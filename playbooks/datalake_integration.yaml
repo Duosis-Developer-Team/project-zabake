@@ -1,0 +1,33 @@
+---
+- name: Update Datalake configuration on Nifi Host
+  hosts: dc13-nifi-1
+  become: yes
+  vars:
+    # conf file (to get backup)
+    config_path: "/Datalake_Project/configuration_file.json"
+    integration_json: "/tmp/datalake_integration.json"
+    integration_script: "/tmp/datalake_integration.py"
+  tasks:
+    - name: Verify integration JSON file exists on nifi host
+      ansible.builtin.stat:
+        path: "{{ integration_json }}"
+      register: integration_file_stat
+
+    - name: Fail if integration JSON file does not exist
+      ansible.builtin.fail:
+        msg: "Integration JSON file {{ integration_json }} does not exist on the nifi host."
+      when: not integration_file_stat.stat.exists
+
+    - name: Backup current datalake configuration
+      ansible.builtin.command: "cp {{ config_path }} {{ config_path }}.bak"
+      when: integration_file_stat.stat.exists
+
+    - name: Execute datalake_integration.py script with integration JSON as argument
+      ansible.builtin.command: "python3 {{ integration_script }} {{ integration_json }}"
+      register: dl_result
+
+    - name: Set update status
+      ansible.builtin.set_stats:
+        data:
+          workflow_datalake_status: "{{ {'updated': (dl_result.rc == 0), 'integration_file': integration_json} }}"
+        per_host: false
