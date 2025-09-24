@@ -38,9 +38,15 @@
   set_fact:
     zbx_csv_header: "{{ zbx_csv_lines[0].split(',') | map('trim') | list }}"
 
-- name: Build records from CSV lines
+- name: Prepare value list for current line
+  vars:
+    _vals: "{{ item.split(',', zbx_csv_header|length - 1) | map('trim') | list }}"
+    _rec_yaml: |-
+      {% for i in range(zbx_csv_header|length) %}
+      {{ zbx_csv_header[i] }}: {{ (_vals[i] | default('') | to_json) }}
+      {% endfor %}
   set_fact:
-    zbx_records: "{{ zbx_records | default([]) + [ dict(zip(zbx_csv_header, (item.split(',', zbx_csv_header|length - 1) | map('trim') | list))) ] }}"
+    zbx_records: "{{ zbx_records | default([]) + [ (_rec_yaml | from_yaml) ] }}"
   loop: "{{ zbx_csv_lines[1:] }}"
 
 - name: Zabbix login to obtain auth token (if not provided)
