@@ -1,7 +1,11 @@
 ---
+- name: Resolve CSV absolute path
+  set_fact:
+    zbx_csv_path_resolved: "{{ (zbx_migration_csv if zbx_migration_csv.startswith('/') else (playbook_dir | default(ansible_playbook_directory) + '/' + zbx_migration_csv)) }}"
+
 - name: Read CSV file
   set_fact:
-    zbx_csv_lines: "{{ lookup('file', zbx_migration_csv).splitlines() }}"
+    zbx_csv_lines: "{{ lookup('file', zbx_csv_path_resolved).splitlines() }}"
 
 - name: Parse CSV header
   set_fact:
