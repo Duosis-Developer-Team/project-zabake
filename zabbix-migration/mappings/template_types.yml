@@ -1,0 +1,44 @@
+# TEMPLATE_TYPE -> interface spec
+snmpv2:
+  interface:
+    type: 2        # SNMP
+    port: 161
+    useip: 1
+    dns: ""
+    details:
+      version: 2   # default SNMP v2c
+      bulk: 1
+      community: "Bltdcsnmp"
+
+snmpv3:
+  interface:
+    type: 2        # SNMP
+    port: 161
+    useip: 1
+    dns: ""
+    details:
+      version: 3   # default SNMP v3
+      bulk: 1
+      securityname: "readonly"
+      securitylevel: 2         # 0=noAuthNoPriv, 1=authNoPriv, 2=authPriv
+      authprotocol: 1          # 0=MD5, 1=SHA1
+      authpassphrase: "U357a3D9Tw3928aV"
+      privprotocol: 1          # 0=DES, 1=DES (depending on Zabbix version mapping); use DES
+      privpassphrase: "ZFlK0O44y412!!"
+      max_repetitions: 10
+
+agent:
+  interface:
+    type: 1        # Zabbix agent
+    port: 10050
+    useip: 1
+    dns: ""
+
+none:
+  interface: null
+
+
+api:
+  interface: null
+
+

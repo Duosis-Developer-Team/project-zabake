@@ -1,0 +1,41 @@
+---
+- name: Ensure community.general collection present (for read_csv)
+  ansible.builtin.meta: noop
+
+- name: Read CSV with header using community.general.read_csv
+  community.general.read_csv:
+    path: "{{ zbx_migration_csv }}"
+  register: zbx_csv_data
+
+- name: Extract records
+  set_fact:
+    zbx_records: "{{ zbx_csv_data.list }}"
+
+- name: Zabbix login to obtain auth token (if not provided)
+  when: zabbix_auth | length == 0
+  uri:
+    url: "{{ zabbix_url }}"
+    method: POST
+    body_format: json
+    validate_certs: "{{ zabbix_validate_certs }}"
+    body:
+      jsonrpc: "2.0"
+      method: "user.login"
+      params:
+        username: "{{ zabbix_user }}"
+        password: "{{ zabbix_password }}"
+      id: 0
+  register: zbx_login_resp
+
+- name: Set zabbix_auth from login
+  when: zabbix_auth | length == 0
+  set_fact:
+    zabbix_auth: "{{ zbx_login_resp.json.result }}"
+
+- name: Include per-record tasks
+  include_tasks: per_record.yml
+  loop: "{{ zbx_records }}"
+  loop_control:
+    loop_var: zbx_record
+
+

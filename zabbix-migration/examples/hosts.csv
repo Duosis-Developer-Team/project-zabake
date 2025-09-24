@@ -1,0 +1,5 @@
+DEVICE_TYPE,HOST_IP,HOSTNAME,DC_ID,MACROS
+Inspur M6,10.132.1.78,g12hv9dc13.blt.vc- InspurM6,DEMO 2-3
+Inspur M5,10.50.1.11,g1hv1dc14.blt.vc - Inspur BMC,Otomasyon Test
+HPE IPMI,10.200.1.11,mny1hv1dc14- Del380 Hp,Otomasyon Test
+Lenovo IPMI,172.18.144.12,c2hv4ict11-blt-vc, DEMO 2-3

@@ -1,0 +1,12 @@
+---
+# Required: set via group_vars/host_vars or extra-vars (use Vault)
+zabbix_url: "http://<zabbix>/zabbix/api_jsonrpc.php"
+zabbix_auth: ""  # Provide an auth token or implement login task before usage
+zabbix_user: ""
+zabbix_password: ""
+zabbix_validate_certs: false
+
+# CSV path passed from playbook variable zbx_migration_csv
+zbx_migration_csv: ""
+
+

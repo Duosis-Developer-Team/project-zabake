@@ -1,0 +1,23 @@
+DEVICE_TYPE,TEMPLATE,TYPE
+Lenovo IPMI,Lenovo ICT XCC Monitoring,snmpv3
+Inspur M6,Lenovo†Inspur M6 Template,snmpv2
+Inspur M5,Server Inspur BMC All Items 4 Zabbix5.0,snmpv2
+HPE IPMI,HPE ProLiant DL380 SNMP,snmpv2
+Dell IPMI,Dell iDRAC SNMP,snmpv2
+Arista Switch,Arista SNMP,snmpv2
+Checkpoint Firewall,Check Point Next Generation Firewall by SNMP,snmpv2
+Cisco Switch,Cisco Catalyst 3750V2-48TS SNMP,snmpv2
+Cisco Management Switch,Cisco IOS SNMP,snmpv2
+Dell Switch,Dell Emc OS10,snmpv2
+Dell Management Switch,Dell Force S-Series SNMP,snmpv2
+Fortigate Firewall,FortiGate by HTTP,API
+HP Management Switch,HP Comware HH3C SNMP,snmpv2
+HP CX Switch,HP CX Switch SNMP,snmpv2
+Huawei VRP,Huawei VRP SNMP,snmpv2
+Juniper Switch,Juniper by SNMP,snmpv2
+Mellanox Switch,Mellanox SNMP,snmpv2
+Network Generic,Network Generic Device SNMP,snmpv2
+Palo Alto Firewall,Palo Alto SNMPv2 64-bit counters,snmpv2
+Ruckus Wireless,SNMP Ruckus Zonedirector,snmpv2
+Citrix ADC,Template Citrix ADC,snmpv2
+Sophos Switch,Virtual Sophos SNMP,snmpv2

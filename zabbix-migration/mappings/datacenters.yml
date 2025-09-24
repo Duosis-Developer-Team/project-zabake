@@ -1,0 +1,7 @@
+# DC_ID -> proxy or proxy group mapping
+DEMO 2-3:
+  proxy_groupid: 1
+Otomasyon Test:
+  proxy_groupid: 4
+
+
