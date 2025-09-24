@@ -1,0 +1,26 @@
+---
+- name: Run Zabbix Integration Script with JSON Argument
+  hosts: ansible_worker
+  become: yes
+  vars:
+    zabbix_integration_file: "/tmp/zabbix_integration.json"
+    zabbix_integration_script: "/data/projects/project_zabake/scripts/zabbix_integration.py"
+
+  tasks:
+    - name: Check if zabbix_integration.json file exists
+      ansible.builtin.stat:
+        path: "{{ zabbix_integration_file }}"
+      register: zabbix_file_stat
+
+    - name: Fail if zabbix_integration.json does not exist
+      ansible.builtin.fail:
+        msg: "Zabbix integration file {{ zabbix_integration_file }} does not exist on the target host."
+      when: not zabbix_file_stat.stat.exists
+
+    - name: Execute the Zabbix integration script with the JSON file as an argument
+      ansible.builtin.command: "python3 {{ zabbix_integration_script }} {{ zabbix_integration_file }}"
+      register: zabbix_script_result
+
+    - name: Display Zabbix script output
+      ansible.builtin.debug:
+        msg: "{{ zabbix_script_result.stdout }}"

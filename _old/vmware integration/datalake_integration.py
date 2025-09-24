@@ -1,0 +1,88 @@
+import json
+import sys
+
+def update_configuration(config, manufacturer, new_ip):
+    """
+    Verilen konfigürasyon sözlüğünde, manufacturer bilgisine göre ilgili bölümü
+    bularak IP/hostname alanına yeni IP değerini virgülle ekler.
+    """
+    if manufacturer == "IBM Power":
+        section = "IBM-HMC"
+        key = "hmc_hostname"
+    elif manufacturer == "Vmware":
+        section = "VmWare"
+        key = "VMwareIP"
+    elif manufacturer == "Nutanix":
+        section = "Nutanix"
+        key = "PRISM_IP"
+    else:
+        print(f"Desteklenmeyen manufacturer: {manufacturer}")
+        return config
+
+    current_value = config.get(section, {}).get(key, "")
+    if current_value:
+        updated_value = current_value + "," + new_ip
+    else:
+        updated_value = new_ip
+
+    if section in config:
+        config[section][key] = updated_value
+    else:
+        config[section] = {key: updated_value}
+
+    return config
+
+def main():
+    """
+    Script, komut satırından input JSON parametresi alır.
+    Örnek kullanım:
+    python3 datalake_integration.py '[{"manufacturer": "IBM Power", "ip": "10.34.2.141"}, {"manufacturer": "Vmware", "ip": "10.34.2.142"}]'
+    Ardından 'configuration_file.json' dosyasını okuyup günceller.
+    """
+    if len(sys.argv) < 2:
+        print("Kullanım: python3 script.py '<json_input>'")
+        sys.exit(1)
+
+    input_json = sys.argv[1]
+    try:
+        data = json.loads(input_json)
+    except json.JSONDecodeError:
+        print("Geçersiz JSON formatı!")
+        sys.exit(1)
+
+    config_file = "configuration_file.json"
+    try:
+        with open(config_file, "r") as f:
+            config = json.load(f)
+    except Exception as e:
+        print(f"Konfigürasyon dosyası okunurken hata: {e}")
+        sys.exit(1)
+
+    # JSON verisi tek kayıt veya liste şeklinde olabilir.
+    if isinstance(data, list):
+        entries = data
+    elif isinstance(data, dict):
+        entries = [data]
+    else:
+        print("JSON verisi uygun formatta değil!")
+        sys.exit(1)
+
+    for entry in entries:
+        manufacturer = entry.get("manufacturer")
+        new_ip = entry.get("ip")
+        if not manufacturer or not new_ip:
+            print("JSON, 'manufacturer' ve 'ip' anahtarlarını içermelidir!")
+            continue
+        config = update_configuration(config, manufacturer, new_ip)
+
+    try:
+        with open(config_file, "w") as f:
+            json.dump(config, f, indent=4)
+    except Exception as e:
+        print(f"Konfigürasyon dosyasına yazılırken hata: {e}")
+        sys.exit(1)
+
+    print("Konfigürasyon başarıyla güncellendi.")
+
+if __name__ == "__main__":
+    main()

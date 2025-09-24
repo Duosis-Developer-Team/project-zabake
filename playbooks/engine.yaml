@@ -1,0 +1,74 @@
+---
+- name: Platform Integration Workflow
+  hosts: ansible_worker
+  become: yes
+  vars:
+    script_path: "/data/projects/project_zabake/scripts/engine.py"
+    input_file: "/tmp/new_platform.json"
+    datalake_output: "/tmp/datalake_integration.json"
+    zabbix_output: "/tmp/zabbix_integration.json"
+    nifi_host: "dc13-nifi-1"
+    nifi_dest: "/tmp/datalake_integration.json"
+    datalake_integration: "/data/projects/project_zabake/scripts/datalake_integration.py"
+    # nifi_host üzerinde datalake_integration dizini için kullanılacak hedef dizin
+    nifi_integration_dest: "/tmp/datalake_integration.py"
+    # Controller (master) üzerinde geçici dosya yolları:
+    temp_datalake_output: "/tmp/datalake_output.json"
+    temp_datalake_integration_output: "/tmp/datalake_integration.py"
+
+  tasks:
+    - name: Verify input file exists
+      ansible.builtin.stat:
+        path: "{{ input_file }}"
+      register: input_file_stat
+
+    - name: Fail if input file doesn't exist
+      ansible.builtin.fail:
+        msg: "Input file {{ input_file }} does not exist on the target host"
+      when: not input_file_stat.stat.exists
+
+    - name: Execute the Python script
+      ansible.builtin.command: "python3 {{ script_path }}"
+      register: script_result
+
+    - name: Check output files existence
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ datalake_output }}"
+        - "{{ zabbix_output }}"
+      register: output_files
+
+    - name: Verify datalake_integration directory exists
+      ansible.builtin.stat:
+        path: "{{ datalake_integration }}"
+      register: integration_dir_stat
+
+    - name: Fail if datalake_integration directory doesn't exist
+      ansible.builtin.fail:
+        msg: "Directory {{ datalake_integration }} does not exist on ansible_worker"
+      when: not integration_dir_stat.stat.exists
+
+    - name: Fetch datalake_output file to control node
+      ansible.builtin.fetch:
+        src: "{{ datalake_output }}"
+        dest: "{{ temp_datalake_output }}"
+        flat: yes
+
+    - name: Copy datalake_output file from control to nifi_host
+      ansible.builtin.copy:
+        src: "{{ temp_datalake_output }}"
+        dest: "{{ nifi_dest }}"
+      delegate_to: "{{ nifi_host }}"
+
+    - name: Fetch datalake_integration file to control node
+      ansible.builtin.fetch:
+        src: "{{ datalake_integration }}"
+        dest: "{{ temp_datalake_integration_output }}"
+        flat: yes
+
+    - name: Copy datalake_integration file from control to nifi_host
+      ansible.builtin.copy:
+        src: "{{ temp_datalake_integration_output }}"
+        dest: "{{ nifi_integration_dest }}"
+      delegate_to: "{{ nifi_host }}"

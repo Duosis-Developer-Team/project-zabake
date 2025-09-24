@@ -1,0 +1,28 @@
+---
+- name: Execute platform synchronization script
+  hosts: ansible_worker
+  gather_facts: no
+  vars:
+    script_path: "/data/projects/project_zabake/scripts/check_new_platform.py"
+    output_file: "/tmp/new_platform.json"
+
+  tasks:
+    - name: Validate script exists
+      ansible.builtin.stat:
+        path: "{{ script_path }}"
+      register: script_stat
+
+    - name: Fail if script not found
+      ansible.builtin.fail:
+        msg: "Python script not found at {{ script_path }}"
+      when: not script_stat.stat.exists
+
+    - name: Execute platform sync script
+      ansible.builtin.command: "python3 {{ script_path }}"
+      register: script_result
+      changed_when: script_result.rc == 0
+
+    - name: Verify JSON output file
+      ansible.builtin.stat:
+        path: "{{ output_file }}"
+      register: json_output
