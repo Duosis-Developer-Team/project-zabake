@@ -3,7 +3,7 @@ Lenovo IPMI:
   - name: Lenovo ICT XCC Monitoring
     type: snmpv3
 Inspur M6:
-  - name: Lenovo†Inspur M6 Template
+  - name: Lenovo Inspur M6 Template
     type: snmpv2
 Inspur M5:
   - name: Server Inspur BMC All Items 4 Zabbix5.0

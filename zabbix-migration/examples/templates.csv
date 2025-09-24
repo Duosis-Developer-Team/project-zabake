@@ -1,6 +1,6 @@
 DEVICE_TYPE,TEMPLATE,TYPE
 Lenovo IPMI,Lenovo ICT XCC Monitoring,snmpv3
-Inspur M6,Lenovo†Inspur M6 Template,snmpv2
+Inspur M6,Lenovo Inspur M6 Template,snmpv2
 Inspur M5,Server Inspur BMC All Items 4 Zabbix5.0,snmpv2
 HPE IPMI,HPE ProLiant DL380 SNMP,snmpv2
 Dell IPMI,Dell iDRAC SNMP,snmpv2
