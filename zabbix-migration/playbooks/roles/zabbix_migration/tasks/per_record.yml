@@ -79,6 +79,50 @@
     zbx_template_id_list: "{{ zbx_template_id_list + [ { 'templateid': item } ] }}"
   loop: "{{ zbx_tpl_get_resp.json.result | map(attribute='templateid') | list }}"
 
+- name: Resolve or create hostgroup by DEVICE_TYPE
+  vars:
+    _grp_get_body: |
+      {
+        "jsonrpc": "2.0",
+        "method": "hostgroup.get",
+        "params": {"output": ["groupid","name"], "filter": {"name": ["%s"]}},
+        "auth": "%s",
+        "id": 2001
+      }
+  uri:
+    url: "{{ zabbix_url }}"
+    method: POST
+    body_format: json
+    validate_certs: false
+    body: "{{ _grp_get_body | format(zbx_record.DEVICE_TYPE, zabbix_auth) | from_json }}"
+  register: zbx_grp_get
+
+- name: Create hostgroup when missing
+  when: (zbx_grp_get.json.result | length) == 0
+  vars:
+    _grp_create_body: |
+      {
+        "jsonrpc": "2.0",
+        "method": "hostgroup.create",
+        "params": {"name": "%s"},
+        "auth": "%s",
+        "id": 2002
+      }
+  uri:
+    url: "{{ zabbix_url }}"
+    method: POST
+    body_format: json
+    validate_certs: false
+    body: "{{ _grp_create_body | format(zbx_record.DEVICE_TYPE, zabbix_auth) | from_json }}"
+  register: zbx_grp_create
+
+- name: Set group id from get/create
+  set_fact:
+    zbx_group_id_list: >-
+      {{ [ (zbx_grp_get.json.result[0].groupid
+            if (zbx_grp_get.json.result | length) > 0
+            else zbx_grp_create.json.result.groupids[0]) ] }}
+
 - name: Create or update host via Zabbix API
   uri:
     url: "{{ zabbix_url }}"
@@ -102,6 +146,7 @@
             'details': zbx_iface.details | default(omit)
           } ] if zbx_iface is not none else [] }}
         templates: "{{ zbx_template_id_list }}"
+        groups: "{{ zbx_group_id_list | map('regex_replace','^(.*)$','{\"groupid\":\"\\1\"}') | map('from_yaml') | list }}"
         monitored_by: "{{ zbx_monitored_by }}"
         proxy_groupid: "{{ zbx_dc.proxy_groupid | default(omit) }}"
         proxyid: "{{ zbx_dc.proxyid | default(omit) }}"
@@ -134,6 +179,7 @@
             'details': zbx_iface.details | default(omit)
           } ] if zbx_iface is not none else omit }}
         templates: "{{ zbx_template_id_list }}"
+        groups: "{{ zbx_group_id_list | map('regex_replace','^(.*)$','{\"groupid\":\"\\1\"}') | map('from_yaml') | list }}"
         monitored_by: "{{ zbx_monitored_by }}"
         proxy_groupid: "{{ zbx_dc.proxy_groupid | default(omit) }}"
         proxyid: "{{ zbx_dc.proxyid | default(omit) }}"
