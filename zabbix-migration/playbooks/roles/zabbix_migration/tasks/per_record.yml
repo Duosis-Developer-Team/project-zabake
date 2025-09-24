@@ -48,6 +48,10 @@
   set_fact:
     zbx_dc: "{{ zbx_dc_map.get(zbx_record.DC_ID, {}) }}"
 
+- name: Determine monitored_by based on DC proxy mapping
+  set_fact:
+    zbx_monitored_by: "{{ 2 if (zbx_dc.proxyid is defined or zbx_dc.proxy_groupid is defined) else omit }}"
+
 - name: Resolve template IDs by name
   vars:
     _tpl_get_body: |
@@ -98,6 +102,7 @@
             'details': zbx_iface.details | default(omit)
           } ] if zbx_iface is not none else [] }}
         templates: "{{ zbx_template_id_list }}"
+        monitored_by: "{{ zbx_monitored_by }}"
         proxy_groupid: "{{ zbx_dc.proxy_groupid | default(omit) }}"
         proxyid: "{{ zbx_dc.proxyid | default(omit) }}"
       auth: "{{ zabbix_auth }}"
@@ -129,6 +134,7 @@
             'details': zbx_iface.details | default(omit)
           } ] if zbx_iface is not none else omit }}
         templates: "{{ zbx_template_id_list }}"
+        monitored_by: "{{ zbx_monitored_by }}"
         proxy_groupid: "{{ zbx_dc.proxy_groupid | default(omit) }}"
         proxyid: "{{ zbx_dc.proxyid | default(omit) }}"
       auth: "{{ zabbix_auth }}"
