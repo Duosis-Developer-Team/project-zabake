@@ -9,10 +9,10 @@ Inspur M5:
   - name: Server Inspur BMC All Items 4 Zabbix5.0
     type: snmpv2
 HPE IPMI:
-  - name: HPE ProLiant DL380 SNMP
+  - name: HPE ProLiant DL380 by SNMP
     type: snmpv2
 Dell IPMI:
-  - name: Dell iDRAC SNMP
+  - name: Dell iDRAC by SNMP
     type: snmpv2
 Arista Switch:
   - name: Arista SNMP
