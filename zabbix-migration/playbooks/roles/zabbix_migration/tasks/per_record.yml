@@ -66,9 +66,14 @@
     body: "{{ _tpl_get_body | format(zbx_template_names | to_json, zabbix_auth) | from_json }}"
   register: zbx_tpl_get_resp
 
-- name: Build template id list
+- name: Init template id list
   set_fact:
-    zbx_template_id_list: "{{ zbx_tpl_get_resp.json.result | map(attribute='templateid') | map('regex_replace','^(.*)$','{"templateid":"\\1"}') | map('from_yaml') | list }}"
+    zbx_template_id_list: []
+
+- name: Append each templateid as dict
+  set_fact:
+    zbx_template_id_list: "{{ zbx_template_id_list + [ { 'templateid': item } ] }}"
+  loop: "{{ zbx_tpl_get_resp.json.result | map(attribute='templateid') | list }}"
 
 - name: Create or update host via Zabbix API
   uri:
