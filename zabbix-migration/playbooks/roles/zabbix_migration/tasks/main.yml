@@ -3,9 +3,36 @@
   set_fact:
     zbx_csv_path_resolved: "{{ (zbx_migration_csv if zbx_migration_csv.startswith('/') else (playbook_dir | default(ansible_playbook_directory) + '/' + zbx_migration_csv)) }}"
 
-- name: Read CSV file
+- name: Stat CSV on controller
+  stat:
+    path: "{{ zbx_csv_path_resolved }}"
+  register: zbx_csv_ctrl_stat
+  delegate_to: localhost
+  run_once: true
+
+- name: Slurp CSV from controller when exists
+  when: zbx_csv_ctrl_stat.stat.exists
+  slurp:
+    path: "{{ zbx_csv_path_resolved }}"
+  register: zbx_csv_slurp_ctrl
+  delegate_to: localhost
+  run_once: true
+
+- name: Set CSV lines from controller
+  when: zbx_csv_ctrl_stat.stat.exists
   set_fact:
-    zbx_csv_lines: "{{ lookup('file', zbx_csv_path_resolved).splitlines() }}"
+    zbx_csv_lines: "{{ (zbx_csv_slurp_ctrl.content | b64decode).splitlines() }}"
+
+- name: Slurp CSV from remote host when not on controller
+  when: not zbx_csv_ctrl_stat.stat.exists
+  slurp:
+    path: "{{ zbx_csv_path_resolved }}"
+  register: zbx_csv_slurp_remote
+
+- name: Set CSV lines from remote
+  when: not zbx_csv_ctrl_stat.stat.exists
+  set_fact:
+    zbx_csv_lines: "{{ (zbx_csv_slurp_remote.content | b64decode).splitlines() }}"
 
 - name: Parse CSV header
   set_fact:
