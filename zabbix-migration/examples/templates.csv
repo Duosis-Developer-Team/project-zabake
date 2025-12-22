@@ -21,3 +21,5 @@ Palo Alto Firewall,Palo Alto SNMPv2 64-bit counters,snmpv2
 Ruckus Wireless,SNMP Ruckus Zonedirector,snmpv2
 Citrix ADC,Template Citrix ADC,snmpv2
 Sophos Switch,Virtual Sophos SNMP,snmpv2
+Lenovo ICT,Lenovo ICT XCC Monitoring,snmpv3
+HP ILO, HP iLO SNMP,snmpv2
