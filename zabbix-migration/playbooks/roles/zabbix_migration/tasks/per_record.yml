@@ -79,12 +79,18 @@
     zbx_template_id_list: "{{ zbx_template_id_list + [ { 'templateid': item } ] }}"
   loop: "{{ zbx_tpl_get_resp.json.result | map(attribute='templateid') | list }}"
 
+- name: Initialize group ID list
+  set_fact:
+    zbx_group_id_list: []
+
 - name: Resolve Group IDs from map
   vars:
-    _csv_group_names: "{{ (zbx_record.HOST_GROUPS | default('')).split(',') | map('trim') | select('length') | list }}"
+    _csv_group_names: "{{ (zbx_record.HOST_GROUPS | default('')).split(',') | map('trim') | reject('equalto', '') | list }}"
     _all_target_groups: "{{ (_csv_group_names + [zbx_record.DEVICE_TYPE]) | unique }}"
   set_fact:
-    zbx_group_id_list: "{{ _all_target_groups | map('extract', zbx_group_map) | list }}"
+    zbx_group_id_list: "{{ zbx_group_id_list + [zbx_group_map[item]] }}"
+  loop: "{{ _all_target_groups }}"
+  when: item is defined and item in zbx_group_map
 
 - name: Create or update host via Zabbix API
   uri:
