@@ -34,20 +34,45 @@
   set_fact:
     zbx_csv_lines: "{{ (zbx_csv_slurp_remote.content | b64decode).splitlines() }}"
 
-- name: Parse CSV header
-  set_fact:
-    zbx_csv_header: "{{ zbx_csv_lines[0].split(',') | map('trim') | list }}"
+- name: Parse CSV using Python csv module
+  command: >
+    python3 -c "
+    import csv
+    import sys
+    import json
+    import io
+    
+    lines = sys.stdin.read().splitlines()
+    if not lines:
+        print('[]')
+        sys.exit(0)
+    
+    reader = csv.DictReader(lines)
+    records = []
+    for row in reader:
+        # Clean up values (remove leading/trailing whitespace and quotes)
+        cleaned_row = {}
+        for k, v in row.items():
+            if v:
+                v = v.strip()
+                # Remove surrounding quotes if present
+                if len(v) >= 2 and v[0] == '\"' and v[-1] == '\"':
+                    v = v[1:-1]
+            cleaned_row[k.strip()] = v if v else ''
+        records.append(cleaned_row)
+    
+    print(json.dumps(records))
+    "
+  args:
+    stdin: "{{ zbx_csv_lines | join('\n') }}"
+  register: zbx_csv_parse_result
+  changed_when: false
+  delegate_to: localhost
+  run_once: true
 
-- name: Prepare value list for current line
-  vars:
-    _vals: "{{ item.split(',', zbx_csv_header|length - 1) | map('trim') | list }}"
-    _rec_yaml: |-
-      {% for i in range(zbx_csv_header|length) %}
-      {{ zbx_csv_header[i] }}: {{ (_vals[i] | default('') | to_json) }}
-      {% endfor %}
+- name: Set parsed CSV records
   set_fact:
-    zbx_records: "{{ zbx_records | default([]) + [ (_rec_yaml | from_yaml) ] }}"
-  loop: "{{ zbx_csv_lines[1:] }}"
+    zbx_records: "{{ zbx_csv_parse_result.stdout | from_json }}"
 
 - name: Zabbix login to obtain auth token (if not provided)
   when: zabbix_auth | length == 0
@@ -72,12 +97,14 @@
 
 - name: Collect all required host groups from CSV
   vars:
-    _csv_groups: >-
-      {{ zbx_records | selectattr('HOST_GROUPS', 'defined') | map(attribute='HOST_GROUPS') | map('split', ',') | flatten | map('trim') | select('length') | list }}
+    _csv_groups_raw: >-
+      {{ zbx_records | selectattr('HOST_GROUPS', 'defined') | map(attribute='HOST_GROUPS') | list }}
+    _csv_groups_split: >-
+      {{ _csv_groups_raw | map('split', ',') | flatten | map('trim') | reject('equalto', '') | list }}
     _device_groups: >-
       {{ zbx_records | map(attribute='DEVICE_TYPE') | list }}
   set_fact:
-    zbx_required_groups: "{{ (_csv_groups + _device_groups) | unique }}"
+    zbx_required_groups: "{{ (_csv_groups_split + _device_groups) | unique }}"
 
 - name: Get existing host groups
   uri:
