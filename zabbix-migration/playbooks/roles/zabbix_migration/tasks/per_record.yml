@@ -50,7 +50,7 @@
 
 - name: Determine monitored_by based on DC proxy mapping
   set_fact:
-    zbx_monitored_by: "{{ 2 if (zbx_dc.proxyid is defined or zbx_dc.proxy_groupid is defined) else omit }}"
+    zbx_monitored_by: "{{ 2 if (zbx_dc.proxyid is defined or zbx_dc.proxy_groupid is defined) else 0 }}"
 
 - name: Resolve template IDs by name
   vars:
@@ -79,49 +79,12 @@
     zbx_template_id_list: "{{ zbx_template_id_list + [ { 'templateid': item } ] }}"
   loop: "{{ zbx_tpl_get_resp.json.result | map(attribute='templateid') | list }}"
 
-- name: Resolve or create hostgroup by DEVICE_TYPE
+- name: Resolve Group IDs from map
   vars:
-    _grp_get_body: |
-      {
-        "jsonrpc": "2.0",
-        "method": "hostgroup.get",
-        "params": {"output": ["groupid","name"], "filter": {"name": ["%s"]}},
-        "auth": "%s",
-        "id": 2001
-      }
-  uri:
-    url: "{{ zabbix_url }}"
-    method: POST
-    body_format: json
-    validate_certs: false
-    body: "{{ _grp_get_body | format(zbx_record.DEVICE_TYPE, zabbix_auth) | from_json }}"
-  register: zbx_grp_get
-
-- name: Create hostgroup when missing
-  when: (zbx_grp_get.json.result | length) == 0
-  vars:
-    _grp_create_body: |
-      {
-        "jsonrpc": "2.0",
-        "method": "hostgroup.create",
-        "params": {"name": "%s"},
-        "auth": "%s",
-        "id": 2002
-      }
-  uri:
-    url: "{{ zabbix_url }}"
-    method: POST
-    body_format: json
-    validate_certs: false
-    body: "{{ _grp_create_body | format(zbx_record.DEVICE_TYPE, zabbix_auth) | from_json }}"
-  register: zbx_grp_create
-
-- name: Set group id from get/create
+    _csv_group_names: "{{ (zbx_record.HOST_GROUPS | default('')).split(',') | map('trim') | select('length') | list }}"
+    _all_target_groups: "{{ (_csv_group_names + [zbx_record.DEVICE_TYPE]) | unique }}"
   set_fact:
-    zbx_group_id_list: >-
-      {{ [ (zbx_grp_get.json.result[0].groupid
-            if (zbx_grp_get.json.result | length) > 0
-            else zbx_grp_create.json.result.groupids[0]) ] }}
+    zbx_group_id_list: "{{ _all_target_groups | map('extract', zbx_group_map) | list }}"
 
 - name: Create or update host via Zabbix API
   uri:
@@ -186,5 +149,3 @@
       auth: "{{ zabbix_auth }}"
       id: 2
   register: zbx_update_resp
-
-

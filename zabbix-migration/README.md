@@ -7,11 +7,12 @@ This module automates migrating hosts into Zabbix from a CSV file. For each CSV 
 - Ensure optional host-level macros exist with provided values
 
 ### High-level Flow
-1. Parse CSV with columns: `DEVICE_TYPE,HOSTNAME,HOST_IP,DC_ID,TEMPLATE_TYPE,{MACRO1:VALUE1,MACRO2:VALUE2,...}`
+1. Parse CSV with columns: `DEVICE_TYPE,HOSTNAME,HOST_IP,DC_ID,HOST_GROUPS,TEMPLATE_TYPE,{MACROS...}`
 2. Resolve mappings:
    - DEVICE_TYPE → template ids/names (default set per type)
    - TEMPLATE_TYPE → interface requirements (e.g., SNMP)
-   - DC_ID → proxy_groupid or proxyid
+   - DC_ID → proxy_groupid or proxyid (defaults to Server if empty)
+   - HOST_GROUPS → Zabbix host groups (auto-created if missing)
 3. For each row:
    - Create/ensure host with name and technical host name
    - Create/ensure interface(s) according to template type

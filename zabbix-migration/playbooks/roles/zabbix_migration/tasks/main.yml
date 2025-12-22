@@ -70,6 +70,75 @@
   set_fact:
     zabbix_auth: "{{ zbx_login_resp.json.result }}"
 
+- name: Collect all required host groups from CSV
+  vars:
+    _csv_groups: >-
+      {{ zbx_records | selectattr('HOST_GROUPS', 'defined') | map(attribute='HOST_GROUPS') | map('split', ',') | flatten | map('trim') | select('length') | list }}
+    _device_groups: >-
+      {{ zbx_records | map(attribute='DEVICE_TYPE') | list }}
+  set_fact:
+    zbx_required_groups: "{{ (_csv_groups + _device_groups) | unique }}"
+
+- name: Get existing host groups
+  uri:
+    url: "{{ zabbix_url }}"
+    method: POST
+    body_format: json
+    validate_certs: "{{ zabbix_validate_certs }}"
+    body:
+      jsonrpc: "2.0"
+      method: "hostgroup.get"
+      params:
+        output: ["groupid", "name"]
+        filter:
+          name: "{{ zbx_required_groups }}"
+      auth: "{{ zabbix_auth }}"
+      id: 101
+  register: zbx_existing_groups_resp
+
+- name: Identify missing groups
+  vars:
+    _existing_names: "{{ zbx_existing_groups_resp.json.result | map(attribute='name') | list }}"
+  set_fact:
+    zbx_missing_groups: "{{ zbx_required_groups | difference(_existing_names) }}"
+
+- name: Create missing host groups
+  uri:
+    url: "{{ zabbix_url }}"
+    method: POST
+    body_format: json
+    validate_certs: "{{ zabbix_validate_certs }}"
+    body:
+      jsonrpc: "2.0"
+      method: "hostgroup.create"
+      params:
+        name: "{{ item }}"
+      auth: "{{ zabbix_auth }}"
+      id: 102
+  loop: "{{ zbx_missing_groups }}"
+  register: zbx_created_groups_resp
+
+- name: Refresh host groups map (Fetch all required groups again to get IDs)
+  uri:
+    url: "{{ zabbix_url }}"
+    method: POST
+    body_format: json
+    validate_certs: "{{ zabbix_validate_certs }}"
+    body:
+      jsonrpc: "2.0"
+      method: "hostgroup.get"
+      params:
+        output: ["groupid", "name"]
+        filter:
+          name: "{{ zbx_required_groups }}"
+      auth: "{{ zabbix_auth }}"
+      id: 103
+  register: zbx_final_groups_resp
+
+- name: Build Group Name-to-ID Map
+  set_fact:
+    zbx_group_map: "{{ zbx_final_groups_resp.json.result | items2dict(key_name='name', value_name='groupid') }}"
+
 - name: Include per-record tasks
   include_tasks: per_record.yml
   loop: "{{ zbx_records }}"

@@ -68,4 +68,7 @@ Sophos Switch:
 HP ILO:
   - name: HP iLO SNMP
     type: snmpv2
+Lenovo ICT:
+  - name: Lenovo ICT XCC Monitoring
+    type: snmpv3
 

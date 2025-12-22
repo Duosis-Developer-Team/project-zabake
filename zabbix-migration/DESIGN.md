@@ -8,7 +8,8 @@ Required columns:
 - DEVICE_TYPE
 - HOSTNAME
 - HOST_IP
-- DC_ID
+- DC_ID (Optional)
+- HOST_GROUPS (Optional, comma-separated)
 - TEMPLATE_TYPE (e.g., snmp, agent, none)
 
 Optional columns (0..N):
@@ -20,15 +21,22 @@ Optional columns (0..N):
 - DC_ID → proxy/proxy_group: `mappings/datacenters.yml`
 
 ### Operations per CSV Row (Idempotent)
-1. Resolve templates (union of DEVICE_TYPE templates and any overrides from TEMPLATE_TYPE)
-2. Ensure host exists (`host.get` by name)
+1. Bulk Host Group Check (Pre-processing):
+   - Collect all unique `HOST_GROUPS` and `DEVICE_TYPE` groups from CSV.
+   - Fetch existing groups from Zabbix.
+   - Create missing groups in one batch.
+   - Build a `name -> groupid` map for fast lookup.
+
+2. Resolve templates (union of DEVICE_TYPE templates and any overrides from TEMPLATE_TYPE)
+3. Ensure host exists (`host.get` by name)
    - If not exists → `host.create`
    - If exists → `host.update`
-3. Ensure interfaces
+4. Ensure interfaces
    - For SNMP: add one main SNMP interface with IP=`HOST_IP`, port `161`, set SNMPv2 or v3 per config (default v2)
-4. Link templates (`host.massadd` or `template.get` + `host.update` with `templates`)
-5. Upsert macros (`usermacro.create` or `usermacro.update`); if exists with different value, update
-6. Assign proxy/proxy group based on `DC_ID`
+5. Link templates (`host.massadd` or `template.get` + `host.update` with `templates`)
+6. Upsert macros (`usermacro.create` or `usermacro.update`); if exists with different value, update
+7. Assign proxy/proxy group based on `DC_ID` (Default to Server if `DC_ID` is empty)
+8. Assign Host Groups (Union of `DEVICE_TYPE` group + `HOST_GROUPS`)
 
 ### Idempotency & Safety
 - Use lookups before create (host, templates, macros)
