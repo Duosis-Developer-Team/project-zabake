@@ -16,19 +16,34 @@
   set_fact:
     netbox_devices_filtered: "{{ netbox_devices_raw }}"
 
-- name: Apply device limit or set all devices
+- name: Apply device limit
+  vars:
+    limit: "{{ device_limit | default(0) | int }}"
   set_fact:
-    netbox_devices_final: >-
-      {% set limit = device_limit | default(0) | int %}
-      {% if limit > 0 %}
-        {{ netbox_devices_filtered[:limit] }}
-      {% else %}
-        {{ netbox_devices_filtered }}
-      {% endif %}
+    netbox_devices_final: "{{ netbox_devices_filtered[:limit] if limit > 0 else netbox_devices_filtered }}"
 
 - name: Display device count
   debug:
     msg: "Found {{ netbox_devices_final | length }} devices to process (limit: {{ 'unlimited' if (device_limit | default(0) | int) == 0 else (device_limit | default(0) | int) }})"
+
+- name: Display list of matching devices
+  debug:
+    msg: |
+      ============================================
+      MATCHING DEVICES FROM NETBOX
+      ============================================
+      {% for device in netbox_devices_final %}
+      Device #{{ loop.index }}:
+        - Name: {{ device.name | default('N/A') }}
+        - ID: {{ device.id | default('N/A') }}
+        - Site: {{ device.site.name | default('N/A') if device.site else 'N/A' }}
+        - Role: {{ device.device_role.name | default('N/A') if device.device_role else 'N/A' }}
+        - Manufacturer: {{ device.device_type.manufacturer.name | default('N/A') if device.device_type.manufacturer else 'N/A' }}
+        - Model: {{ device.device_type.model | default('N/A') if device.device_type else 'N/A' }}
+        - Primary IP: {{ device.primary_ip4.address | default('N/A') if device.primary_ip4 else 'N/A' }}
+      {% endfor %}
+      ============================================
+  when: netbox_devices_final | length > 0
 
 - name: Process each device
   include_tasks: process_device.yml
