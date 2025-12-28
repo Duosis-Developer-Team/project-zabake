@@ -5,19 +5,12 @@
     datacenters_map: "{{ lookup('file', datacenters_map_path) | from_yaml }}"
     device_type_mapping: "{{ lookup('file', device_type_mapping_path) | from_yaml }}"
 
-- name: Fetch all devices from Netbox API (with pagination)
+- name: Fetch all devices from Netbox API (with pagination and role filter)
   include_tasks: fetch_all_devices.yml
 
-- name: Apply device role filter
-  set_fact:
-    netbox_devices_filtered: >-
-      {{ netbox_devices_raw | selectattr('device_role.name', 'equalto', device_role_filter) | list }}
-  when: device_role_filter | string | length > 0
-
-- name: Set devices after role filter (no filter)
+- name: Set filtered devices
   set_fact:
     netbox_devices_filtered: "{{ netbox_devices_raw }}"
-  when: device_role_filter | string | length == 0
 
 - name: Apply site filter
   set_fact:
