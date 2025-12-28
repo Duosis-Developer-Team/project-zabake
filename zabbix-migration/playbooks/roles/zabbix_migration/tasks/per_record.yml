@@ -82,12 +82,8 @@
   vars:
     location_name: "{{ zbx_record.DC_ID | default('') }}"
   set_fact:
-    zbx_proxy_group_id_raw: "{{ zbx_proxy_group_map.get(location_name) if (zbx_proxy_group_map is defined and zbx_proxy_group_map.get(location_name)) else None }}"
-    zbx_monitored_by: "{{ 2 if (zbx_proxy_group_map is defined and zbx_proxy_group_map.get(location_name)) else 0 }}"
-
-- name: Set proxy group ID (omit if not found)
-  set_fact:
-    zbx_proxy_group_id: "{{ omit if zbx_proxy_group_id_raw is none or zbx_proxy_group_id_raw == '' else zbx_proxy_group_id_raw }}"
+    zbx_proxy_group_id: "{{ zbx_proxy_group_map.get(location_name) if (zbx_proxy_group_map is defined and location_name and zbx_proxy_group_map.get(location_name)) else '' }}"
+    zbx_monitored_by: "{{ 2 if (zbx_proxy_group_map is defined and location_name and zbx_proxy_group_map.get(location_name)) else 0 }}"
 
 - name: Debug template names
   debug:
@@ -252,7 +248,7 @@
         groups: "{{ zbx_group_id_list | map('regex_replace','^(.*)$','{\"groupid\":\"\\1\"}') | map('from_yaml') | list }}"
         tags: "{{ zbx_tags | default(omit) }}"
         monitored_by: "{{ zbx_monitored_by }}"
-        proxy_groupid: "{{ zbx_proxy_group_id if (zbx_proxy_group_id is defined and zbx_proxy_group_id != '' and zbx_proxy_group_id is not none) else omit }}"
+        proxy_groupid: "{{ zbx_proxy_group_id if (zbx_proxy_group_id is defined and zbx_proxy_group_id != '') else omit }}"
       auth: "{{ zabbix_auth }}"
       id: 1
   register: zbx_create_resp
@@ -285,7 +281,7 @@
         groups: "{{ zbx_group_id_list | map('regex_replace','^(.*)$','{\"groupid\":\"\\1\"}') | map('from_yaml') | list }}"
         tags: "{{ zbx_tags | default(omit) }}"
         monitored_by: "{{ zbx_monitored_by }}"
-        proxy_groupid: "{{ zbx_proxy_group_id if (zbx_proxy_group_id is defined and zbx_proxy_group_id != '' and zbx_proxy_group_id is not none) else omit }}"
+        proxy_groupid: "{{ zbx_proxy_group_id if (zbx_proxy_group_id is defined and zbx_proxy_group_id != '') else omit }}"
       auth: "{{ zabbix_auth }}"
       id: 2
   register: zbx_update_resp
