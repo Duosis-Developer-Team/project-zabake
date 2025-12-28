@@ -11,24 +11,31 @@
   set_fact:
     netbox_devices_filtered: >-
       {{ netbox_devices_raw | selectattr('device_role.name', 'equalto', device_role_filter) | list }}
-  when: device_role_filter | length > 0
+  when: 
+    - device_role_filter is defined
+    - device_role_filter | string | length > 0
 
 - name: Set devices after role filter
   set_fact:
     netbox_devices_filtered: "{{ netbox_devices_raw }}"
-  when: device_role_filter | length == 0
+  when: 
+    - device_role_filter is not defined or (device_role_filter | string | length == 0)
 
 - name: Apply site filter
   set_fact:
     netbox_devices_filtered: >-
       {{ netbox_devices_filtered | selectattr('site.name', 'equalto', site_filter) | list }}
-  when: site_filter | length > 0
+  when: 
+    - site_filter is defined
+    - site_filter | string | length > 0
 
 - name: Apply manufacturer filter
   set_fact:
     netbox_devices_filtered: >-
       {{ netbox_devices_filtered | selectattr('device_type.manufacturer.name', 'equalto', manufacturer_filter) | list }}
-  when: manufacturer_filter | length > 0
+  when: 
+    - manufacturer_filter is defined
+    - manufacturer_filter | string | length > 0
 
 - name: Apply device limit
   set_fact:
