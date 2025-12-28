@@ -13,9 +13,14 @@
       netbox_url = sys.argv[1].rstrip('/')
       netbox_token = sys.argv[2]
       verify_ssl = sys.argv[3].lower() == 'true'
-      device_role_filter = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] else None
-      site_filter = sys.argv[5] if len(sys.argv) > 5 and sys.argv[5] else None
-      manufacturer_filter = sys.argv[6] if len(sys.argv) > 6 and sys.argv[6] else None
+      device_role_filter = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] and sys.argv[4].strip() else None
+      site_filter = sys.argv[5] if len(sys.argv) > 5 and sys.argv[5] and sys.argv[5].strip() else None
+      manufacturer_filter = sys.argv[6] if len(sys.argv) > 6 and sys.argv[6] and sys.argv[6].strip() else None
+      
+      # Debug: Print filters
+      print(f"DEBUG: device_role_filter = {device_role_filter}", file=sys.stderr)
+      print(f"DEBUG: site_filter = {site_filter}", file=sys.stderr)
+      print(f"DEBUG: manufacturer_filter = {manufacturer_filter}", file=sys.stderr)
       
       all_devices = []
       next_url = f"{netbox_url}/api/dcim/devices/?limit=1000"
@@ -35,6 +40,9 @@
               data = response.json()
               
               devices = data.get('results', [])
+              
+              # Debug: Print page info
+              print(f"DEBUG: Fetched {len(devices)} devices from this page", file=sys.stderr)
               
               # Apply filters
               filtered_devices = []
@@ -60,6 +68,7 @@
                   filtered_devices.append(device)
               
               all_devices.extend(filtered_devices)
+              print(f"DEBUG: After filters, {len(filtered_devices)} devices match on this page", file=sys.stderr)
               next_url = data.get('next')
               
               if not next_url:
@@ -67,6 +76,9 @@
           except Exception as e:
               print(f"Error: {e}", file=sys.stderr)
               sys.exit(1)
+      
+      # Debug: Print final results
+      print(f"DEBUG: Total devices after all filters: {len(all_devices)}", file=sys.stderr)
       
       result = {
           'devices': all_devices,
@@ -81,9 +93,17 @@
 
 - name: Set filter variables with safe defaults
   set_fact:
-    _device_role_filter: "{{ device_role_filter if device_role_filter is defined else '' }}"
-    _site_filter: "{{ site_filter if site_filter is defined else '' }}"
-    _manufacturer_filter: "{{ manufacturer_filter if manufacturer_filter is defined else '' }}"
+    _device_role_filter: "{{ device_role_filter if device_role_filter is defined and device_role_filter | string | length > 0 else '' }}"
+    _site_filter: "{{ site_filter if site_filter is defined and site_filter | string | length > 0 else '' }}"
+    _manufacturer_filter: "{{ manufacturer_filter if manufacturer_filter is defined and manufacturer_filter | string | length > 0 else '' }}"
+
+- name: Display active filters
+  debug:
+    msg: |
+      Active Filters:
+      - Device Role: {{ _device_role_filter if _device_role_filter | length > 0 else 'ALL (no filter)' }}
+      - Site: {{ _site_filter if _site_filter | length > 0 else 'ALL (no filter)' }}
+      - Manufacturer: {{ _manufacturer_filter if _manufacturer_filter | length > 0 else 'ALL (no filter)' }}
 
 - name: Fetch all devices using Python script
   command: >
@@ -98,8 +118,23 @@
   changed_when: false
   delegate_to: localhost
 
+- name: Display Python script debug output
+  debug:
+    msg: "{{ fetch_devices_result.stderr_lines | default([]) | join('\n') }}"
+  when: fetch_devices_result.stderr_lines is defined and fetch_devices_result.stderr_lines | length > 0
+
 - name: Parse fetched devices
   set_fact:
     netbox_devices_raw: "{{ (fetch_devices_result.stdout | from_json).devices }}"
     netbox_devices_count: "{{ (fetch_devices_result.stdout | from_json).count }}"
+
+- name: Display fetch results
+  debug:
+    msg: |
+      ============================================
+      NETBOX API FETCH RESULTS
+      ============================================
+      Total devices found after filters: {{ netbox_devices_count }}
+      Raw devices list length: {{ netbox_devices_raw | length }}
+      ============================================
 
