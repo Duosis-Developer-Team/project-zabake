@@ -17,9 +17,6 @@
     # Optional: Limit number of devices to process
     _device_limit: "{{ device_limit | default(0) | int }}"
     
-    # Optional: Device role filter (will use role default if not provided)
-    _device_role_filter: "{{ device_role_filter if device_role_filter is defined else omit }}"
-    
     # Optional: Site filter
     _site_filter: "{{ site_filter | default('') }}"
     
@@ -63,7 +60,6 @@
         zabbix_password: "{{ _zabbix_password }}"
         zabbix_validate_certs: "{{ _zabbix_validate_certs }}"
         device_limit: "{{ _device_limit }}"
-        device_role_filter: "{{ _device_role_filter if _device_role_filter != omit else omit }}"
         site_filter: "{{ _site_filter if _site_filter != '' else omit }}"
         manufacturer_filter: "{{ _manufacturer_filter if _manufacturer_filter != '' else omit }}"
-
+        # device_role_filter will use role default if not provided via extra-vars

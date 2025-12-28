@@ -12,16 +12,12 @@
   set_fact:
     netbox_devices_filtered: >-
       {{ netbox_devices_raw | selectattr('device_role.name', 'equalto', device_role_filter) | list }}
-  when: 
-    - device_role_filter is defined
-    - device_role_filter != ""
-    - device_role_filter | string | length > 0
+  when: device_role_filter | string | length > 0
 
 - name: Set devices after role filter (no filter)
   set_fact:
     netbox_devices_filtered: "{{ netbox_devices_raw }}"
-  when: 
-    - device_role_filter is not defined or device_role_filter == "" or (device_role_filter | string | length == 0)
+  when: device_role_filter | string | length == 0
 
 - name: Apply site filter
   set_fact:
