@@ -67,14 +67,37 @@
           return None
       
       def get_primary_ip(device, netbox_url, netbox_token, verify_ssl):
-          primary_ip_id = device.get('primary_ip4')
-          if not primary_ip_id:
+          primary_ip4 = device.get('primary_ip4')
+          if not primary_ip4:
               return None
           
-          if isinstance(primary_ip_id, int):
+          # If primary_ip4 is a dict/object (expanded in API response)
+          if isinstance(primary_ip4, dict):
+              address = primary_ip4.get('address', '')
+              if address:
+                  return address.split('/')[0] if '/' in address else address
+              # If address not in dict, try to get from API using ID
+              ip_id = primary_ip4.get('id')
+              if ip_id:
+                  try:
+                      response = requests.get(
+                          f"{netbox_url.rstrip('/')}/api/ipam/ip-addresses/{ip_id}/",
+                          headers={'Authorization': f'Token {netbox_token}', 'Accept': 'application/json'},
+                          verify=verify_ssl,
+                          timeout=10
+                      )
+                      if response.status_code == 200:
+                          ip_data = response.json()
+                          address = ip_data.get('address', '')
+                          return address.split('/')[0] if '/' in address else address
+                  except:
+                      pass
+          
+          # If primary_ip4 is an integer (ID only)
+          if isinstance(primary_ip4, int):
               try:
                   response = requests.get(
-                      f"{netbox_url.rstrip('/')}/api/ipam/ip-addresses/{primary_ip_id}/",
+                      f"{netbox_url.rstrip('/')}/api/ipam/ip-addresses/{primary_ip4}/",
                       headers={'Authorization': f'Token {netbox_token}', 'Accept': 'application/json'},
                       verify=verify_ssl,
                       timeout=10
@@ -86,8 +109,9 @@
               except:
                   pass
           
-          if isinstance(primary_ip_id, str):
-              return primary_ip_id.split('/')[0] if '/' in primary_ip_id else primary_ip_id
+          # If primary_ip4 is a string (direct address)
+          if isinstance(primary_ip4, str):
+              return primary_ip4.split('/')[0] if '/' in primary_ip4 else primary_ip4
           
           return None
       
