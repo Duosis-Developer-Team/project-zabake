@@ -65,10 +65,3 @@ Citrix ADC:
 Sophos Switch:
   - name: Virtual Sophos SNMP
     type: snmpv2
-HP ILO:
-  - name: HP iLO by SNMP
-    type: snmpv2
-Lenovo ICT:
-  - name: Lenovo ICT XCC Monitoring
-    type: snmpv3
-

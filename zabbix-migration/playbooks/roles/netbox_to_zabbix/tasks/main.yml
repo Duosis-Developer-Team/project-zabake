@@ -3,6 +3,7 @@
   set_fact:
     templates_map: "{{ lookup('file', templates_map_path) | from_yaml }}"
     datacenters_map: "{{ lookup('file', datacenters_map_path) | from_yaml }}"
+    device_type_mapping: "{{ lookup('file', device_type_mapping_path) | from_yaml }}"
 
 - name: Fetch all devices from Netbox API (with pagination)
   include_tasks: fetch_all_devices.yml
@@ -13,13 +14,14 @@
       {{ netbox_devices_raw | selectattr('device_role.name', 'equalto', device_role_filter) | list }}
   when: 
     - device_role_filter is defined
+    - device_role_filter != ""
     - device_role_filter | string | length > 0
 
-- name: Set devices after role filter
+- name: Set devices after role filter (no filter)
   set_fact:
     netbox_devices_filtered: "{{ netbox_devices_raw }}"
   when: 
-    - device_role_filter is not defined or (device_role_filter | string | length == 0)
+    - device_role_filter is not defined or device_role_filter == "" or (device_role_filter | string | length == 0)
 
 - name: Apply site filter
   set_fact:

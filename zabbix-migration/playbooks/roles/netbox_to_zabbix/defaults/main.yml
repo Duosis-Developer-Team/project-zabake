@@ -19,4 +19,5 @@ manufacturer_filter: ""  # Filter by manufacturer (empty = all manufacturers)
 # Mapping file paths
 templates_map_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/templates.yml"
 datacenters_map_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/datacenters.yml"
+device_type_mapping_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/netbox_device_type_mapping.yml"
 

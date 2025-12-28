@@ -7,46 +7,60 @@
       import sys
       import requests
       
-      def determine_device_type(device, templates_map):
-          role = device.get('device_role', {}).get('name', '')
-          manufacturer = device.get('device_type', {}).get('manufacturer', {}).get('name', '').upper()
-          model = device.get('device_type', {}).get('model', '').upper()
-          device_name = device.get('name', '').upper()
+      def check_condition(device, condition_key, condition_value):
+          """Check if device matches a condition"""
+          if condition_key == 'device_role':
+              role = device.get('device_role', {}).get('name', '')
+              if isinstance(condition_value, list):
+                  return role.upper() in [v.upper() for v in condition_value]
+              return role.upper() == condition_value.upper()
           
-          if role != 'HOST':
-              return None
+          elif condition_key == 'manufacturer':
+              manufacturer = device.get('device_type', {}).get('manufacturer', {}).get('name', '').upper()
+              if isinstance(condition_value, list):
+                  return manufacturer in [v.upper() for v in condition_value]
+              return manufacturer == condition_value.upper()
           
-          # Lenovo IPMI or Lenovo ICT
-          if 'LENOVO' in manufacturer and 'Lenovo' in str(templates_map.keys()):
-              if 'ICT' in model or 'XCC' in model or 'ICT' in device_name:
-                  return 'Lenovo ICT'
-              else:
-                  return 'Lenovo IPMI'
+          elif condition_key == 'model_contains':
+              model = device.get('device_type', {}).get('model', '').upper()
+              if isinstance(condition_value, list):
+                  return any(item.upper() in model for item in condition_value)
+              return condition_value.upper() in model
           
-          # Inspur M6 or M5
-          elif 'INSPUR' in manufacturer:
-              if 'M6' in model or model.endswith('M6'):
-                  return 'Inspur M6'
-              elif 'M5' in model or model.endswith('M5'):
-                  return 'Inspur M5'
+          elif condition_key == 'model_suffix':
+              model = device.get('device_type', {}).get('model', '').upper()
+              if isinstance(condition_value, list):
+                  return any(model.endswith(item.upper()) for item in condition_value)
+              return model.endswith(condition_value.upper())
           
-          # HPE IPMI or HP ILO
-          elif 'HPE' in manufacturer or 'HP' in manufacturer:
-              if 'ILO' in model or 'ILO' in device_name:
-                  return 'HP ILO'
-              else:
-                  return 'HPE IPMI'
+          elif condition_key == 'name_contains':
+              device_name = device.get('name', '').upper()
+              if isinstance(condition_value, list):
+                  return any(item.upper() in device_name for item in condition_value)
+              return condition_value.upper() in device_name
           
-          # Dell IPMI
-          elif 'DELL' in manufacturer:
-              return 'Dell IPMI'
+          return False
+      
+      def determine_device_type(device, device_type_mapping):
+          """Determine device type from YAML mapping"""
+          mappings = device_type_mapping.get('mappings', [])
           
-          # Check other device types
-          for dev_type in templates_map.keys():
-              if manufacturer and dev_type:
-                  if manufacturer.replace(' ', '') in dev_type.replace(' ', '').upper() or \
-                     dev_type.replace(' ', '').upper() in manufacturer.replace(' ', ''):
-                      return dev_type
+          # Sort by priority (lower priority number = higher priority)
+          sorted_mappings = sorted(mappings, key=lambda x: x.get('priority', 999))
+          
+          for mapping in sorted_mappings:
+              conditions = mapping.get('conditions', {})
+              device_type = mapping.get('device_type')
+              
+              # Check all conditions
+              all_match = True
+              for condition_key, condition_value in conditions.items():
+                  if not check_condition(device, condition_key, condition_value):
+                      all_match = False
+                      break
+              
+              if all_match:
+                  return device_type
           
           return None
       
@@ -110,16 +124,16 @@
       
       if __name__ == '__main__':
           device_json = sys.argv[1]
-          templates_map_json = sys.argv[2]
+          device_type_mapping_json = sys.argv[2]
           netbox_url = sys.argv[3]
           netbox_token = sys.argv[4]
           verify_ssl = sys.argv[5].lower() == 'true'
           
           device = json.loads(device_json)
-          templates_map = json.loads(templates_map_json)
+          device_type_mapping = json.loads(device_type_mapping_json)
           
           result = {
-              'device_type': determine_device_type(device, templates_map),
+              'device_type': determine_device_type(device, device_type_mapping),
               'primary_ip': get_primary_ip(device, netbox_url, netbox_token, verify_ssl),
               'host_groups': extract_host_groups(device),
               'tags': extract_tags(device),
@@ -136,7 +150,7 @@
   command: >
     python3 /tmp/netbox_device_processor.py
     "{{ netbox_device | to_json }}"
-    "{{ templates_map | to_json }}"
+    "{{ device_type_mapping | to_json }}"
     "{{ netbox_url }}"
     "{{ netbox_token }}"
     "{{ netbox_verify_ssl | string }}"

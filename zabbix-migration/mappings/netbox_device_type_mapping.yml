@@ -1,0 +1,41 @@
+# Netbox Device Type Mapping
+# This file maps Netbox device attributes to Zabbix DEVICE_TYPE
+# Conditions are evaluated in order, first match wins
+
+mappings:
+  # Lenovo devices
+  - device_type: "Lenovo IPMI"
+    conditions:
+      device_role: "HOST"
+      manufacturer: "LENOVO"
+    priority: 1
+
+  # Inspur devices
+  - device_type: "Inspur M6"
+    conditions:
+      device_role: "HOST"
+      manufacturer: "INSPUR"
+      model_contains: ["M6"]
+      model_suffix: "M6"
+    priority: 1
+
+  - device_type: "Inspur M5"
+    conditions:
+      device_role: "HOST"
+      manufacturer: "INSPUR"
+      model_contains: ["M5"]
+      model_suffix: "M5"
+    priority: 1
+
+  - device_type: "HPE IPMI"
+    conditions:
+      device_role: "HOST"
+      manufacturer: ["HPE", "HP"]
+    priority: 1
+
+  # Dell devices
+  - device_type: "Dell IPMI"
+    conditions:
+      device_role: "HOST"
+      manufacturer: "DELL"
+    priority: 1
