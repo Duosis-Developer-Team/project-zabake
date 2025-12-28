@@ -25,9 +25,11 @@
       
       def device_matches_conditions(device, conditions):
           """Check if device matches the given conditions"""
-          # Device role check
+          # Device role check - Netbox API uses 'role' field, not 'device_role'
           if 'device_role' in conditions:
-              role_name = device.get('device_role', {}).get('name', '') if device.get('device_role') else ''
+              # Try 'role' first (Netbox API field name), then 'device_role' as fallback
+              role_obj = device.get('role') or device.get('device_role')
+              role_name = role_obj.get('name', '') if role_obj and isinstance(role_obj, dict) else ''
               expected_roles = conditions['device_role']
               if isinstance(expected_roles, list):
                   if not role_name or role_name.upper() not in [r.upper() for r in expected_roles]:
@@ -112,7 +114,9 @@
               if len(devices) > 0 and len(all_devices) == 0:  # Only print on first page
                   print("DEBUG: Sample device details (first 3 devices):", file=sys.stderr)
                   for i, device in enumerate(devices[:3]):
-                      role_name = device.get('device_role', {}).get('name', 'N/A') if device.get('device_role') else 'N/A'
+                      # Try 'role' first (Netbox API field name), then 'device_role' as fallback
+                      role_obj = device.get('role') or device.get('device_role')
+                      role_name = role_obj.get('name', 'N/A') if role_obj and isinstance(role_obj, dict) else 'N/A'
                       manufacturer_name = device.get('device_type', {}).get('manufacturer', {}).get('name', 'N/A') if device.get('device_type', {}).get('manufacturer') else 'N/A'
                       model = device.get('device_type', {}).get('model', 'N/A') if device.get('device_type') else 'N/A'
                       name = device.get('name', 'N/A')
@@ -128,7 +132,9 @@
                       unmatched_count += 1
                       # Debug: Print first unmatched device details for troubleshooting
                       if unmatched_count == 1 and len(all_devices) == 0:
-                          role_name = device.get('device_role', {}).get('name', 'N/A') if device.get('device_role') else 'N/A'
+                          # Try 'role' first (Netbox API field name), then 'device_role' as fallback
+                          role_obj = device.get('role') or device.get('device_role')
+                          role_name = role_obj.get('name', 'N/A') if role_obj and isinstance(role_obj, dict) else 'N/A'
                           manufacturer_name = device.get('device_type', {}).get('manufacturer', {}).get('name', 'N/A') if device.get('device_type', {}).get('manufacturer') else 'N/A'
                           model = device.get('device_type', {}).get('model', 'N/A') if device.get('device_type') else 'N/A'
                           name = device.get('name', 'N/A')
