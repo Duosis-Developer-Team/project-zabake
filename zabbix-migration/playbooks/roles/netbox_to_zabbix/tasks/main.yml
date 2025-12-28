@@ -8,25 +8,9 @@
 - name: Fetch all devices from Netbox API (with pagination and role filter)
   include_tasks: fetch_all_devices.yml
 
-- name: Set filtered devices
+- name: Set filtered devices (filters already applied in Python script)
   set_fact:
     netbox_devices_filtered: "{{ netbox_devices_raw }}"
-
-- name: Apply site filter
-  set_fact:
-    netbox_devices_filtered: >-
-      {{ netbox_devices_filtered | selectattr('site.name', 'equalto', site_filter) | list }}
-  when: 
-    - site_filter is defined
-    - site_filter | string | length > 0
-
-- name: Apply manufacturer filter
-  set_fact:
-    netbox_devices_filtered: >-
-      {{ netbox_devices_filtered | selectattr('device_type.manufacturer.name', 'equalto', manufacturer_filter) | list }}
-  when: 
-    - manufacturer_filter is defined
-    - manufacturer_filter | string | length > 0
 
 - name: Apply device limit
   set_fact:

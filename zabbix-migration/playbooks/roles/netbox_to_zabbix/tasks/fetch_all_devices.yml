@@ -13,7 +13,9 @@
       netbox_url = sys.argv[1].rstrip('/')
       netbox_token = sys.argv[2]
       verify_ssl = sys.argv[3].lower() == 'true'
-      device_role_filter = sys.argv[4] if len(sys.argv) > 4 else None
+      device_role_filter = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] else None
+      site_filter = sys.argv[5] if len(sys.argv) > 5 and sys.argv[5] else None
+      manufacturer_filter = sys.argv[6] if len(sys.argv) > 6 and sys.argv[6] else None
       
       all_devices = []
       next_url = f"{netbox_url}/api/dcim/devices/?limit=1000"
@@ -34,16 +36,30 @@
               
               devices = data.get('results', [])
               
-              # Apply device role filter if provided
-              if device_role_filter:
-                  filtered_devices = []
-                  for device in devices:
+              # Apply filters
+              filtered_devices = []
+              for device in devices:
+                  # Device role filter
+                  if device_role_filter:
                       role_name = device.get('device_role', {}).get('name', '') if device.get('device_role') else ''
-                      if role_name and role_name.upper() == device_role_filter.upper():
-                          filtered_devices.append(device)
-                  devices = filtered_devices
+                      if not role_name or role_name.upper() != device_role_filter.upper():
+                          continue
+                  
+                  # Site filter
+                  if site_filter:
+                      site_name = device.get('site', {}).get('name', '') if device.get('site') else ''
+                      if not site_name or site_name.upper() != site_filter.upper():
+                          continue
+                  
+                  # Manufacturer filter
+                  if manufacturer_filter:
+                      manufacturer_name = device.get('device_type', {}).get('manufacturer', {}).get('name', '') if device.get('device_type', {}).get('manufacturer') else ''
+                      if not manufacturer_name or manufacturer_name.upper() != manufacturer_filter.upper():
+                          continue
+                  
+                  filtered_devices.append(device)
               
-              all_devices.extend(devices)
+              all_devices.extend(filtered_devices)
               next_url = data.get('next')
               
               if not next_url:
@@ -70,6 +86,8 @@
     "{{ netbox_token }}"
     "{{ netbox_verify_ssl | string }}"
     "{{ device_role_filter | default('') }}"
+    "{{ site_filter | default('') }}"
+    "{{ manufacturer_filter | default('') }}"
   register: fetch_devices_result
   changed_when: false
   delegate_to: localhost
