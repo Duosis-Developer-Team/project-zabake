@@ -19,7 +19,9 @@
 
 - name: Apply device limit
   set_fact:
-    netbox_devices_final: "{{ netbox_devices_filtered[:device_limit_int] }}"
+    netbox_devices_final: >-
+      {%- set limit = device_limit_int | int -%}
+      {{ netbox_devices_filtered[:limit] }}
   when: device_limit_int | int > 0
 
 - name: Set all devices when no limit
