@@ -270,15 +270,17 @@
   run_once: true
   delegate_to: localhost
 
-- name: Set zbx_record for role
+- name: Set variables for role
   set_fact:
     _zbx_record_for_role: "{{ zbx_record }}"
+    _zabbix_auth_for_role: "{{ zabbix_auth }}"
   when: 
     - device_info.device_type is not none
     - device_info.device_type != ""
     - device_info.primary_ip is not none
     - device_info.primary_ip != ""
     - zbx_record is defined
+    - zabbix_auth is defined
 
 - name: Process device with Zabbix migration role
   include_role:
@@ -290,10 +292,11 @@
     zabbix_user: "{{ zabbix_user }}"
     zabbix_password: "{{ zabbix_password }}"
     zabbix_validate_certs: "{{ zabbix_validate_certs }}"
-    zabbix_auth: "{{ zabbix_auth }}"
+    zabbix_auth: "{{ _zabbix_auth_for_role }}"
   when: 
     - device_info.device_type is not none
     - device_info.device_type != ""
     - device_info.primary_ip is not none
     - device_info.primary_ip != ""
     - _zbx_record_for_role is defined
+    - _zabbix_auth_for_role is defined
