@@ -108,11 +108,54 @@
               # Debug: Print page info
               print(f"DEBUG: Fetched {len(devices)} devices from this page", file=sys.stderr)
               
+              # Debug: Print sample device details (first 3 devices)
+              if len(devices) > 0 and len(all_devices) == 0:  # Only print on first page
+                  print("DEBUG: Sample device details (first 3 devices):", file=sys.stderr)
+                  for i, device in enumerate(devices[:3]):
+                      role_name = device.get('device_role', {}).get('name', 'N/A') if device.get('device_role') else 'N/A'
+                      manufacturer_name = device.get('device_type', {}).get('manufacturer', {}).get('name', 'N/A') if device.get('device_type', {}).get('manufacturer') else 'N/A'
+                      model = device.get('device_type', {}).get('model', 'N/A') if device.get('device_type') else 'N/A'
+                      name = device.get('name', 'N/A')
+                      print(f"  Device {i+1}: name={name}, role={role_name}, manufacturer={manufacturer_name}, model={model}", file=sys.stderr)
+              
               # Apply mapping-based filters
               filtered_devices = []
+              unmatched_count = 0
               for device in devices:
                   if device_matches_any_mapping(device):
                       filtered_devices.append(device)
+                  else:
+                      unmatched_count += 1
+                      # Debug: Print first unmatched device details for troubleshooting
+                      if unmatched_count == 1 and len(all_devices) == 0:
+                          role_name = device.get('device_role', {}).get('name', 'N/A') if device.get('device_role') else 'N/A'
+                          manufacturer_name = device.get('device_type', {}).get('manufacturer', {}).get('name', 'N/A') if device.get('device_type', {}).get('manufacturer') else 'N/A'
+                          model = device.get('device_type', {}).get('model', 'N/A') if device.get('device_type') else 'N/A'
+                          name = device.get('name', 'N/A')
+                          print(f"DEBUG: First unmatched device: name={name}, role={role_name}, manufacturer={manufacturer_name}, model={model}", file=sys.stderr)
+                          # Check why it doesn't match
+                          for mapping in mappings:
+                              conditions = mapping.get('conditions', {})
+                              print(f"  Checking mapping '{mapping.get('device_type', 'N/A')}':", file=sys.stderr)
+                              if 'device_role' in conditions:
+                                  expected_role = conditions['device_role']
+                                  if isinstance(expected_role, list):
+                                      print(f"    device_role: expected one of {expected_role}, got '{role_name}'", file=sys.stderr)
+                                  else:
+                                      print(f"    device_role: expected '{expected_role}', got '{role_name}'", file=sys.stderr)
+                              if 'manufacturer' in conditions:
+                                  expected_manufacturer = conditions['manufacturer']
+                                  if isinstance(expected_manufacturer, list):
+                                      print(f"    manufacturer: expected one of {expected_manufacturer}, got '{manufacturer_name}'", file=sys.stderr)
+                                  else:
+                                      print(f"    manufacturer: expected '{expected_manufacturer}', got '{manufacturer_name}'", file=sys.stderr)
+                              if 'model_contains' in conditions:
+                                  expected_contains = conditions['model_contains']
+                                  print(f"    model_contains: expected {expected_contains}, got model '{model}'", file=sys.stderr)
+                              if 'model_suffix' in conditions:
+                                  expected_suffix = conditions['model_suffix']
+                                  print(f"    model_suffix: expected '{expected_suffix}', got model '{model}'", file=sys.stderr)
+                          break
               
               all_devices.extend(filtered_devices)
               print(f"DEBUG: After mapping filters, {len(filtered_devices)} devices match on this page", file=sys.stderr)
