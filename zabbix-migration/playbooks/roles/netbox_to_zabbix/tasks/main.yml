@@ -4,52 +4,8 @@
     templates_map: "{{ lookup('file', templates_map_path) | from_yaml }}"
     datacenters_map: "{{ lookup('file', datacenters_map_path) | from_yaml }}"
 
-- name: Fetch devices from Netbox API (first page)
-  uri:
-    url: "{{ netbox_url.rstrip('/') }}/api/dcim/devices/?limit=1000"
-    method: GET
-    headers:
-      Authorization: "Token {{ netbox_token }}"
-      Accept: "application/json"
-    body_format: json
-    validate_certs: "{{ netbox_verify_ssl }}"
-    status_code: [200]
-    return_content: yes
-  register: netbox_devices_first_page
-  until: netbox_devices_first_page.status == 200
-  retries: 3
-  delay: 2
-
-- name: Initialize device list
-  set_fact:
-    netbox_devices_raw: "{{ netbox_devices_first_page.json.results | default([]) }}"
-    netbox_devices_count: "{{ netbox_devices_first_page.json.count | default(0) }}"
-    netbox_next_url: "{{ netbox_devices_first_page.json.next }}"
-
-- name: Fetch remaining pages
-  uri:
-    url: "{{ netbox_next_url }}"
-    method: GET
-    headers:
-      Authorization: "Token {{ netbox_token }}"
-      Accept: "application/json"
-    body_format: json
-    validate_certs: "{{ netbox_verify_ssl }}"
-    status_code: [200]
-    return_content: yes
-  register: netbox_devices_page
-  when: netbox_next_url is defined and netbox_next_url is not none and netbox_next_url != ""
-  loop: "{{ range(0, 100) | list }}"
-  until: netbox_next_url is not defined or netbox_next_url is none or netbox_next_url == ""
-
-- name: Append page results
-  set_fact:
-    netbox_devices_raw: "{{ netbox_devices_raw + (netbox_devices_page.json.results | default([])) }}"
-    netbox_next_url: "{{ netbox_devices_page.json.next }}"
-  when: 
-    - netbox_devices_page is defined
-    - netbox_devices_page.json.results is defined
-    - netbox_next_url is not defined or netbox_next_url is none or netbox_next_url == ""
+- name: Fetch all devices from Netbox API (with pagination)
+  include_tasks: fetch_all_devices.yml
 
 - name: Apply device role filter
   set_fact:

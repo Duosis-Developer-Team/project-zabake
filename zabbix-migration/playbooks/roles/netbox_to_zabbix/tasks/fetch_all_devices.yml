@@ -1,0 +1,68 @@
+---
+- name: Create Python script to fetch all devices with pagination
+  copy:
+    content: |
+      #!/usr/bin/env python3
+      import json
+      import sys
+      import requests
+      from urllib3.exceptions import InsecureRequestWarning
+      
+      requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+      
+      netbox_url = sys.argv[1].rstrip('/')
+      netbox_token = sys.argv[2]
+      verify_ssl = sys.argv[3].lower() == 'true'
+      
+      all_devices = []
+      next_url = f"{netbox_url}/api/dcim/devices/?limit=1000"
+      
+      while next_url:
+          try:
+              response = requests.get(
+                  next_url,
+                  headers={
+                      'Authorization': f'Token {netbox_token}',
+                      'Accept': 'application/json'
+                  },
+                  verify=verify_ssl,
+                  timeout=30
+              )
+              response.raise_for_status()
+              data = response.json()
+              
+              all_devices.extend(data.get('results', []))
+              next_url = data.get('next')
+              
+              if not next_url:
+                  break
+          except Exception as e:
+              print(f"Error: {e}", file=sys.stderr)
+              sys.exit(1)
+      
+      result = {
+          'devices': all_devices,
+          'count': len(all_devices)
+      }
+      
+      print(json.dumps(result))
+    dest: "/tmp/fetch_all_netbox_devices.py"
+    mode: '0755'
+  delegate_to: localhost
+  run_once: true
+
+- name: Fetch all devices using Python script
+  command: >
+    python3 /tmp/fetch_all_netbox_devices.py
+    "{{ netbox_url }}"
+    "{{ netbox_token }}"
+    "{{ netbox_verify_ssl | string }}"
+  register: fetch_devices_result
+  changed_when: false
+  delegate_to: localhost
+
+- name: Parse fetched devices
+  set_fact:
+    netbox_devices_raw: "{{ (fetch_devices_result.stdout | from_json).devices }}"
+    netbox_devices_count: "{{ (fetch_devices_result.stdout | from_json).count }}"
+
