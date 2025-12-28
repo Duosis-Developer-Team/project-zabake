@@ -17,6 +17,19 @@
     zbx_macros: >-
       {{ (macros_json_like | from_yaml) if macros_json_like is match('^\\{') else {} }}
 
+- name: Parse tags from macros field
+  vars:
+    _macros_dict: "{{ zbx_macros | default({}) }}"
+  set_fact:
+    zbx_tags: >-
+      {{ _macros_dict | dict2items | map('dict', tag='key', value='value') | list }}
+  when: _macros_dict | length > 0
+
+- name: Initialize tags if empty
+  set_fact:
+    zbx_tags: []
+  when: zbx_tags is not defined
+
 - name: Resolve templates for device type
   set_fact:
     zbx_templates: "{{ zbx_tpl_map.get(zbx_record.DEVICE_TYPE, []) }}"
@@ -116,6 +129,7 @@
           } ] if zbx_iface is not none else [] }}
         templates: "{{ zbx_template_id_list }}"
         groups: "{{ zbx_group_id_list | map('regex_replace','^(.*)$','{\"groupid\":\"\\1\"}') | map('from_yaml') | list }}"
+        tags: "{{ zbx_tags | default(omit) }}"
         monitored_by: "{{ zbx_monitored_by }}"
         proxy_groupid: "{{ zbx_dc.proxy_groupid | default(omit) }}"
         proxyid: "{{ zbx_dc.proxyid | default(omit) }}"
@@ -149,6 +163,7 @@
           } ] if zbx_iface is not none else omit }}
         templates: "{{ zbx_template_id_list }}"
         groups: "{{ zbx_group_id_list | map('regex_replace','^(.*)$','{\"groupid\":\"\\1\"}') | map('from_yaml') | list }}"
+        tags: "{{ zbx_tags | default(omit) }}"
         monitored_by: "{{ zbx_monitored_by }}"
         proxy_groupid: "{{ zbx_dc.proxy_groupid | default(omit) }}"
         proxyid: "{{ zbx_dc.proxyid | default(omit) }}"

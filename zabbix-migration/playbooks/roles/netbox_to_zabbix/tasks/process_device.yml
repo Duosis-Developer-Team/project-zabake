@@ -1,0 +1,232 @@
+---
+- name: Create temporary Python script for device processing
+  copy:
+    content: |
+      #!/usr/bin/env python3
+      import json
+      import sys
+      import requests
+      
+      def determine_device_type(device, templates_map):
+          role = device.get('device_role', {}).get('name', '')
+          manufacturer = device.get('device_type', {}).get('manufacturer', {}).get('name', '').upper()
+          model = device.get('device_type', {}).get('model', '').upper()
+          device_name = device.get('name', '').upper()
+          
+          if role != 'HOST':
+              return None
+          
+          # Lenovo IPMI or Lenovo ICT
+          if 'LENOVO' in manufacturer and 'Lenovo' in str(templates_map.keys()):
+              if 'ICT' in model or 'XCC' in model or 'ICT' in device_name:
+                  return 'Lenovo ICT'
+              else:
+                  return 'Lenovo IPMI'
+          
+          # Inspur M6 or M5
+          elif 'INSPUR' in manufacturer:
+              if 'M6' in model or model.endswith('M6'):
+                  return 'Inspur M6'
+              elif 'M5' in model or model.endswith('M5'):
+                  return 'Inspur M5'
+          
+          # HPE IPMI or HP ILO
+          elif 'HPE' in manufacturer or 'HP' in manufacturer:
+              if 'ILO' in model or 'ILO' in device_name:
+                  return 'HP ILO'
+              else:
+                  return 'HPE IPMI'
+          
+          # Dell IPMI
+          elif 'DELL' in manufacturer:
+              return 'Dell IPMI'
+          
+          # Check other device types
+          for dev_type in templates_map.keys():
+              if manufacturer and dev_type:
+                  if manufacturer.replace(' ', '') in dev_type.replace(' ', '').upper() or \
+                     dev_type.replace(' ', '').upper() in manufacturer.replace(' ', ''):
+                      return dev_type
+          
+          return None
+      
+      def get_primary_ip(device, netbox_url, netbox_token, verify_ssl):
+          primary_ip_id = device.get('primary_ip4')
+          if not primary_ip_id:
+              return None
+          
+          if isinstance(primary_ip_id, int):
+              try:
+                  response = requests.get(
+                      f"{netbox_url.rstrip('/')}/api/ipam/ip-addresses/{primary_ip_id}/",
+                      headers={'Authorization': f'Token {netbox_token}', 'Accept': 'application/json'},
+                      verify=verify_ssl,
+                      timeout=10
+                  )
+                  if response.status_code == 200:
+                      ip_data = response.json()
+                      address = ip_data.get('address', '')
+                      return address.split('/')[0] if '/' in address else address
+              except:
+                  pass
+          
+          if isinstance(primary_ip_id, str):
+              return primary_ip_id.split('/')[0] if '/' in primary_ip_id else primary_ip_id
+          
+          return None
+      
+      def extract_host_groups(device):
+          groups = []
+          if device.get('site', {}).get('name'):
+              groups.append(device['site']['name'])
+          if device.get('device_type', {}).get('model'):
+              groups.append(device['device_type']['model'])
+          elif device.get('device_type', {}).get('display'):
+              groups.append(device['device_type']['display'])
+          return ','.join(groups) if groups else ''
+      
+      def extract_tags(device):
+          tags = {}
+          if device.get('device_type', {}).get('manufacturer', {}).get('name'):
+              tags['Manufacturer'] = device['device_type']['manufacturer']['name']
+          if device.get('device_type', {}).get('model'):
+              tags['Device_Type'] = device['device_type']['model']
+          elif device.get('device_type', {}).get('display'):
+              tags['Device_Type'] = device['device_type']['display']
+          if device.get('location', {}).get('name'):
+              tags['Location_Detail'] = device['location']['name']
+          elif device.get('site', {}).get('name'):
+              tags['Location_Detail'] = device['site']['name']
+          if device.get('site', {}).get('name'):
+              tags['City'] = device['site']['name']
+          if device.get('tenant', {}).get('name'):
+              tags['Customer'] = device['tenant']['name']
+          custom_fields = device.get('custom_fields', {})
+          if custom_fields.get('Sorumlu_Ekip'):
+              tags['Sorumlu_Ekip'] = custom_fields['Sorumlu_Ekip']
+          if device.get('id'):
+              tags['Loki_ID'] = str(device['id'])
+          return json.dumps(tags).replace('"', '""')
+      
+      if __name__ == '__main__':
+          device_json = sys.argv[1]
+          templates_map_json = sys.argv[2]
+          netbox_url = sys.argv[3]
+          netbox_token = sys.argv[4]
+          verify_ssl = sys.argv[5].lower() == 'true'
+          
+          device = json.loads(device_json)
+          templates_map = json.loads(templates_map_json)
+          
+          result = {
+              'device_type': determine_device_type(device, templates_map),
+              'primary_ip': get_primary_ip(device, netbox_url, netbox_token, verify_ssl),
+              'host_groups': extract_host_groups(device),
+              'tags': extract_tags(device),
+              'dc_id': device.get('site', {}).get('name', '')
+          }
+          
+          print(json.dumps(result))
+    dest: "/tmp/netbox_device_processor.py"
+    mode: '0755'
+  delegate_to: localhost
+  run_once: true
+
+- name: Process device with Python script
+  command: >
+    python3 /tmp/netbox_device_processor.py
+    "{{ netbox_device | to_json }}"
+    "{{ templates_map | to_json }}"
+    "{{ netbox_url }}"
+    "{{ netbox_token }}"
+    "{{ netbox_verify_ssl | string }}"
+  register: device_processing_result
+  changed_when: false
+  delegate_to: localhost
+
+- name: Parse device processing result
+  set_fact:
+    device_info: "{{ device_processing_result.stdout | from_json }}"
+
+- name: Skip device if no matching device type
+  debug:
+    msg: "Skipping device {{ netbox_device.name }} - no matching device type found"
+  when: device_info.device_type is none or device_info.device_type == ""
+  failed_when: false
+
+- name: Skip device if no IP address
+  debug:
+    msg: "Skipping device {{ netbox_device.name }} - no primary IP address found"
+  when: 
+    - device_info.device_type is not none
+    - device_info.device_type != ""
+    - (device_info.primary_ip is none or device_info.primary_ip == "")
+  failed_when: false
+
+- name: Create Zabbix record
+  set_fact:
+    zbx_record:
+      DEVICE_TYPE: "{{ device_info.device_type }}"
+      HOST_IP: "{{ device_info.primary_ip }}"
+      HOSTNAME: "{{ netbox_device.name }}"
+      DC_ID: "{{ device_info.dc_id }}"
+      HOST_GROUPS: "{{ device_info.host_groups }}"
+      TEMPLATE_TYPE: ""
+      MACROS: "{{ device_info.tags }}"
+  when: 
+    - device_info.device_type is not none
+    - device_info.device_type != ""
+    - device_info.primary_ip is not none
+    - device_info.primary_ip != ""
+
+- name: Zabbix login to obtain auth token
+  uri:
+    url: "{{ zabbix_url }}"
+    method: POST
+    body_format: json
+    validate_certs: "{{ zabbix_validate_certs }}"
+    body:
+      jsonrpc: "2.0"
+      method: "user.login"
+      params:
+        username: "{{ zabbix_user }}"
+        password: "{{ zabbix_password }}"
+      id: 0
+  register: zbx_login_resp
+  when: 
+    - device_info.device_type is not none
+    - device_info.device_type != ""
+    - device_info.primary_ip is not none
+    - device_info.primary_ip != ""
+  run_once: true
+  delegate_to: localhost
+
+- name: Set zabbix_auth from login
+  set_fact:
+    zabbix_auth: "{{ zbx_login_resp.json.result }}"
+  when: 
+    - device_info.device_type is not none
+    - device_info.device_type != ""
+    - device_info.primary_ip is not none
+    - device_info.primary_ip != ""
+    - zbx_login_resp.json.result is defined
+  run_once: true
+  delegate_to: localhost
+
+- name: Process device with Zabbix migration role
+  include_role:
+    name: zabbix_migration
+    tasks_from: per_record
+  vars:
+    zbx_record: "{{ zbx_record }}"
+    zabbix_url: "{{ zabbix_url }}"
+    zabbix_user: "{{ zabbix_user }}"
+    zabbix_password: "{{ zabbix_password }}"
+    zabbix_validate_certs: "{{ zabbix_validate_certs }}"
+    zabbix_auth: "{{ zabbix_auth }}"
+  when: 
+    - device_info.device_type is not none
+    - device_info.device_type != ""
+    - device_info.primary_ip is not none
+    - device_info.primary_ip != ""
+    - zbx_record is defined

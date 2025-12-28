@@ -1,0 +1,22 @@
+---
+# Netbox connection settings
+netbox_url: ""
+netbox_token: ""
+netbox_verify_ssl: false
+
+# Zabbix connection settings
+zabbix_url: ""
+zabbix_user: ""
+zabbix_password: ""
+zabbix_validate_certs: false
+
+# Device filtering
+device_limit: 0  # 0 means no limit, process all matching devices
+device_role_filter: "HOST"  # Filter by device role
+site_filter: ""  # Filter by site name (empty = all sites)
+manufacturer_filter: ""  # Filter by manufacturer (empty = all manufacturers)
+
+# Mapping file paths
+templates_map_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/templates.yml"
+datacenters_map_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/datacenters.yml"
+

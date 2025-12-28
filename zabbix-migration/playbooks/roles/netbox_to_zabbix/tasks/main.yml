@@ -1,0 +1,97 @@
+---
+- name: Load template mappings
+  set_fact:
+    templates_map: "{{ lookup('file', templates_map_path) | from_yaml }}"
+    datacenters_map: "{{ lookup('file', datacenters_map_path) | from_yaml }}"
+
+- name: Fetch devices from Netbox API (first page)
+  uri:
+    url: "{{ netbox_url.rstrip('/') }}/api/dcim/devices/?limit=1000"
+    method: GET
+    headers:
+      Authorization: "Token {{ netbox_token }}"
+      Accept: "application/json"
+    body_format: json
+    validate_certs: "{{ netbox_verify_ssl }}"
+    status_code: [200]
+    return_content: yes
+  register: netbox_devices_first_page
+  until: netbox_devices_first_page.status == 200
+  retries: 3
+  delay: 2
+
+- name: Initialize device list
+  set_fact:
+    netbox_devices_raw: "{{ netbox_devices_first_page.json.results | default([]) }}"
+    netbox_devices_count: "{{ netbox_devices_first_page.json.count | default(0) }}"
+    netbox_next_url: "{{ netbox_devices_first_page.json.next }}"
+
+- name: Fetch remaining pages
+  uri:
+    url: "{{ netbox_next_url }}"
+    method: GET
+    headers:
+      Authorization: "Token {{ netbox_token }}"
+      Accept: "application/json"
+    body_format: json
+    validate_certs: "{{ netbox_verify_ssl }}"
+    status_code: [200]
+    return_content: yes
+  register: netbox_devices_page
+  when: netbox_next_url is defined and netbox_next_url is not none and netbox_next_url != ""
+  loop: "{{ range(0, 100) | list }}"
+  until: netbox_next_url is not defined or netbox_next_url is none or netbox_next_url == ""
+
+- name: Append page results
+  set_fact:
+    netbox_devices_raw: "{{ netbox_devices_raw + (netbox_devices_page.json.results | default([])) }}"
+    netbox_next_url: "{{ netbox_devices_page.json.next }}"
+  when: 
+    - netbox_devices_page is defined
+    - netbox_devices_page.json.results is defined
+    - netbox_next_url is not defined or netbox_next_url is none or netbox_next_url == ""
+
+- name: Apply device role filter
+  set_fact:
+    netbox_devices_filtered: >-
+      {{ netbox_devices_raw | selectattr('device_role.name', 'equalto', device_role_filter) | list }}
+  when: device_role_filter | length > 0
+
+- name: Set devices after role filter
+  set_fact:
+    netbox_devices_filtered: "{{ netbox_devices_raw }}"
+  when: device_role_filter | length == 0
+
+- name: Apply site filter
+  set_fact:
+    netbox_devices_filtered: >-
+      {{ netbox_devices_filtered | selectattr('site.name', 'equalto', site_filter) | list }}
+  when: site_filter | length > 0
+
+- name: Apply manufacturer filter
+  set_fact:
+    netbox_devices_filtered: >-
+      {{ netbox_devices_filtered | selectattr('device_type.manufacturer.name', 'equalto', manufacturer_filter) | list }}
+  when: manufacturer_filter | length > 0
+
+- name: Apply device limit
+  set_fact:
+    netbox_devices_final: "{{ netbox_devices_filtered[:device_limit] }}"
+  when: device_limit > 0
+
+- name: Set all devices when no limit
+  set_fact:
+    netbox_devices_final: "{{ netbox_devices_filtered }}"
+  when: device_limit == 0
+
+- name: Display device count
+  debug:
+    msg: "Found {{ netbox_devices_final | length }} devices to process (limit: {{ 'unlimited' if device_limit == 0 else device_limit }})"
+
+- name: Process each device
+  include_tasks: process_device.yml
+  loop: "{{ netbox_devices_final }}"
+  loop_control:
+    label: "{{ item.name | default('Unknown') }}"
+  vars:
+    netbox_device: "{{ item }}"

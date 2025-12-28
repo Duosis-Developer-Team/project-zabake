@@ -1,0 +1,55 @@
+---
+- name: Netbox to Zabbix Migration
+  hosts: localhost
+  gather_facts: no
+  vars:
+    # Netbox credentials (required)
+    netbox_url: "{{ netbox_url | default('') }}"
+    netbox_token: "{{ netbox_token | default('') }}"
+    netbox_verify_ssl: "{{ netbox_verify_ssl | default(false) }}"
+    
+    # Zabbix credentials (required)
+    zabbix_url: "{{ zabbix_url | default('') }}"
+    zabbix_user: "{{ zabbix_user | default('') }}"
+    zabbix_password: "{{ zabbix_password | default('') }}"
+    zabbix_validate_certs: "{{ zabbix_validate_certs | default(false) }}"
+    
+    # Optional: Limit number of devices to process
+    device_limit: "{{ device_limit | default(0) | int }}"
+    
+    # Optional: Device role filter (default: HOST)
+    device_role_filter: "{{ device_role_filter | default('HOST') }}"
+    
+    # Optional: Site filter
+    site_filter: "{{ site_filter | default('') }}"
+    
+    # Optional: Manufacturer filter
+    manufacturer_filter: "{{ manufacturer_filter | default('') }}"
+  
+  pre_tasks:
+    - name: Validate required variables
+      fail:
+        msg: "{{ item }} is required"
+      when: vars[item] | length == 0
+      loop:
+        - netbox_url
+        - netbox_token
+        - zabbix_url
+        - zabbix_user
+        - zabbix_password
+  
+  roles:
+    - role: netbox_to_zabbix
+      vars:
+        netbox_url: "{{ netbox_url }}"
+        netbox_token: "{{ netbox_token }}"
+        netbox_verify_ssl: "{{ netbox_verify_ssl }}"
+        zabbix_url: "{{ zabbix_url }}"
+        zabbix_user: "{{ zabbix_user }}"
+        zabbix_password: "{{ zabbix_password }}"
+        zabbix_validate_certs: "{{ zabbix_validate_certs }}"
+        device_limit: "{{ device_limit }}"
+        device_role_filter: "{{ device_role_filter }}"
+        site_filter: "{{ site_filter }}"
+        manufacturer_filter: "{{ manufacturer_filter }}"
+
