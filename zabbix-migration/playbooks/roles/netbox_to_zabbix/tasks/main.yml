@@ -44,7 +44,7 @@
         - Name: {{ device.name | default('N/A') }}
         - ID: {{ device.id | default('N/A') }}
         - Site: {{ device.site.name | default('N/A') if device.site else 'N/A' }}
-        - Role: {{ device.device_role.name | default('N/A') if device.device_role else 'N/A' }}
+        - Role: {% if device.role %}{{ device.role.name | default('N/A') }}{% elif device.device_role %}{{ device.device_role.name | default('N/A') }}{% else %}N/A{% endif %}
         - Manufacturer: {{ device.device_type.manufacturer.name | default('N/A') if device.device_type.manufacturer else 'N/A' }}
         - Model: {{ device.device_type.model | default('N/A') if device.device_type else 'N/A' }}
         - Primary IP: {{ device.primary_ip4.address | default('N/A') if device.primary_ip4 else 'N/A' }}

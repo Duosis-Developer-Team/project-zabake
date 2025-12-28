@@ -10,7 +10,9 @@
       def check_condition(device, condition_key, condition_value):
           """Check if device matches a condition"""
           if condition_key == 'device_role':
-              role = device.get('device_role', {}).get('name', '')
+              # Try 'role' first (Netbox API field name), then 'device_role' as fallback
+              role_obj = device.get('role') or device.get('device_role')
+              role = role_obj.get('name', '') if role_obj and isinstance(role_obj, dict) else ''
               if isinstance(condition_value, list):
                   return role.upper() in [v.upper() for v in condition_value]
               return role.upper() == condition_value.upper()
