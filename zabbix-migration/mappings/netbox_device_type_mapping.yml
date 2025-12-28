@@ -14,7 +14,7 @@ mappings:
   - device_type: "Inspur M6"
     conditions:
       device_role: "HOST"
-      manufacturer: "INSPUR"
+      manufacturer: ["INSPUR", "Inspur"]
       model_contains: ["M6"]
       model_suffix: "M6"
     priority: 1
@@ -22,7 +22,7 @@ mappings:
   - device_type: "Inspur M5"
     conditions:
       device_role: "HOST"
-      manufacturer: "INSPUR"
+      manufacturer: ["INSPUR", "Inspur"]
       model_contains: ["M5"]
       model_suffix: "M5"
     priority: 1
