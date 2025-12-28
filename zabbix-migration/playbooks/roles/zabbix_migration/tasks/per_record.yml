@@ -92,6 +92,87 @@
     zbx_template_id_list: "{{ zbx_template_id_list + [ { 'templateid': item } ] }}"
   loop: "{{ zbx_tpl_get_resp.json.result | map(attribute='templateid') | list }}"
 
+- name: Collect required host groups for this record
+  vars:
+    _csv_group_names: "{{ (zbx_record.HOST_GROUPS | default('')).split(',') | map('trim') | reject('equalto', '') | list }}"
+    _all_target_groups: "{{ (_csv_group_names + [zbx_record.DEVICE_TYPE]) | unique }}"
+  set_fact:
+    zbx_required_groups_for_record: "{{ _all_target_groups }}"
+
+- name: Ensure zbx_group_map exists (create if missing)
+  when: zbx_group_map is not defined
+  block:
+    - name: Get existing host groups from Zabbix
+      uri:
+        url: "{{ zabbix_url }}"
+        method: POST
+        body_format: json
+        validate_certs: "{{ zabbix_validate_certs | default(false) }}"
+        body:
+          jsonrpc: "2.0"
+          method: "hostgroup.get"
+          params:
+            output: ["groupid", "name"]
+            filter:
+              name: "{{ zbx_required_groups_for_record }}"
+          auth: "{{ zabbix_auth }}"
+          id: 101
+      register: zbx_existing_groups_resp
+      run_once: true
+      delegate_to: localhost
+
+    - name: Identify missing groups
+      vars:
+        _existing_names: "{{ zbx_existing_groups_resp.json.result | map(attribute='name') | list }}"
+      set_fact:
+        zbx_missing_groups: "{{ zbx_required_groups_for_record | difference(_existing_names) }}"
+      run_once: true
+      delegate_to: localhost
+
+    - name: Create missing host groups
+      uri:
+        url: "{{ zabbix_url }}"
+        method: POST
+        body_format: json
+        validate_certs: "{{ zabbix_validate_certs | default(false) }}"
+        body:
+          jsonrpc: "2.0"
+          method: "hostgroup.create"
+          params:
+            name: "{{ item }}"
+          auth: "{{ zabbix_auth }}"
+          id: 102
+      loop: "{{ zbx_missing_groups }}"
+      register: zbx_created_groups_resp
+      when: zbx_missing_groups | length > 0
+      run_once: true
+      delegate_to: localhost
+
+    - name: Refresh host groups map (Fetch all required groups again to get IDs)
+      uri:
+        url: "{{ zabbix_url }}"
+        method: POST
+        body_format: json
+        validate_certs: "{{ zabbix_validate_certs | default(false) }}"
+        body:
+          jsonrpc: "2.0"
+          method: "hostgroup.get"
+          params:
+            output: ["groupid", "name"]
+            filter:
+              name: "{{ zbx_required_groups_for_record }}"
+          auth: "{{ zabbix_auth }}"
+          id: 103
+      register: zbx_final_groups_resp
+      run_once: true
+      delegate_to: localhost
+
+    - name: Build Group Name-to-ID Map
+      set_fact:
+        zbx_group_map: "{{ zbx_final_groups_resp.json.result | items2dict(key_name='name', value_name='groupid') }}"
+      run_once: true
+      delegate_to: localhost
+
 - name: Initialize group ID list
   set_fact:
     zbx_group_id_list: []
@@ -101,9 +182,11 @@
     _csv_group_names: "{{ (zbx_record.HOST_GROUPS | default('')).split(',') | map('trim') | reject('equalto', '') | list }}"
     _all_target_groups: "{{ (_csv_group_names + [zbx_record.DEVICE_TYPE]) | unique }}"
   set_fact:
-    zbx_group_id_list: "{{ zbx_group_id_list + [zbx_group_map[item]] }}"
+    zbx_group_id_list: "{{ zbx_group_id_list + [zbx_group_map[group_name]] }}"
   loop: "{{ _all_target_groups }}"
-  when: item is defined and item in zbx_group_map
+  loop_control:
+    loop_var: group_name
+  when: group_name is defined and group_name in zbx_group_map
 
 - name: Create or update host via Zabbix API
   uri:
