@@ -54,5 +54,4 @@
         zabbix_password: "{{ _zabbix_password }}"
         zabbix_validate_certs: "{{ _zabbix_validate_certs }}"
         device_limit: "{{ _device_limit }}"
-        # Optional filters - will use role defaults if not provided via extra-vars
-        # site_filter, manufacturer_filter, device_role_filter
+        # Note: Device filtering is now based on conditions in netbox_device_type_mapping.yml

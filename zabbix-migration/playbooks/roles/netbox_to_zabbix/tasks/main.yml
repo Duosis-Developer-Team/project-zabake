@@ -9,10 +9,10 @@
     datacenters_map: "{{ lookup('file', datacenters_map_path) | from_yaml }}"
     device_type_mapping: "{{ lookup('file', device_type_mapping_path) | from_yaml }}"
 
-- name: Fetch all devices from Netbox API (with pagination and role filter)
+- name: Fetch all devices from Netbox API (with pagination and mapping-based filtering)
   include_tasks: fetch_all_devices.yml
 
-- name: Set filtered devices (filters already applied in Python script)
+- name: Set filtered devices (mapping-based filters already applied in Python script)
   set_fact:
     netbox_devices_filtered: "{{ netbox_devices_raw }}"
     device_limit_int: "{{ device_limit | default(0) | int }}"

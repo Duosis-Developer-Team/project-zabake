@@ -1,5 +1,5 @@
 ---
-- name: Create Python script to fetch all devices with pagination
+- name: Create Python script to fetch all devices with mapping-based filtering
   copy:
     content: |
       #!/usr/bin/env python3
@@ -13,14 +13,78 @@
       netbox_url = sys.argv[1].rstrip('/')
       netbox_token = sys.argv[2]
       verify_ssl = sys.argv[3].lower() == 'true'
-      device_role_filter = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] and sys.argv[4].strip() else None
-      site_filter = sys.argv[5] if len(sys.argv) > 5 and sys.argv[5] and sys.argv[5].strip() else None
-      manufacturer_filter = sys.argv[6] if len(sys.argv) > 6 and sys.argv[6] and sys.argv[6].strip() else None
+      mapping_file_path = sys.argv[4]
       
-      # Debug: Print filters
-      print(f"DEBUG: device_role_filter = {device_role_filter}", file=sys.stderr)
-      print(f"DEBUG: site_filter = {site_filter}", file=sys.stderr)
-      print(f"DEBUG: manufacturer_filter = {manufacturer_filter}", file=sys.stderr)
+      # Load device type mapping from file
+      with open(mapping_file_path, 'r') as f:
+          device_type_mapping = json.load(f)
+      mappings = device_type_mapping.get('mappings', [])
+      
+      # Debug: Print mapping info
+      print(f"DEBUG: Loaded {len(mappings)} device type mappings", file=sys.stderr)
+      
+      def device_matches_conditions(device, conditions):
+          """Check if device matches the given conditions"""
+          # Device role check
+          if 'device_role' in conditions:
+              role_name = device.get('device_role', {}).get('name', '') if device.get('device_role') else ''
+              expected_roles = conditions['device_role']
+              if isinstance(expected_roles, list):
+                  if not role_name or role_name.upper() not in [r.upper() for r in expected_roles]:
+                      return False
+              else:
+                  if not role_name or role_name.upper() != expected_roles.upper():
+                      return False
+          
+          # Manufacturer check
+          if 'manufacturer' in conditions:
+              manufacturer_name = device.get('device_type', {}).get('manufacturer', {}).get('name', '') if device.get('device_type', {}).get('manufacturer') else ''
+              expected_manufacturers = conditions['manufacturer']
+              if isinstance(expected_manufacturers, list):
+                  if not manufacturer_name or manufacturer_name.upper() not in [m.upper() for m in expected_manufacturers]:
+                      return False
+              else:
+                  if not manufacturer_name or manufacturer_name.upper() != expected_manufacturers.upper():
+                      return False
+          
+          # Model contains check
+          if 'model_contains' in conditions:
+              model = device.get('device_type', {}).get('model', '') if device.get('device_type') else ''
+              expected_contains = conditions['model_contains']
+              if isinstance(expected_contains, list):
+                  if not any(contain.upper() in model.upper() for contain in expected_contains):
+                      return False
+              else:
+                  if expected_contains.upper() not in model.upper():
+                      return False
+          
+          # Model suffix check
+          if 'model_suffix' in conditions:
+              model = device.get('device_type', {}).get('model', '') if device.get('device_type') else ''
+              expected_suffix = conditions['model_suffix']
+              if not model.upper().endswith(expected_suffix.upper()):
+                  return False
+          
+          # Name contains check
+          if 'name_contains' in conditions:
+              name = device.get('name', '')
+              expected_contains = conditions['name_contains']
+              if isinstance(expected_contains, list):
+                  if not any(contain.upper() in name.upper() for contain in expected_contains):
+                      return False
+              else:
+                  if expected_contains.upper() not in name.upper():
+                      return False
+          
+          return True
+      
+      def device_matches_any_mapping(device):
+          """Check if device matches any mapping condition"""
+          for mapping in mappings:
+              conditions = mapping.get('conditions', {})
+              if device_matches_conditions(device, conditions):
+                  return True
+          return False
       
       all_devices = []
       next_url = f"{netbox_url}/api/dcim/devices/?limit=1000"
@@ -44,31 +108,14 @@
               # Debug: Print page info
               print(f"DEBUG: Fetched {len(devices)} devices from this page", file=sys.stderr)
               
-              # Apply filters
+              # Apply mapping-based filters
               filtered_devices = []
               for device in devices:
-                  # Device role filter
-                  if device_role_filter:
-                      role_name = device.get('device_role', {}).get('name', '') if device.get('device_role') else ''
-                      if not role_name or role_name.upper() != device_role_filter.upper():
-                          continue
-                  
-                  # Site filter
-                  if site_filter:
-                      site_name = device.get('site', {}).get('name', '') if device.get('site') else ''
-                      if not site_name or site_name.upper() != site_filter.upper():
-                          continue
-                  
-                  # Manufacturer filter
-                  if manufacturer_filter:
-                      manufacturer_name = device.get('device_type', {}).get('manufacturer', {}).get('name', '') if device.get('device_type', {}).get('manufacturer') else ''
-                      if not manufacturer_name or manufacturer_name.upper() != manufacturer_filter.upper():
-                          continue
-                  
-                  filtered_devices.append(device)
+                  if device_matches_any_mapping(device):
+                      filtered_devices.append(device)
               
               all_devices.extend(filtered_devices)
-              print(f"DEBUG: After filters, {len(filtered_devices)} devices match on this page", file=sys.stderr)
+              print(f"DEBUG: After mapping filters, {len(filtered_devices)} devices match on this page", file=sys.stderr)
               next_url = data.get('next')
               
               if not next_url:
@@ -78,7 +125,7 @@
               sys.exit(1)
       
       # Debug: Print final results
-      print(f"DEBUG: Total devices after all filters: {len(all_devices)}", file=sys.stderr)
+      print(f"DEBUG: Total devices after mapping filters: {len(all_devices)}", file=sys.stderr)
       
       result = {
           'devices': all_devices,
@@ -91,29 +138,34 @@
   delegate_to: localhost
   run_once: true
 
-- name: Set filter variables with safe defaults
-  set_fact:
-    _device_role_filter: "{{ device_role_filter if device_role_filter is defined and device_role_filter | string | length > 0 else '' }}"
-    _site_filter: "{{ site_filter if site_filter is defined and site_filter | string | length > 0 else '' }}"
-    _manufacturer_filter: "{{ manufacturer_filter if manufacturer_filter is defined and manufacturer_filter | string | length > 0 else '' }}"
+- name: Save device type mapping to temporary file
+  copy:
+    content: "{{ device_type_mapping | to_json }}"
+    dest: "/tmp/netbox_device_type_mapping.json"
+  delegate_to: localhost
+  run_once: true
 
-- name: Display active filters
+- name: Display mapping-based filtering info
   debug:
     msg: |
-      Active Filters:
-      - Device Role: {{ _device_role_filter if _device_role_filter | length > 0 else 'ALL (no filter)' }}
-      - Site: {{ _site_filter if _site_filter | length > 0 else 'ALL (no filter)' }}
-      - Manufacturer: {{ _manufacturer_filter if _manufacturer_filter | length > 0 else 'ALL (no filter)' }}
+      ============================================
+      MAPPING-BASED FILTERING
+      ============================================
+      Using device type mapping file: {{ device_type_mapping_path }}
+      Total mappings loaded: {{ device_type_mapping.mappings | length }}
+      Mappings:
+      {% for mapping in device_type_mapping.mappings %}
+      - {{ mapping.device_type }}: {{ mapping.conditions | to_nice_json }}
+      {% endfor %}
+      ============================================
 
-- name: Fetch all devices using Python script
+- name: Fetch all devices using Python script with mapping-based filtering
   command: >
     python3 /tmp/fetch_all_netbox_devices.py
     "{{ netbox_url }}"
     "{{ netbox_token }}"
     "{{ netbox_verify_ssl | string }}"
-    "{{ _device_role_filter }}"
-    "{{ _site_filter }}"
-    "{{ _manufacturer_filter }}"
+    "/tmp/netbox_device_type_mapping.json"
   register: fetch_devices_result
   changed_when: false
   delegate_to: localhost

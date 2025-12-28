@@ -12,9 +12,8 @@ zabbix_validate_certs: false
 
 # Device filtering
 device_limit: 0  # 0 means no limit, process all matching devices
-device_role_filter: "HOST"  # Filter by device role
-site_filter: ""  # Filter by site name (empty = all sites)
-manufacturer_filter: ""  # Filter by manufacturer (empty = all manufacturers)
+# Note: Device filtering is now based on conditions in netbox_device_type_mapping.yml
+# All devices matching any condition in the mapping file will be selected
 
 # Mapping file paths
 templates_map_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/templates.yml"
