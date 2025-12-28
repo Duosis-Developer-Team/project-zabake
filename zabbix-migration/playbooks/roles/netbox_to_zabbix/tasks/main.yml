@@ -15,21 +15,20 @@
 - name: Set filtered devices (filters already applied in Python script)
   set_fact:
     netbox_devices_filtered: "{{ netbox_devices_raw }}"
-    device_limit_int: "{{ device_limit | int }}"
 
-- name: Apply device limit
+- name: Apply device limit or set all devices
   set_fact:
-    netbox_devices_final: "{{ netbox_devices_filtered[:device_limit_int] }}"
-  when: device_limit_int > 0
-
-- name: Set all devices when no limit
-  set_fact:
-    netbox_devices_final: "{{ netbox_devices_filtered }}"
-  when: device_limit_int == 0
+    netbox_devices_final: >-
+      {% set limit = device_limit | default(0) | int %}
+      {% if limit > 0 %}
+        {{ netbox_devices_filtered[:limit] }}
+      {% else %}
+        {{ netbox_devices_filtered }}
+      {% endif %}
 
 - name: Display device count
   debug:
-    msg: "Found {{ netbox_devices_final | length }} devices to process (limit: {{ 'unlimited' if device_limit_int == 0 else device_limit_int }})"
+    msg: "Found {{ netbox_devices_final | length }} devices to process (limit: {{ 'unlimited' if (device_limit | default(0) | int) == 0 else (device_limit | default(0) | int) }})"
 
 - name: Process each device
   include_tasks: process_device.yml
