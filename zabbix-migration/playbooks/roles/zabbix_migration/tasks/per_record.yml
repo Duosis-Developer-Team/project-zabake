@@ -100,15 +100,18 @@
   set_fact:
     zbx_proxy_group_id: "{{ zbx_proxy_group_map.get(_matched_proxy_group) if (_matched_proxy_group and zbx_proxy_group_map is defined) else '' }}"
     zbx_monitored_by: "{{ 2 if (_matched_proxy_group and zbx_proxy_group_map is defined) else 0 }}"
+    zbx_location_name: "{{ location_name }}"
+    zbx_dc_number: "{{ _dc_number }}"
+    zbx_matched_proxy_group: "{{ _matched_proxy_group }}"
 
 - name: Debug proxy group matching
   debug:
     msg: |
-      Location: {{ location_name }}
-      DC Number: {{ _dc_number }}
-      Matched proxy group: {{ _matched_proxy_group }}
+      Location: {{ zbx_location_name }}
+      DC Number: {{ zbx_dc_number }}
+      Matched proxy group: {{ zbx_matched_proxy_group }}
       Proxy group ID: {{ zbx_proxy_group_id }}
-      Available proxy groups: {{ _proxy_group_keys | default([]) }}
+      Available proxy groups: {{ zbx_proxy_group_map.keys() | list if zbx_proxy_group_map is defined else [] }}
 
 - name: Debug template names
   debug:
