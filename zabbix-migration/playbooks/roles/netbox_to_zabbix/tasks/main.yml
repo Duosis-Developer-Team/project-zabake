@@ -15,16 +15,21 @@
 - name: Set filtered devices (filters already applied in Python script)
   set_fact:
     netbox_devices_filtered: "{{ netbox_devices_raw }}"
+    device_limit_int: "{{ device_limit | default(0) | int }}"
 
 - name: Apply device limit
-  vars:
-    limit: "{{ device_limit | default(0) | int }}"
   set_fact:
-    netbox_devices_final: "{{ netbox_devices_filtered[:limit] if limit > 0 else netbox_devices_filtered }}"
+    netbox_devices_final: "{{ netbox_devices_filtered[:device_limit_int] }}"
+  when: device_limit_int | int > 0
+
+- name: Set all devices when no limit
+  set_fact:
+    netbox_devices_final: "{{ netbox_devices_filtered }}"
+  when: device_limit_int | int == 0
 
 - name: Display device count
   debug:
-    msg: "Found {{ netbox_devices_final | length }} devices to process (limit: {{ 'unlimited' if (device_limit | default(0) | int) == 0 else (device_limit | default(0) | int) }})"
+    msg: "Found {{ netbox_devices_final | length }} devices to process (limit: {{ 'unlimited' if device_limit_int == 0 else device_limit_int }})"
 
 - name: Display list of matching devices
   debug:
