@@ -115,14 +115,50 @@
           
           return None
       
-      def extract_host_groups(device):
-          groups = []
+      def get_location_name(device, netbox_url, netbox_token, verify_ssl):
+          """Get location name: parent if exists, otherwise location or site"""
+          location_obj = device.get('location')
+          if location_obj:
+              # If location is expanded, check for parent
+              if isinstance(location_obj, dict):
+                  parent = location_obj.get('parent')
+                  if parent and isinstance(parent, dict):
+                      return parent.get('name', '')
+                  return location_obj.get('name', '')
+              # If location is just an ID, fetch it
+              elif isinstance(location_obj, int):
+                  try:
+                      response = requests.get(
+                          f"{netbox_url.rstrip('/')}/api/dcim/locations/{location_obj}/",
+                          headers={'Authorization': f'Token {netbox_token}', 'Accept': 'application/json'},
+                          verify=verify_ssl,
+                          timeout=10
+                      )
+                      if response.status_code == 200:
+                          loc_data = response.json()
+                          parent = loc_data.get('parent')
+                          if parent and isinstance(parent, dict):
+                              return parent.get('name', '')
+                          return loc_data.get('name', '')
+                  except:
+                      pass
+          # Fallback to site name
           if device.get('site', {}).get('name'):
-              groups.append(device['site']['name'])
-          if device.get('device_type', {}).get('model'):
-              groups.append(device['device_type']['model'])
-          elif device.get('device_type', {}).get('display'):
-              groups.append(device['device_type']['display'])
+              return device['site']['name']
+          return ''
+      
+      def extract_host_groups(device, device_type, netbox_url, netbox_token, verify_ssl):
+          groups = []
+          # 1. Device type (from mapping)
+          if device_type:
+              groups.append(device_type)
+          # 2. Tenant/Ownership
+          if device.get('tenant', {}).get('name'):
+              groups.append(device['tenant']['name'])
+          # 3. Location (parent if exists, otherwise location or site)
+          location_name = get_location_name(device, netbox_url, netbox_token, verify_ssl)
+          if location_name:
+              groups.append(location_name)
           return ','.join(groups) if groups else ''
       
       def extract_tags(device):
@@ -146,7 +182,7 @@
               tags['Sorumlu_Ekip'] = custom_fields['Sorumlu_Ekip']
           if device.get('id'):
               tags['Loki_ID'] = str(device['id'])
-          return json.dumps(tags).replace('"', '""')
+          return tags  # Return as dict, not JSON string
       
       if __name__ == '__main__':
           device_file = sys.argv[1]
@@ -163,11 +199,13 @@
           with open(device_type_mapping_file, 'r') as f:
               device_type_mapping = json.load(f)
           
+          device_type = determine_device_type(device, device_type_mapping)
           result = {
-              'device_type': determine_device_type(device, device_type_mapping),
+              'device_type': device_type,
               'primary_ip': get_primary_ip(device, netbox_url, netbox_token, verify_ssl),
-              'host_groups': extract_host_groups(device),
+              'host_groups': extract_host_groups(device, device_type, netbox_url, netbox_token, verify_ssl),
               'tags': extract_tags(device),
+              'location': get_location_name(device, netbox_url, netbox_token, verify_ssl),
               'dc_id': device.get('site', {}).get('name', '')
           }
           
@@ -226,10 +264,10 @@
       DEVICE_TYPE: "{{ device_info.device_type }}"
       HOST_IP: "{{ device_info.primary_ip }}"
       HOSTNAME: "{{ netbox_device.name }}"
-      DC_ID: "{{ device_info.dc_id }}"
+      DC_ID: "{{ device_info.location }}"
       HOST_GROUPS: "{{ device_info.host_groups }}"
       TEMPLATE_TYPE: ""
-      MACROS: "{{ device_info.tags }}"
+      MACROS: "{{ device_info.tags | to_json }}"
   when: 
     - device_info.device_type is not none
     - device_info.device_type != ""

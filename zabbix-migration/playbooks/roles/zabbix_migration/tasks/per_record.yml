@@ -9,26 +9,12 @@
     zbx_type_map: "{{ lookup('file', _type_map_path) | from_yaml }}"
     zbx_dc_map: "{{ lookup('file', _dc_map_path) | from_yaml }}"
 
-- name: Parse macros field
+- name: Parse tags from MACROS field (JSON string)
   vars:
-    macros_raw: "{{ zbx_record.MACROS | default('') }}"
-    macros_json_like: "{{ macros_raw | regex_replace('^\\s*$','{}') | regex_replace('^{\\s*','{') | regex_replace('\\s*}$','}') }}"
-  set_fact:
-    zbx_macros: >-
-      {{ (macros_json_like | from_yaml) if macros_json_like is match('^\\{') else {} }}
-
-- name: Parse tags from macros field
-  vars:
-    _macros_dict: "{{ zbx_macros | default({}) }}"
+    macros_raw: "{{ zbx_record.MACROS | default('{}') }}"
   set_fact:
     zbx_tags: >-
-      {{ _macros_dict | dict2items | map('dict', tag='key', value='value') | list }}
-  when: _macros_dict | length > 0
-
-- name: Initialize tags if empty
-  set_fact:
-    zbx_tags: []
-  when: zbx_tags is not defined
+      {{ (macros_raw | from_json | dict2items | map('dict', tag='key', value='value') | list) if macros_raw | trim != '' else [] }}
 
 - name: Resolve templates for device type
   set_fact:
@@ -57,13 +43,37 @@
   set_fact:
     zbx_iface: "{{ zbx_type_map.get(zbx_iface_type, {}).get('interface') }}"
 
-- name: Resolve DC proxy
-  set_fact:
-    zbx_dc: "{{ zbx_dc_map.get(zbx_record.DC_ID, {}) }}"
+- name: Get all proxy groups from Zabbix (if not already fetched)
+  when: zbx_proxy_group_map is not defined
+  uri:
+    url: "{{ zabbix_url }}"
+    method: POST
+    body_format: json
+    validate_certs: "{{ zabbix_validate_certs | default(false) }}"
+    body:
+      jsonrpc: "2.0"
+      method: "proxygroup.get"
+      params:
+        output: ["proxy_groupid", "name"]
+      auth: "{{ zabbix_auth }}"
+      id: 104
+  register: zbx_proxy_groups_resp
+  run_once: true
+  delegate_to: localhost
 
-- name: Determine monitored_by based on DC proxy mapping
+- name: Build proxy group name to ID map (if not already built)
+  when: zbx_proxy_group_map is not defined
   set_fact:
-    zbx_monitored_by: "{{ 2 if (zbx_dc.proxyid is defined or zbx_dc.proxy_groupid is defined) else 0 }}"
+    zbx_proxy_group_map: "{{ zbx_proxy_groups_resp.json.result | items2dict(key_name='name', value_name='proxy_groupid') }}"
+  run_once: true
+  delegate_to: localhost
+
+- name: Resolve proxy group by location (DC_ID)
+  vars:
+    location_name: "{{ zbx_record.DC_ID | default('') }}"
+  set_fact:
+    zbx_proxy_group_id: "{{ zbx_proxy_group_map.get(location_name, '') if zbx_proxy_group_map is defined else '' }}"
+    zbx_monitored_by: "{{ 2 if (zbx_proxy_group_map is defined and zbx_proxy_group_map.get(location_name)) else 0 }}"
 
 - name: Resolve template IDs by name
   vars:
@@ -79,7 +89,7 @@
     url: "{{ zabbix_url }}"
     method: POST
     body_format: json
-    validate_certs: false
+    validate_certs: "{{ zabbix_validate_certs | default(false) }}"
     body: "{{ _tpl_get_body | format(zbx_template_names | to_json, zabbix_auth) | from_json }}"
   register: zbx_tpl_get_resp
 
@@ -193,7 +203,7 @@
     url: "{{ zabbix_url }}"
     method: POST
     body_format: json
-    validate_certs: false
+    validate_certs: "{{ zabbix_validate_certs | default(false) }}"
     body:
       jsonrpc: "2.0"
       method: "host.create"
@@ -214,8 +224,7 @@
         groups: "{{ zbx_group_id_list | map('regex_replace','^(.*)$','{\"groupid\":\"\\1\"}') | map('from_yaml') | list }}"
         tags: "{{ zbx_tags | default(omit) }}"
         monitored_by: "{{ zbx_monitored_by }}"
-        proxy_groupid: "{{ zbx_dc.proxy_groupid | default(omit) }}"
-        proxyid: "{{ zbx_dc.proxyid | default(omit) }}"
+        proxy_groupid: "{{ zbx_proxy_group_id | default(omit) }}"
       auth: "{{ zabbix_auth }}"
       id: 1
   register: zbx_create_resp
@@ -227,7 +236,7 @@
     url: "{{ zabbix_url }}"
     method: POST
     body_format: json
-    validate_certs: false
+    validate_certs: "{{ zabbix_validate_certs | default(false) }}"
     body:
       jsonrpc: "2.0"
       method: "host.update"
@@ -248,8 +257,7 @@
         groups: "{{ zbx_group_id_list | map('regex_replace','^(.*)$','{\"groupid\":\"\\1\"}') | map('from_yaml') | list }}"
         tags: "{{ zbx_tags | default(omit) }}"
         monitored_by: "{{ zbx_monitored_by }}"
-        proxy_groupid: "{{ zbx_dc.proxy_groupid | default(omit) }}"
-        proxyid: "{{ zbx_dc.proxyid | default(omit) }}"
+        proxy_groupid: "{{ zbx_proxy_group_id | default(omit) }}"
       auth: "{{ zabbix_auth }}"
       id: 2
   register: zbx_update_resp
