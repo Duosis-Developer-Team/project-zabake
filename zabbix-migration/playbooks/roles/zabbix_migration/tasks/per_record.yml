@@ -85,24 +85,29 @@
     _dc_number: "{{ (location_name | upper | regex_replace('.*DC([0-9]+).*', '\\1')) if location_name else '' }}"
     # Try to find proxy group by matching DC number
     _proxy_group_keys: "{{ zbx_proxy_group_map.keys() | list if zbx_proxy_group_map is defined else [] }}"
-    _matched_proxy_group: >-
-      {%- set found = None -%}
-      {%- if _dc_number and _proxy_group_keys -%}
-      {%- for pg_name in _proxy_group_keys -%}
-      {%- set pg_upper = pg_name | upper -%}
-      {%- set pg_dc_num = pg_upper | regex_replace('.*DC([0-9]+).*', '\\1') -%}
-      {%- if pg_dc_num == _dc_number -%}
-      {%- set found = pg_name -%}
-      {%- endif -%}
-      {%- endfor -%}
-      {%- endif -%}
-      {{ found if found else '' }}
   set_fact:
-    zbx_proxy_group_id: "{{ zbx_proxy_group_map.get(_matched_proxy_group) if (_matched_proxy_group and zbx_proxy_group_map is defined) else '' }}"
-    zbx_monitored_by: "{{ 2 if (_matched_proxy_group and zbx_proxy_group_map is defined) else 0 }}"
     zbx_location_name: "{{ location_name }}"
     zbx_dc_number: "{{ _dc_number }}"
-    zbx_matched_proxy_group: "{{ _matched_proxy_group }}"
+    zbx_matched_proxy_group: "{{ '' }}"
+    zbx_proxy_group_id: "{{ '' }}"
+    zbx_monitored_by: "0"
+
+- name: Find matching proxy group
+  vars:
+    pg_name: "{{ item }}"
+    pg_upper: "{{ item | upper }}"
+    pg_dc_num: "{{ pg_upper | regex_replace('.*DC([0-9]+).*', '\\1') }}"
+  set_fact:
+    zbx_matched_proxy_group: "{{ item }}"
+    zbx_proxy_group_id: "{{ zbx_proxy_group_map[item] }}"
+    zbx_monitored_by: "2"
+  loop: "{{ zbx_proxy_group_map.keys() | list if zbx_proxy_group_map is defined else [] }}"
+  when: 
+    - zbx_dc_number is defined
+    - zbx_dc_number != ''
+    - zbx_dc_number | string == pg_dc_num | string
+  loop_control:
+    label: "{{ item }} (DC: {{ pg_dc_num }}, Match: {{ (zbx_dc_number | string == pg_dc_num | string) | bool }})"
 
 - name: Debug proxy group matching
   vars:
