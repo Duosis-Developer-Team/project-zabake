@@ -1,4 +1,8 @@
 ---
+- name: Ensure device_limit is an integer
+  set_fact:
+    device_limit: "{{ device_limit | default(0) | int }}"
+
 - name: Load template mappings
   set_fact:
     templates_map: "{{ lookup('file', templates_map_path) | from_yaml }}"
@@ -15,16 +19,16 @@
 - name: Apply device limit
   set_fact:
     netbox_devices_final: "{{ netbox_devices_filtered[:device_limit] }}"
-  when: device_limit > 0
+  when: device_limit | int > 0
 
 - name: Set all devices when no limit
   set_fact:
     netbox_devices_final: "{{ netbox_devices_filtered }}"
-  when: device_limit == 0
+  when: device_limit | int == 0
 
 - name: Display device count
   debug:
-    msg: "Found {{ netbox_devices_final | length }} devices to process (limit: {{ 'unlimited' if device_limit == 0 else device_limit }})"
+    msg: "Found {{ netbox_devices_final | length }} devices to process (limit: {{ 'unlimited' if device_limit | int == 0 else device_limit }})"
 
 - name: Process each device
   include_tasks: process_device.yml
