@@ -81,28 +81,8 @@
 - name: Resolve proxy group by location (DC_ID)
   vars:
     location_name: "{{ zbx_record.DC_ID | default('') }}"
-    # Extract DC number from location name (e.g., "DC14" -> "14", "Dc14" -> "14")
-    _dc_number: >-
-      {%- set loc_upper = location_name | upper -%}
-      {%- if 'DC' in loc_upper -%}
-      {%- set parts = loc_upper.split('DC') -%}
-      {%- if parts|length > 1 -%}
-      {%- set after_dc = parts[1] -%}
-      {%- set numbers = '' -%}
-      {%- for char in after_dc -%}
-      {%- if char in '0123456789' -%}
-      {%- set numbers = numbers + char -%}
-      {%- else -%}
-      {%- break -%}
-      {%- endif -%}
-      {%- endfor -%}
-      {{ numbers }}
-      {%- else -%}
-      {{ '' }}
-      {%- endif -%}
-      {%- else -%}
-      {{ '' }}
-      {%- endif -%}
+    # Extract DC number from location name using regex (e.g., "DC14" -> "14", "Dc14" -> "14")
+    _dc_number: "{{ (location_name | upper | regex_replace('.*DC', '') | regex_replace('[^0-9].*', '')) if location_name else '' }}"
     # Try to find proxy group by matching DC number
     _proxy_group_keys: "{{ zbx_proxy_group_map.keys() | list if zbx_proxy_group_map is defined else [] }}"
     _matched_proxy_group: >-
@@ -110,22 +90,9 @@
       {%- if _dc_number and _proxy_group_keys -%}
       {%- for pg_name in _proxy_group_keys -%}
       {%- set pg_upper = pg_name | upper -%}
-      {%- if 'DC' in pg_upper -%}
-      {%- set pg_parts = pg_upper.split('DC') -%}
-      {%- if pg_parts|length > 1 -%}
-      {%- set pg_after_dc = pg_parts[1] -%}
-      {%- set pg_numbers = '' -%}
-      {%- for char in pg_after_dc -%}
-      {%- if char in '0123456789' -%}
-      {%- set pg_numbers = pg_numbers + char -%}
-      {%- else -%}
-      {%- break -%}
-      {%- endif -%}
-      {%- endfor -%}
-      {%- if pg_numbers == _dc_number -%}
+      {%- set pg_dc_num = pg_upper | regex_replace('.*DC', '') | regex_replace('[^0-9].*', '') -%}
+      {%- if pg_dc_num == _dc_number -%}
       {%- set found = pg_name -%}
-      {%- endif -%}
-      {%- endif -%}
       {%- endif -%}
       {%- endfor -%}
       {%- endif -%}
