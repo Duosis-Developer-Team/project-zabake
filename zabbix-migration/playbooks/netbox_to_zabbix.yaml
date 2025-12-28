@@ -16,12 +16,6 @@
     
     # Optional: Limit number of devices to process
     _device_limit: "{{ device_limit | default(0) | int }}"
-    
-    # Optional: Site filter
-    _site_filter: "{{ site_filter | default('') }}"
-    
-    # Optional: Manufacturer filter
-    _manufacturer_filter: "{{ manufacturer_filter | default('') }}"
   
   pre_tasks:
     - name: Validate netbox_url
@@ -60,6 +54,5 @@
         zabbix_password: "{{ _zabbix_password }}"
         zabbix_validate_certs: "{{ _zabbix_validate_certs }}"
         device_limit: "{{ _device_limit }}"
-        site_filter: "{{ _site_filter }}"
-        manufacturer_filter: "{{ _manufacturer_filter }}"
-        # device_role_filter will use role default if not provided via extra-vars
+        # Optional filters - will use role defaults if not provided via extra-vars
+        # site_filter, manufacturer_filter, device_role_filter

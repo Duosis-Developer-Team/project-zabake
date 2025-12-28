@@ -79,15 +79,21 @@
   delegate_to: localhost
   run_once: true
 
+- name: Set filter variables with safe defaults
+  set_fact:
+    _device_role_filter: "{{ device_role_filter if device_role_filter is defined else '' }}"
+    _site_filter: "{{ site_filter if site_filter is defined else '' }}"
+    _manufacturer_filter: "{{ manufacturer_filter if manufacturer_filter is defined else '' }}"
+
 - name: Fetch all devices using Python script
   command: >
     python3 /tmp/fetch_all_netbox_devices.py
     "{{ netbox_url }}"
     "{{ netbox_token }}"
     "{{ netbox_verify_ssl | string }}"
-    "{{ device_role_filter | default('') }}"
-    "{{ site_filter | default('') }}"
-    "{{ manufacturer_filter | default('') }}"
+    "{{ _device_role_filter }}"
+    "{{ _site_filter }}"
+    "{{ _manufacturer_filter }}"
   register: fetch_devices_result
   changed_when: false
   delegate_to: localhost
