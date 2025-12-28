@@ -81,9 +81,34 @@
 - name: Resolve proxy group by location (DC_ID)
   vars:
     location_name: "{{ zbx_record.DC_ID | default('') }}"
+    # Extract DC number from location name (e.g., "DC14" -> "14", "Dc14" -> "14")
+    _dc_number: "{{ location_name | upper | regex_replace('.*DC', '') | regex_replace('[^0-9].*', '') }}"
+    # Try to find proxy group by matching DC number in proxy group names
+    # Proxy groups are like "Dc14-proxy Group", "Dc13-proxy Group", etc.
+    _proxy_group_keys: "{{ zbx_proxy_group_map.keys() | list if zbx_proxy_group_map is defined else [] }}"
+    _matched_proxy_group: >-
+      {%- set found = None -%}
+      {%- if _dc_number and _proxy_group_keys -%}
+      {%- for pg_name in _proxy_group_keys -%}
+      {%- set pg_dc = pg_name | upper | regex_replace('.*DC', '') | regex_replace('[^0-9].*', '') -%}
+      {%- if pg_dc == _dc_number -%}
+      {%- set found = pg_name -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- endif -%}
+      {{ found if found else '' }}
   set_fact:
-    zbx_proxy_group_id: "{{ zbx_proxy_group_map.get(location_name) if (zbx_proxy_group_map is defined and location_name and zbx_proxy_group_map.get(location_name)) else '' }}"
-    zbx_monitored_by: "{{ 2 if (zbx_proxy_group_map is defined and location_name and zbx_proxy_group_map.get(location_name)) else 0 }}"
+    zbx_proxy_group_id: "{{ zbx_proxy_group_map.get(_matched_proxy_group) if (_matched_proxy_group and zbx_proxy_group_map is defined) else '' }}"
+    zbx_monitored_by: "{{ 2 if (_matched_proxy_group and zbx_proxy_group_map is defined) else 0 }}"
+
+- name: Debug proxy group matching
+  debug:
+    msg: |
+      Location: {{ location_name }}
+      DC Number: {{ _dc_number }}
+      Matched proxy group: {{ _matched_proxy_group }}
+      Proxy group ID: {{ zbx_proxy_group_id }}
+      Available proxy groups: {{ _proxy_group_keys | default([]) }}
 
 - name: Debug template names
   debug:

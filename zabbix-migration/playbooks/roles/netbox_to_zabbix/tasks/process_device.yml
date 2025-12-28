@@ -135,8 +135,19 @@
                       # Parent is expanded, use it directly
                       return parent.get('name', '')
                   elif isinstance(parent, int):
-                      # Parent is just an ID, we'll fetch it after getting location
-                      pass
+                      # Parent is just an ID, fetch it directly
+                      try:
+                          parent_response = requests.get(
+                              f"{netbox_url.rstrip('/')}/api/dcim/locations/{parent}/",
+                              headers={'Authorization': f'Token {netbox_token}', 'Accept': 'application/json'},
+                              verify=verify_ssl,
+                              timeout=10
+                          )
+                          if parent_response.status_code == 200:
+                              parent_data = parent_response.json()
+                              return parent_data.get('name', '')
+                      except Exception as e:
+                          pass
           # If location is just an ID
           elif isinstance(location_obj, int):
               location_id = location_obj
@@ -244,13 +255,14 @@
               device_type_mapping = json.load(f)
           
           device_type = determine_device_type(device, device_type_mapping)
+          location_name = get_location_name(device, netbox_url, netbox_token, verify_ssl)
           result = {
               'device_type': device_type,
               'primary_ip': get_primary_ip(device, netbox_url, netbox_token, verify_ssl),
               'host_groups': extract_host_groups(device, device_type, netbox_url, netbox_token, verify_ssl),
               'tags': extract_tags(device),
-              'location': get_location_name(device, netbox_url, netbox_token, verify_ssl),
-              'dc_id': device.get('site', {}).get('name', '')
+              'location': location_name,
+              'dc_id': location_name if location_name else device.get('site', {}).get('name', '')
           }
           
           print(json.dumps(result))
