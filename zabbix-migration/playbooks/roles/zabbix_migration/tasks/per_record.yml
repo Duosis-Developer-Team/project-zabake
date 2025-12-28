@@ -9,12 +9,14 @@
     zbx_type_map: "{{ lookup('file', _type_map_path) | from_yaml }}"
     zbx_dc_map: "{{ lookup('file', _dc_map_path) | from_yaml }}"
 
-- name: Parse tags from MACROS field (JSON string)
+- name: Parse tags from MACROS field
   vars:
-    macros_raw: "{{ zbx_record.MACROS | default('{}') }}"
+    macros_raw: "{{ zbx_record.MACROS | default({}) }}"
+    _macros_dict: >-
+      {{ macros_raw if macros_raw is mapping else (macros_raw | from_json if macros_raw is string else {}) }}
   set_fact:
     zbx_tags: >-
-      {{ (macros_raw | from_json | dict2items | map('dict', tag='key', value='value') | list) if macros_raw | trim != '' else [] }}
+      {{ (_macros_dict | dict2items | map('dict', tag='key', value='value') | list) if _macros_dict is mapping and _macros_dict | length > 0 else [] }}
 
 - name: Resolve templates for device type
   set_fact:
