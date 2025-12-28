@@ -125,14 +125,19 @@
           return json.dumps(tags).replace('"', '""')
       
       if __name__ == '__main__':
-          device_json = sys.argv[1]
-          device_type_mapping_json = sys.argv[2]
+          device_file = sys.argv[1]
+          device_type_mapping_file = sys.argv[2]
           netbox_url = sys.argv[3]
           netbox_token = sys.argv[4]
           verify_ssl = sys.argv[5].lower() == 'true'
           
-          device = json.loads(device_json)
-          device_type_mapping = json.loads(device_type_mapping_json)
+          # Load device JSON from file
+          with open(device_file, 'r') as f:
+              device = json.load(f)
+          
+          # Load device type mapping JSON from file
+          with open(device_type_mapping_file, 'r') as f:
+              device_type_mapping = json.load(f)
           
           result = {
               'device_type': determine_device_type(device, device_type_mapping),
@@ -148,11 +153,23 @@
   delegate_to: localhost
   run_once: true
 
+- name: Save device JSON to temporary file
+  copy:
+    content: "{{ netbox_device | to_json }}"
+    dest: "/tmp/netbox_device_{{ netbox_device.id | default('temp') }}.json"
+  delegate_to: localhost
+
+- name: Save device type mapping JSON to temporary file
+  copy:
+    content: "{{ device_type_mapping | to_json }}"
+    dest: "/tmp/netbox_device_type_mapping_{{ netbox_device.id | default('temp') }}.json"
+  delegate_to: localhost
+
 - name: Process device with Python script
   command: >
     python3 /tmp/netbox_device_processor.py
-    "{{ netbox_device | to_json }}"
-    "{{ device_type_mapping | to_json }}"
+    "/tmp/netbox_device_{{ netbox_device.id | default('temp') }}.json"
+    "/tmp/netbox_device_type_mapping_{{ netbox_device.id | default('temp') }}.json"
     "{{ netbox_url }}"
     "{{ netbox_token }}"
     "{{ netbox_verify_ssl | string }}"
