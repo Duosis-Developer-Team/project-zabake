@@ -1,18 +1,18 @@
 # DEVICE_TYPE -> Zabbix template names or IDs
 Lenovo IPMI:
-  - name: Lenovo ICT XCC Monitoring
+  - name: BLT - Lenovo ICT XCC Monitoring
     type: snmpv3
 Inspur M6:
-  - name: Inspur M6 Template Clone
+  - name: BLT - Inspur M6 Template
     type: snmpv2
 Inspur M5:
-  - name: Server Inspur BMC All Items 4 Zabbix5.0
+  - name: BLT - Server Inspur BMC All Items 4 Zabbix5.0
     type: snmpv2
 HPE IPMI:
-  - name: HPE ProLiant DL380 by SNMP Original
+  - name: BLT - HPE ProLiant DL380 SNMP
     type: snmpv2
 Dell IPMI:
-  - name: Dell iDRAC by SNMP
+  - name: BLT - Dell iDRAC SNMP
     type: snmpv2
 Arista Switch:
   - name: Arista SNMP
