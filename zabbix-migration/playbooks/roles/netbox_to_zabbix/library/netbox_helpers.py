@@ -191,3 +191,4 @@ class FilterModule(object):
             'extract_tags': extract_tags,
         }
 
+

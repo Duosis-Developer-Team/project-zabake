@@ -314,3 +314,4 @@ def map_site_to_dc_id(site_name):
 3. Site to DC_ID mapping dosyası oluşturulmalı
 4. Test edilmeli ve doğrulanmalı
 
+

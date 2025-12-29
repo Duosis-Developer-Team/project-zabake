@@ -51,3 +51,4 @@ print("  2. Token has proper permissions")
 print("  3. Token is not expired")
 print("  4. Token format matches Netbox version requirements")
 
+

@@ -262,3 +262,4 @@ Zabbix API'de tags, `host.create` veya `host.update` metodunda `tags` parametres
 2. Zabbix migration script'e tags desteği eklenmeli
 3. Test edilmeli ve doğrulanmalı
 
+

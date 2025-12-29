@@ -120,3 +120,4 @@ Bu örnekte:
 - İlk eşleşen mapping kullanılır
 - Hiçbir mapping eşleşmezse `None` döner ve device atlanır
 
+

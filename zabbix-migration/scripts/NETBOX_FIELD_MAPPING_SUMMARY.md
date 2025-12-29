@@ -149,3 +149,4 @@ Zabbix migration scripti MACROS alanındaki JSON'u otomatik olarak Zabbix tags f
 2. ⏳ Netbox'tan CSV oluşturma scripti yazılmalı
 3. ⏳ Test edilmeli ve doğrulanmalı
 
+

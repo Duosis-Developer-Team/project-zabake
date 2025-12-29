@@ -182,3 +182,4 @@ ansible-playbook netbox_to_zabbix.yaml -vvv ...
 - Zabbix'te host groups otomatik oluşturulur
 - Tags Zabbix API'ye direkt gönderilir
 
+
