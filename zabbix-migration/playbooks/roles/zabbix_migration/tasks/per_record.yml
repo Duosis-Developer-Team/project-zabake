@@ -342,9 +342,6 @@
     - _missing_params | default([]) | length > 0
 
 - name: Create new host (scenario: create)
-  when: 
-    - zbx_scenario == 'create'
-    - _missing_params | default([]) | length == 0
   uri:
     url: "{{ zabbix_url }}"
     method: POST
@@ -375,6 +372,9 @@
       id: 1
   register: zbx_create_resp
   failed_when: false
+  when: 
+    - zbx_scenario == 'create'
+    - _missing_params | default([]) | length == 0
 
 - name: Record create success
   set_fact:
@@ -402,19 +402,18 @@
     - zbx_create_resp.json.error is defined
 
 - name: Handle create error (host already exists fallback)
-  when: 
-    - zbx_scenario == 'create'
-    - zbx_create_resp.json.error is defined
-    - zbx_create_resp.json.error.message is search('already exists')
-    - zabbix_hosts_by_hostname is defined
   debug:
     msg: "Host {{ zbx_record.HOSTNAME }} already exists, switching to update scenario"
   set_fact:
     zbx_scenario: "update"
     zbx_existing_host: "{{ zabbix_hosts_by_hostname.get(zbx_record.HOSTNAME) | default({}) }}"
+  when: 
+    - zbx_scenario == 'create'
+    - zbx_create_resp.json.error is defined
+    - zbx_create_resp.json.error.message is search('already exists')
+    - zabbix_hosts_by_hostname is defined
 
 - name: Update existing host (scenario: update - only continuous fields)
-  when: zbx_scenario == 'update' and zbx_existing_host.hostid is defined
   vars:
     _existing_interface: "{{ zbx_existing_host.interfaces | default([]) | selectattr('main', 'equalto', 1) | first | default({}) }}"
     _interface_id: "{{ _existing_interface.interfaceid | default(omit) }}"
@@ -448,6 +447,7 @@
       auth: "{{ zabbix_auth }}"
       id: 2
   register: zbx_update_resp
+  when: zbx_scenario == 'update' and zbx_existing_host.hostid is defined
 
 - name: Record update success
   set_fact:
