@@ -14,9 +14,6 @@
     _zabbix_password: "{{ zabbix_password | default('') }}"
     _zabbix_validate_certs: "{{ zabbix_validate_certs | default(false) }}"
     
-    # Optional: Limit number of devices to process
-    _device_limit: "{{ device_limit | default(0) | int }}"
-    
     # Optional: Location filter for Netbox devices
     _location_filter: "{{ location_filter | default('') }}"
     
@@ -24,6 +21,9 @@
     _mail_recipients: "{{ mail_recipients | default([]) }}"
   
   pre_tasks:
+    - name: Set device limit variable
+      set_fact:
+        _device_limit: "{{ (device_limit | default(0)) | int }}"
     - name: Validate netbox_url
       fail:
         msg: "netbox_url is required"
