@@ -19,7 +19,16 @@
     macros_raw: "{{ zbx_record.MACROS | default({}) }}"
     _macros_dict: "{{ macros_raw if macros_raw is mapping else (macros_raw | from_json if macros_raw is string else {}) }}"
   set_fact:
-    zbx_tags: "{{ _macros_dict.items() | map('community.general.dict_kv', 'tag', 'value') | list if _macros_dict is mapping and _macros_dict | length > 0 else [] }}"
+    zbx_tags: >-
+      {%- if _macros_dict is mapping and _macros_dict | length > 0 -%}
+      {%- set _tags = [] -%}
+      {%- for key, value in _macros_dict.items() -%}
+      {%- set _ = _tags.append({'tag': key, 'value': value | string}) -%}
+      {%- endfor -%}
+      {{ _tags }}
+      {%- else -%}
+      []
+      {%- endif -%}
 
 - name: Resolve templates for device type
   set_fact:
