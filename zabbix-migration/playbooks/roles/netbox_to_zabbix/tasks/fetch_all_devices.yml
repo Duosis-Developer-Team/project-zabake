@@ -278,7 +278,16 @@
               # Apply mapping-based filters (location filter already applied at API level)
               filtered_devices = []
               unmatched_count = 0
+              host_device_count = 0
               for device in devices:
+                  # Debug: Count HOST devices before mapping check
+                  role_obj = device.get('role') or device.get('device_role')
+                  role_name = role_obj.get('name', '') if role_obj and isinstance(role_obj, dict) else ''
+                  if 'HOST' in role_name.upper():
+                      host_device_count += 1
+                      if host_device_count <= 3:  # Debug first 3 HOST devices
+                          print(f"DEBUG: Processing HOST device #{host_device_count}: name={device.get('name', 'N/A')}, role={role_name}, manufacturer={device.get('device_type', {}).get('manufacturer', {}).get('name', 'N/A') if device.get('device_type', {}).get('manufacturer') else 'N/A'}", file=sys.stderr)
+                  
                   # Check mapping-based filters
                   if device_matches_any_mapping(device):
                       filtered_devices.append(device)
@@ -326,7 +335,7 @@
                       filter_info += f" + location filter (IDs: {location_ids_to_filter})"
                       if location_filtered_count > 0:
                           print(f"DEBUG: Location filter stats: {location_filtered_count} devices filtered out by location on this page", file=sys.stderr)
-              print(f"DEBUG: After {filter_info}, {len(filtered_devices)} devices match on this page", file=sys.stderr)
+              print(f"DEBUG: Processed {host_device_count} HOST devices, {len(filtered_devices)} devices matched after {filter_info} on this page", file=sys.stderr)
               next_url = data.get('next')
               
               if not next_url:
