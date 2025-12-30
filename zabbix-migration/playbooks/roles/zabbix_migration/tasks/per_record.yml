@@ -341,14 +341,19 @@
     - zbx_scenario == 'create'
     - _missing_params | default([]) | length > 0
 
-- name: Create new host (scenario: create)
-  vars:
+- name: Format groups for Zabbix API
+  set_fact:
     _groups_formatted: >-
       {%- set groups_list = [] -%}
       {%- for group_id in zbx_group_id_list | default([]) -%}
       {%- set _ = groups_list.append({'groupid': group_id | string}) -%}
       {%- endfor -%}
       {{ groups_list }}
+  when: 
+    - zbx_scenario == 'create'
+    - _missing_params | default([]) | length == 0
+
+- name: Create new host (scenario: create)
   uri:
     url: "{{ zabbix_url }}"
     method: POST
