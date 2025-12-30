@@ -21,6 +21,95 @@
           device_type_mapping = json.load(f)
       mappings = device_type_mapping.get('mappings', [])
       
+      # Cache for location data (to avoid multiple API calls)
+      location_cache = {}
+      
+      def get_location_name(device):
+          """Get location name from device, expanding if needed"""
+          location_obj = device.get('location')
+          if not location_obj:
+              # Fallback to site
+              if device.get('site'):
+                  if isinstance(device.get('site'), dict):
+                      return device.get('site', {}).get('name', ''), None
+              return None, None
+          
+          # If location is a dict (expanded), use it directly
+          if isinstance(location_obj, dict):
+              location_name = location_obj.get('name', '')
+              parent = location_obj.get('parent')
+              parent_name = None
+              if parent:
+                  if isinstance(parent, dict):
+                      parent_name = parent.get('name', '')
+                  elif isinstance(parent, int):
+                      # Parent is just an ID, fetch it
+                      if parent not in location_cache:
+                          try:
+                              parent_response = requests.get(
+                                  f"{netbox_url}/api/dcim/locations/{parent}/",
+                                  headers={'Authorization': f'Token {netbox_token}', 'Accept': 'application/json'},
+                                  verify=verify_ssl,
+                                  timeout=10
+                              )
+                              if parent_response.status_code == 200:
+                                  parent_data = parent_response.json()
+                                  location_cache[parent] = parent_data.get('name', '')
+                                  parent_name = location_cache[parent]
+                          except Exception:
+                              pass
+                      else:
+                          parent_name = location_cache[parent]
+              return location_name, parent_name
+          
+          # If location is just an ID, fetch it
+          elif isinstance(location_obj, int):
+              location_id = location_obj
+              if location_id not in location_cache:
+                  try:
+                      location_response = requests.get(
+                          f"{netbox_url}/api/dcim/locations/{location_id}/",
+                          headers={'Authorization': f'Token {netbox_token}', 'Accept': 'application/json'},
+                          verify=verify_ssl,
+                          timeout=10
+                      )
+                      if location_response.status_code == 200:
+                          location_data = location_response.json()
+                          location_cache[location_id] = {
+                              'name': location_data.get('name', ''),
+                              'parent': location_data.get('parent')
+                          }
+                          # If parent exists and is just an ID, fetch it too
+                          parent = location_data.get('parent')
+                          if parent and isinstance(parent, int):
+                              if parent not in location_cache:
+                                  try:
+                                      parent_response = requests.get(
+                                          f"{netbox_url}/api/dcim/locations/{parent}/",
+                                          headers={'Authorization': f'Token {netbox_token}', 'Accept': 'application/json'},
+                                          verify=verify_ssl,
+                                          timeout=10
+                                      )
+                                      if parent_response.status_code == 200:
+                                          parent_data = parent_response.json()
+                                          location_cache[parent] = parent_data.get('name', '')
+                                  except Exception:
+                                      pass
+                  except Exception:
+                      pass
+              
+              if location_id in location_cache:
+                  cached = location_cache[location_id]
+                  if isinstance(cached, dict):
+                      location_name = cached.get('name', '')
+                      parent_id = cached.get('parent')
+                      parent_name = None
+                      if parent_id and isinstance(parent_id, int) and parent_id in location_cache:
+                          parent_name = location_cache[parent_id]
+                      return location_name, parent_name
+          
+          return None, None
+      
       # Debug: Print mapping info
       print(f"DEBUG: Loaded {len(mappings)} device type mappings", file=sys.stderr)
       
@@ -129,18 +218,10 @@
                       manufacturer_name = device.get('device_type', {}).get('manufacturer', {}).get('name', 'N/A') if device.get('device_type', {}).get('manufacturer') else 'N/A'
                       model = device.get('device_type', {}).get('model', 'N/A') if device.get('device_type') else 'N/A'
                       name = device.get('name', 'N/A')
-                      # Get location info with parent
-                      device_location = 'N/A'
-                      device_location_parent = 'N/A'
-                      if device.get('location'):
-                          if isinstance(device.get('location'), dict):
-                              device_location = device.get('location', {}).get('name', 'N/A')
-                              parent = device.get('location', {}).get('parent')
-                              if parent and isinstance(parent, dict):
-                                  device_location_parent = parent.get('name', 'N/A')
-                      elif device.get('site'):
-                          if isinstance(device.get('site'), dict):
-                              device_location = device.get('site', {}).get('name', 'N/A')
+                      # Get location info with parent using helper function
+                      device_location, device_location_parent = get_location_name(device)
+                      device_location = device_location or 'N/A'
+                      device_location_parent = device_location_parent or 'N/A'
                       print(f"  Device {i+1}: name={name}, location={device_location}, parent={device_location_parent}, role={role_name}, manufacturer={manufacturer_name}, model={model}", file=sys.stderr)
               
               # Apply mapping-based filters and location filter
@@ -150,21 +231,8 @@
               for device in devices:
                   # First check location filter if provided
                   if location_filter:
-                      # Check both 'location' and 'site' fields (Netbox can use either)
-                      # Also check parent location if exists
-                      device_location = None
-                      device_location_parent = None
-                      
-                      if device.get('location'):
-                          if isinstance(device.get('location'), dict):
-                              device_location = device.get('location', {}).get('name', '')
-                              # Check parent location if exists
-                              parent = device.get('location', {}).get('parent')
-                              if parent and isinstance(parent, dict):
-                                  device_location_parent = parent.get('name', '')
-                      elif device.get('site'):
-                          if isinstance(device.get('site'), dict):
-                              device_location = device.get('site', {}).get('name', '')
+                      # Get location name using helper function (handles expansion)
+                      device_location, device_location_parent = get_location_name(device)
                       
                       # Check if location matches (either location name or parent location name)
                       location_matches = False
