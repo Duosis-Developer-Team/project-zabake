@@ -321,7 +321,8 @@
 - name: Check if proxy group is missing (when DC_ID is provided)
   set_fact:
     _missing_params: "{{ _missing_params + ['proxy group'] }}"
-    _validation_errors: "{{ _validation_errors + ['Proxy group bulunamadı (DC_ID: ' + (zbx_record.DC_ID | default('N/A')) + ')'] }}"
+    _validation_errors: >-
+      {{ _validation_errors + ['Proxy group bulunamadı (DC_ID: ' ~ (zbx_record.DC_ID | default('N/A')) | string ~ ')'] }}
   when: 
     - zbx_scenario == 'create'
     - zbx_record.DC_ID is defined
