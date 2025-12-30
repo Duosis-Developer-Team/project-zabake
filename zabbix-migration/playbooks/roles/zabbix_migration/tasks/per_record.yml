@@ -17,19 +17,9 @@
 - name: Parse tags from MACROS field
   vars:
     macros_raw: "{{ zbx_record.MACROS | default({}) }}"
-    _macros_dict: >-
-      {{ macros_raw if macros_raw is mapping else (macros_raw | from_json if macros_raw is string else {}) }}
+    _macros_dict: "{{ macros_raw if macros_raw is mapping else (macros_raw | from_json if macros_raw is string else {}) }}"
   set_fact:
-    zbx_tags: >-
-      {%- if _macros_dict is mapping and _macros_dict | length > 0 -%}
-      {%- set _tags = [] -%}
-      {%- for key, value in _macros_dict.items() -%}
-      {%- set _ = _tags.append({'tag': key, 'value': value | string}) -%}
-      {%- endfor -%}
-      {{ _tags }}
-      {%- else -%}
-      []
-      {%- endif -%}
+    zbx_tags: "{{ _macros_dict.items() | map('community.general.dict_kv', 'tag', 'value') | list if _macros_dict is mapping and _macros_dict | length > 0 else [] }}"
 
 - name: Resolve templates for device type
   set_fact:
@@ -41,25 +31,24 @@
     zbx_template_types: "{{ zbx_templates | map(attribute='type') | list | unique }}"
 
 - name: Fail if no templates found for device type
-  when: zbx_template_names | length == 0
   fail:
     msg: "No templates mapped for DEVICE_TYPE='{{ zbx_record.DEVICE_TYPE }}'"
+  when: zbx_template_names | length == 0
 
 - name: Determine interface type from templates
   set_fact:
     zbx_iface_type: "{{ zbx_template_types[0] }}"
 
 - name: Warn if multiple differing interface types found
-  when: zbx_template_types | length > 1
   debug:
     msg: "Multiple template types found {{ zbx_template_types }}; using '{{ zbx_iface_type }}'"
+  when: zbx_template_types | length > 1
 
 - name: Resolve interface spec
   set_fact:
     zbx_iface: "{{ zbx_type_map.get(zbx_iface_type, {}).get('interface') }}"
 
 - name: Get all proxy groups from Zabbix (if not already fetched)
-  when: zbx_proxy_group_map is not defined
   uri:
     url: "{{ zabbix_url }}"
     method: POST
@@ -75,26 +64,24 @@
   register: zbx_proxy_groups_resp
   run_once: true
   delegate_to: localhost
+  when: zbx_proxy_group_map is not defined
 
 - name: Build proxy group name to ID map (if not already built)
-  when: zbx_proxy_group_map is not defined
   set_fact:
     zbx_proxy_group_map: "{{ zbx_proxy_groups_resp.json.result | items2dict(key_name='name', value_name='proxy_groupid') }}"
   run_once: true
   delegate_to: localhost
+  when: zbx_proxy_group_map is not defined
 
 - name: Resolve proxy group by location (DC_ID)
   vars:
     location_name: "{{ zbx_record.DC_ID | default('') }}"
-    # Extract DC number from location name using regex (e.g., "DC14" -> "14", "Dc14" -> "14")
     _dc_number: "{{ (location_name | upper | regex_replace('.*DC([0-9]+).*', '\\1')) if location_name else '' }}"
-    # Try to find proxy group by matching DC number
-    _proxy_group_keys: "{{ zbx_proxy_group_map.keys() | list if zbx_proxy_group_map is defined else [] }}"
   set_fact:
     zbx_location_name: "{{ location_name }}"
     zbx_dc_number: "{{ _dc_number }}"
-    zbx_matched_proxy_group: "{{ '' }}"
-    zbx_proxy_group_id: "{{ '' }}"
+    zbx_matched_proxy_group: ""
+    zbx_proxy_group_id: ""
     zbx_monitored_by: "0"
 
 - name: Find matching proxy group
@@ -107,12 +94,12 @@
     zbx_proxy_group_id: "{{ zbx_proxy_group_map[item] }}"
     zbx_monitored_by: "2"
   loop: "{{ zbx_proxy_group_map.keys() | list if zbx_proxy_group_map is defined else [] }}"
-  when: 
+  loop_control:
+    label: "{{ item }} (DC: {{ pg_dc_num }}, Match: {{ (zbx_dc_number | string == pg_dc_num | string) | bool }})"
+  when:
     - zbx_dc_number is defined
     - zbx_dc_number != ''
     - zbx_dc_number | string == pg_dc_num | string
-  loop_control:
-    label: "{{ item }} (DC: {{ pg_dc_num }}, Match: {{ (zbx_dc_number | string == pg_dc_num | string) | bool }})"
 
 - name: Debug proxy group matching
   vars:
@@ -222,9 +209,9 @@
           id: 102
       loop: "{{ zbx_missing_groups }}"
       register: zbx_created_groups_resp
-      when: zbx_missing_groups | length > 0
       run_once: true
       delegate_to: localhost
+      when: zbx_missing_groups | length > 0
 
     - name: Refresh host groups map (Fetch all required groups again to get IDs)
       uri:
@@ -268,27 +255,13 @@
     loop_var: group_name
   when: group_name is defined and group_name in zbx_group_map
 
-- name: Separate continuous and metadata tags
+- name: Extract continuous tags
   set_fact:
-    zbx_continuous_tags: >-
-      {%- set continuous = [] -%}
-      {%- set continuous_keys = ['Loki_ID', 'Location_Detail', 'City', 'Contact'] -%}
-      {%- for tag in zbx_tags | default([]) -%}
-      {%- if tag.tag in continuous_keys -%}
-      {%- set _ = continuous.append(tag) -%}
-      {%- endif -%}
-      {%- endfor -%}
-      {{ continuous }}
-    zbx_metadata_tags: >-
-      {%- set metadata = [] -%}
-      {%- set metadata_keys = ['Rack_Name', 'Rack_Type', 'Cluster', 'Hall', 'Kurulum_Tarihi', 'Manufacturer', 'Device_Type', 'Sorumlu_Ekip'] -%}
-      {%- set loki_tag_prefix = 'Loki_Tag_' -%}
-      {%- for tag in zbx_tags | default([]) -%}
-      {%- if tag.tag in metadata_keys or tag.tag.startswith(loki_tag_prefix) -%}
-      {%- set _ = metadata.append(tag) -%}
-      {%- endif -%}
-      {%- endfor -%}
-      {{ metadata }}
+    zbx_continuous_tags: "{{ zbx_tags | default([]) | selectattr('tag', 'in', ['Loki_ID', 'Location_Detail', 'City', 'Contact']) | list }}"
+
+- name: Extract metadata tags
+  set_fact:
+    zbx_metadata_tags: "{{ zbx_tags | default([]) | rejectattr('tag', 'in', ['Loki_ID', 'Location_Detail', 'City', 'Contact']) | list }}"
 
 - name: Validate required parameters before create
   set_fact:
@@ -300,7 +273,7 @@
   set_fact:
     _missing_params: "{{ _missing_params + ['host'] }}"
     _validation_errors: "{{ _validation_errors + ['Hostname eksik'] }}"
-  when: 
+  when:
     - zbx_scenario == 'create'
     - zbx_record.HOSTNAME is not defined or zbx_record.HOSTNAME == ""
 
@@ -308,7 +281,7 @@
   set_fact:
     _missing_params: "{{ _missing_params + ['ip'] }}"
     _validation_errors: "{{ _validation_errors + ['IP adresi eksik'] }}"
-  when: 
+  when:
     - zbx_scenario == 'create'
     - zbx_record.HOST_IP is not defined or zbx_record.HOST_IP == ""
 
@@ -316,7 +289,7 @@
   set_fact:
     _missing_params: "{{ _missing_params + ['template'] }}"
     _validation_errors: "{{ _validation_errors + ['Template bulunamadı'] }}"
-  when: 
+  when:
     - zbx_scenario == 'create'
     - zbx_template_id_list | default([]) | length == 0
 
@@ -326,11 +299,11 @@
   set_fact:
     _missing_params: "{{ _missing_params + ['proxy group'] }}"
     _validation_errors: "{{ _validation_errors + [_error_msg] }}"
-  when: 
+  when:
     - zbx_scenario == 'create'
     - zbx_record.DC_ID is defined
     - zbx_record.DC_ID != ""
-    - (zbx_proxy_group_id is not defined or zbx_proxy_group_id == "")
+    - zbx_proxy_group_id is not defined or zbx_proxy_group_id == ""
 
 - name: Record validation failure
   set_fact:
@@ -339,11 +312,18 @@
       status: "eklenemedi"
       reason: "{{ _validation_errors | join(', ') }}"
       ip: "{{ zbx_record.HOST_IP | default('N/A') }}"
-  when: 
+  when:
     - zbx_scenario == 'create'
     - _missing_params | default([]) | length > 0
 
-- name: Create new host (scenario: create)
+- name: Build interface for create
+  set_fact:
+    _zbx_interface_create: "{{ [{'type': zbx_iface.type, 'main': 1, 'useip': 1, 'ip': zbx_record.HOST_IP, 'dns': zbx_iface.dns | default(''), 'port': (zbx_iface.port | default(161)) | string, 'details': zbx_iface.details | default(omit)}] if zbx_iface is not none else [] }}"
+  when:
+    - zbx_scenario == 'create'
+    - _missing_params | default([]) | length == 0
+
+- name: Create new host (scenario create)
   uri:
     url: "{{ zabbix_url }}"
     method: POST
@@ -355,26 +335,17 @@
       params:
         host: "{{ zbx_record.HOSTNAME }}"
         name: "{{ zbx_record.HOSTNAME }}"
-        interfaces: >-
-          {{ [ {
-            'type': zbx_iface.type,
-            'main': 1,
-            'useip': 1,
-            'ip': zbx_record.HOST_IP,
-            'dns': zbx_iface.dns | default(''),
-            'port': (zbx_iface.port | default(161)) | string,
-            'details': zbx_iface.details | default(omit)
-          } ] if zbx_iface is not none else [] }}
+        interfaces: "{{ _zbx_interface_create }}"
         templates: "{{ zbx_template_id_list }}"
         groups: "{{ zbx_groups_formatted | default([]) }}"
-        tags: "{{ zbx_tags | default(omit) }}"  # Tüm tag'ler (continuous + metadata)
+        tags: "{{ zbx_tags | default(omit) }}"
         monitored_by: "{{ zbx_monitored_by }}"
         proxy_groupid: "{{ zbx_proxy_group_id if (zbx_proxy_group_id is defined and zbx_proxy_group_id != '') else omit }}"
       auth: "{{ zabbix_auth }}"
       id: 1
   register: zbx_create_resp
   failed_when: false
-  when: 
+  when:
     - zbx_scenario == 'create'
     - _missing_params | default([]) | length == 0
 
@@ -385,7 +356,7 @@
       status: "eklendi"
       reason: ""
       ip: "{{ zbx_record.HOST_IP }}"
-  when: 
+  when:
     - zbx_scenario == 'create'
     - _missing_params | default([]) | length == 0
     - zbx_create_resp.json.result is defined
@@ -398,27 +369,37 @@
       status: "eklenemedi"
       reason: "{{ zbx_create_resp.json.error.message | default('Bilinmeyen hata') }}"
       ip: "{{ zbx_record.HOST_IP }}"
-  when: 
+  when:
     - zbx_scenario == 'create'
     - _missing_params | default([]) | length == 0
     - zbx_create_resp.json.error is defined
 
 - name: Handle create error (host already exists fallback)
-  debug:
-    msg: "Host {{ zbx_record.HOSTNAME }} already exists, switching to update scenario"
   set_fact:
     zbx_scenario: "update"
     zbx_existing_host: "{{ zabbix_hosts_by_hostname.get(zbx_record.HOSTNAME) | default({}) }}"
-  when: 
+  when:
     - zbx_scenario == 'create'
     - zbx_create_resp.json.error is defined
     - zbx_create_resp.json.error.message is search('already exists')
     - zabbix_hosts_by_hostname is defined
 
-- name: Update existing host (scenario: update - only continuous fields)
-  vars:
+- name: Get existing interface for update
+  set_fact:
     _existing_interface: "{{ zbx_existing_host.interfaces | default([]) | selectattr('main', 'equalto', 1) | first | default({}) }}"
-    _interface_id: "{{ _existing_interface.interfaceid | default(omit) }}"
+    _interface_id: "{{ (zbx_existing_host.interfaces | default([]) | selectattr('main', 'equalto', 1) | first | default({})).interfaceid | default(omit) }}"
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host.hostid is defined
+
+- name: Build interface for update
+  set_fact:
+    _zbx_interface_update: "{{ [{'interfaceid': _interface_id, 'type': zbx_iface.type, 'main': 1, 'useip': 1, 'ip': zbx_record.HOST_IP, 'dns': zbx_iface.dns | default(''), 'port': (zbx_iface.port | default(161)) | string, 'details': zbx_iface.details | default(omit)}] if zbx_iface is not none else omit }}"
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host.hostid is defined
+
+- name: Update existing host (scenario update - only continuous fields)
   uri:
     url: "{{ zabbix_url }}"
     method: POST
@@ -429,27 +410,18 @@
       method: "host.update"
       params:
         hostid: "{{ zbx_existing_host.hostid }}"
-        host: "{{ zbx_record.HOSTNAME }}"  # Sürekli güncellenecek
-        name: "{{ zbx_record.HOSTNAME }}"  # Sürekli güncellenecek
-        interfaces: >-
-          {{ [ {
-            'interfaceid': _interface_id,
-            'type': zbx_iface.type,
-            'main': 1,
-            'useip': 1,
-            'ip': zbx_record.HOST_IP,  # Sürekli güncellenecek
-            'dns': zbx_iface.dns | default(''),
-            'port': (zbx_iface.port | default(161)) | string,
-            'details': zbx_iface.details | default(omit)
-          } ] if zbx_iface is not none else omit }}
-        tags: "{{ zbx_continuous_tags | default(omit) }}"  # Sadece continuous tag'ler
-        monitored_by: "{{ zbx_monitored_by }}"  # DC_ID değişirse güncellenir
+        host: "{{ zbx_record.HOSTNAME }}"
+        name: "{{ zbx_record.HOSTNAME }}"
+        interfaces: "{{ _zbx_interface_update }}"
+        tags: "{{ zbx_continuous_tags | default(omit) }}"
+        monitored_by: "{{ zbx_monitored_by }}"
         proxy_groupid: "{{ zbx_proxy_group_id if (zbx_proxy_group_id is defined and zbx_proxy_group_id != '') else omit }}"
-        # NOT: templates, groups, metadata tags güncellenmez
       auth: "{{ zabbix_auth }}"
       id: 2
   register: zbx_update_resp
-  when: zbx_scenario == 'update' and zbx_existing_host.hostid is defined
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host.hostid is defined
 
 - name: Record update success
   set_fact:
@@ -458,7 +430,7 @@
       status: "güncellendi"
       reason: ""
       ip: "{{ zbx_record.HOST_IP }}"
-  when: 
+  when:
     - zbx_scenario == 'update'
     - zbx_update_resp.json.result is defined
     - zbx_update_resp.json.error is not defined
@@ -470,6 +442,6 @@
       status: "eklenemedi"
       reason: "Güncelleme hatası: {{ zbx_update_resp.json.error.message | default('Bilinmeyen hata') }}"
       ip: "{{ zbx_record.HOST_IP }}"
-  when: 
+  when:
     - zbx_scenario == 'update'
     - zbx_update_resp.json.error is defined
