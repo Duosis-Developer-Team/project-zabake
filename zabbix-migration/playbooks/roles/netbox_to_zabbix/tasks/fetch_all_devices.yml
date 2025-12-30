@@ -22,7 +22,9 @@
       mappings = device_type_mapping.get('mappings', [])
       
       # Resolve location ID from location name if filter is provided
+      # Also collect child location IDs if the location has children
       location_id_filter = None
+      location_ids_to_filter = []
       if location_filter:
           print(f"DEBUG: Resolving location ID for location name: {location_filter}", file=sys.stderr)
           try:
@@ -39,11 +41,34 @@
               locations = location_data.get('results', [])
               
               # Find exact match (case-insensitive)
+              matched_location = None
               for loc in locations:
                   if loc.get('name', '').upper() == location_filter.upper():
+                      matched_location = loc
                       location_id_filter = loc.get('id')
+                      location_ids_to_filter.append(location_id_filter)
                       print(f"DEBUG: Found location ID {location_id_filter} for location name '{location_filter}'", file=sys.stderr)
                       break
+              
+              if matched_location:
+                  # Also fetch child locations (locations that have this location as parent)
+                  try:
+                      child_locations_response = requests.get(
+                          f"{netbox_url}/api/dcim/locations/",
+                          headers={'Authorization': f'Token {netbox_token}', 'Accept': 'application/json'},
+                          params={'parent_id': location_id_filter, 'limit': 1000},
+                          verify=verify_ssl,
+                          timeout=30
+                      )
+                      child_locations_response.raise_for_status()
+                      child_locations_data = child_locations_response.json()
+                      child_locations = child_locations_data.get('results', [])
+                      if child_locations:
+                          child_ids = [loc.get('id') for loc in child_locations]
+                          location_ids_to_filter.extend(child_ids)
+                          print(f"DEBUG: Found {len(child_locations)} child locations. Total location IDs to filter: {len(location_ids_to_filter)}", file=sys.stderr)
+                  except Exception as e:
+                      print(f"DEBUG: Could not fetch child locations: {e}", file=sys.stderr)
               
               if not location_id_filter:
                   print(f"WARNING: Location '{location_filter}' not found in Netbox. Will fetch all devices.", file=sys.stderr)
@@ -61,12 +86,21 @@
               # Try 'role' first (Netbox API field name), then 'device_role' as fallback
               role_obj = device.get('role') or device.get('device_role')
               role_name = role_obj.get('name', '') if role_obj and isinstance(role_obj, dict) else ''
+              
+              # Debug: Print role matching for HOST devices
               expected_roles = conditions['device_role']
+              if 'HOST' in role_name.upper() or (isinstance(expected_roles, str) and 'HOST' in expected_roles.upper()) or (isinstance(expected_roles, list) and any('HOST' in str(r).upper() for r in expected_roles)):
+                  print(f"DEBUG: Checking HOST device role match: device_role='{role_name}', expected={expected_roles}", file=sys.stderr)
+              
               if isinstance(expected_roles, list):
                   if not role_name or role_name.upper() not in [r.upper() for r in expected_roles]:
+                      if 'HOST' in role_name.upper():
+                          print(f"DEBUG: HOST device role '{role_name}' does not match expected roles {expected_roles}", file=sys.stderr)
                       return False
               else:
                   if not role_name or role_name.upper() != expected_roles.upper():
+                      if 'HOST' in role_name.upper():
+                          print(f"DEBUG: HOST device role '{role_name}' does not match expected role '{expected_roles}'", file=sys.stderr)
                       return False
           
           # Manufacturer check
@@ -121,10 +155,18 @@
       
       all_devices = []
       # Build API URL with location filter if location ID was resolved
+      # If multiple location IDs (parent + children), we'll need to fetch separately or use a different approach
       api_url = f"{netbox_url}/api/dcim/devices/?limit=1000"
-      if location_id_filter:
-          api_url += f"&location_id={location_id_filter}"
-          print(f"DEBUG: Applying location filter at API level: location_id={location_id_filter}", file=sys.stderr)
+      if location_ids_to_filter:
+          # Netbox API supports filtering by multiple location IDs using location_id parameter multiple times
+          # But we'll use a simpler approach: fetch for each location ID and combine
+          if len(location_ids_to_filter) == 1:
+              api_url += f"&location_id={location_ids_to_filter[0]}"
+              print(f"DEBUG: Applying location filter at API level: location_id={location_ids_to_filter[0]}", file=sys.stderr)
+          else:
+              # For multiple locations, we'll fetch all and filter in Python
+              print(f"DEBUG: Multiple location IDs found ({len(location_ids_to_filter)}). Will fetch all devices and filter by location in Python.", file=sys.stderr)
+              api_url = f"{netbox_url}/api/dcim/devices/?limit=1000"
       
       next_url = api_url
       
@@ -146,6 +188,44 @@
               
               # Debug: Print page info
               print(f"DEBUG: Fetched {len(devices)} devices from this page", file=sys.stderr)
+              
+              # Debug: Print role distribution
+              if len(devices) > 0:
+                  role_count = {}
+                  for device in devices:
+                      role_obj = device.get('role') or device.get('device_role')
+                      role_name = role_obj.get('name', 'Unknown') if role_obj and isinstance(role_obj, dict) else 'Unknown'
+                      role_count[role_name] = role_count.get(role_name, 0) + 1
+                  print(f"DEBUG: Role distribution on this page: {role_count}", file=sys.stderr)
+              
+              # Debug: Print all devices with HOST role (before filtering)
+              host_devices = []
+              for device in devices:
+                  role_obj = device.get('role') or device.get('device_role')
+                  role_name = role_obj.get('name', '') if role_obj and isinstance(role_obj, dict) else ''
+                  if role_name and 'HOST' in role_name.upper():
+                      host_devices.append(device)
+              
+              if host_devices:
+                  print(f"DEBUG: Found {len(host_devices)} HOST devices on this page (before mapping filters):", file=sys.stderr)
+                  for i, device in enumerate(host_devices[:10]):  # Show first 10 HOST devices
+                      role_obj = device.get('role') or device.get('device_role')
+                      role_name = role_obj.get('name', 'N/A') if role_obj and isinstance(role_obj, dict) else 'N/A'
+                      manufacturer_name = device.get('device_type', {}).get('manufacturer', {}).get('name', 'N/A') if device.get('device_type', {}).get('manufacturer') else 'N/A'
+                      model = device.get('device_type', {}).get('model', 'N/A') if device.get('device_type') else 'N/A'
+                      name = device.get('name', 'N/A')
+                      device_location = 'N/A'
+                      if device.get('location'):
+                          if isinstance(device.get('location'), dict):
+                              device_location = device.get('location', {}).get('name', 'N/A')
+                          elif isinstance(device.get('location'), int):
+                              device_location = f"ID:{device.get('location')}"
+                      elif device.get('site'):
+                          if isinstance(device.get('site'), dict):
+                              device_location = device.get('site', {}).get('name', 'N/A')
+                      print(f"  HOST Device {i+1}: name={name}, location={device_location}, role={role_name}, manufacturer={manufacturer_name}, model={model}", file=sys.stderr)
+              else:
+                  print("DEBUG: No HOST devices found on this page", file=sys.stderr)
               
               # Debug: Print sample device details (first 3 devices)
               if len(devices) > 0 and len(all_devices) == 0:  # Only print on first page
@@ -213,8 +293,13 @@
               
               all_devices.extend(filtered_devices)
               filter_info = "mapping filters"
-              if location_id_filter:
-                  filter_info += f" + location filter (ID: {location_id_filter})"
+              if location_ids_to_filter:
+                  if len(location_ids_to_filter) == 1:
+                      filter_info += f" + location filter (ID: {location_ids_to_filter[0]})"
+                  else:
+                      filter_info += f" + location filter (IDs: {location_ids_to_filter})"
+                      if location_filtered_count > 0:
+                          print(f"DEBUG: Location filter stats: {location_filtered_count} devices filtered out by location on this page", file=sys.stderr)
               print(f"DEBUG: After {filter_info}, {len(filtered_devices)} devices match on this page", file=sys.stderr)
               next_url = data.get('next')
               
