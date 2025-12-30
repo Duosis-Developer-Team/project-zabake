@@ -12,6 +12,9 @@
 - name: Fetch all devices from Netbox API (with pagination and mapping-based filtering)
   include_tasks: fetch_all_devices.yml
 
+- name: Fetch all hosts from Zabbix API (for mapping and update detection)
+  include_tasks: fetch_all_zabbix_hosts.yml
+
 - name: Set filtered devices (mapping-based filters already applied in Python script)
   set_fact:
     netbox_devices_filtered: "{{ netbox_devices_raw }}"
@@ -29,9 +32,13 @@
     netbox_devices_final: "{{ netbox_devices_filtered }}"
   when: device_limit_int | int == 0
 
+- name: Initialize processing results list
+  set_fact:
+    processing_results: []
+
 - name: Display device count
   debug:
-    msg: "Found {{ netbox_devices_final | length }} devices to process (limit: {{ 'unlimited' if device_limit_int == 0 else device_limit_int }})"
+    msg: "Found {{ netbox_devices_final | length }} devices to process (limit: {{ 'unlimited' if device_limit_int == 0 else device_limit_int }}{% if location_filter and location_filter != '' %}, location filter: {{ location_filter }}{% endif %})"
 
 - name: Display list of matching devices
   debug:
@@ -59,3 +66,46 @@
     label: "{{ item.name | default('Unknown') }}"
   vars:
     netbox_device: "{{ item }}"
+
+- name: Collect all device results from temporary files
+  find:
+    paths: /tmp
+    patterns: "zabbix_migration_result_*.json"
+  register: result_files
+  delegate_to: localhost
+  run_once: true
+
+- name: Load all device results
+  set_fact:
+    processing_results: >-
+      {%- set results = [] -%}
+      {%- for file in result_files.files | default([]) -%}
+      {%- set file_content = lookup('file', file.path) | from_json -%}
+      {%- if file_content -%}
+      {%- set _ = results.append(file_content) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ results }}
+  delegate_to: localhost
+  run_once: true
+  when: result_files.files is defined and result_files.files | length > 0
+
+- name: Set empty results if no files found
+  set_fact:
+    processing_results: []
+  when: result_files.files is not defined or result_files.files | length == 0
+  delegate_to: localhost
+  run_once: true
+
+- name: Clean up temporary result files
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ result_files.files | default([]) }}"
+  delegate_to: localhost
+  run_once: true
+  when: result_files.files is defined
+
+- name: Send notification email for failed devices
+  include_tasks: send_notification_email.yml
+  when: processing_results is defined and processing_results | length > 0

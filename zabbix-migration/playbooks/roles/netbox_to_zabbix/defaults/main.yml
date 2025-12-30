@@ -12,11 +12,22 @@ zabbix_validate_certs: false
 
 # Device filtering
 device_limit: 0  # 0 means no limit, process all matching devices
+location_filter: ""  # Optional: Filter devices by location name (e.g., "DC11", "ISTANBUL")
 # Note: Device filtering is now based on conditions in netbox_device_type_mapping.yml
 # All devices matching any condition in the mapping file will be selected
+# If location_filter is provided, only devices from that location will be fetched
 
 # Mapping file paths
 templates_map_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/templates.yml"
 datacenters_map_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/datacenters.yml"
 device_type_mapping_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/netbox_device_type_mapping.yml"
+
+# Email notification settings
+mail_smtp_host: "10.34.8.191"
+mail_smtp_port: 587
+mail_smtp_username: ""  # User authentication: False
+mail_smtp_password: ""  # User authentication: False
+mail_smtp_use_tls: false  # TLS: False
+mail_recipients: []  # Required: List of email addresses, e.g. ["user1@example.com", "user2@example.com"] - Must be provided as playbook input
+mail_from: "infrareport@alert.bulutistan.com"
 

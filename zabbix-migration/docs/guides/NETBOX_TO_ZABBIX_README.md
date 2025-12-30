@@ -32,6 +32,22 @@ ansible-playbook netbox_to_zabbix.yaml \
   -e "zabbix_password=password"
 ```
 
+### Location Filtresi ile Kullanım
+
+Belirli bir location'dan device'ları göndermek için:
+
+```bash
+ansible-playbook netbox_to_zabbix.yaml \
+  -e "netbox_url=https://loki.bulutistan.com" \
+  -e "netbox_token=YOUR_NETBOX_TOKEN" \
+  -e "zabbix_url=http://zabbix.example.com/zabbix/api_jsonrpc.php" \
+  -e "zabbix_user=admin" \
+  -e "zabbix_password=password" \
+  -e "location_filter=DC11"
+```
+
+**Not**: `location_filter` parametresi opsiyoneldir. Belirtilmezse tüm location'lardan device'lar çekilir.
+
 ### Device Limit ile Kullanım
 
 Sadece ilk 10 device'ı göndermek için:
@@ -106,11 +122,10 @@ ansible-playbook netbox_to_zabbix.yaml \
 | Parametre | Varsayılan | Açıklama |
 |-----------|------------|----------|
 | `device_limit` | `0` | Kaç adet device gönderileceği (0 = tümü) |
-| `device_role_filter` | `HOST` | Device role filtresi |
-| `site_filter` | `` | Site filtresi (boş = tüm siteler) |
-| `manufacturer_filter` | `` | Manufacturer filtresi (boş = tüm manufacturer'lar) |
+| `location_filter` | `` | Location filtresi (boş = tüm location'lar) |
 | `netbox_verify_ssl` | `false` | Netbox SSL doğrulama |
 | `zabbix_validate_certs` | `false` | Zabbix SSL doğrulama |
+| `mail_recipients` | `[]` | E-posta alıcıları listesi (opsiyonel) |
 
 ## Device Type Mapping
 

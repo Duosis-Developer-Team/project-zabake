@@ -218,6 +218,8 @@
       
       def extract_tags(device):
           tags = {}
+          
+          # Mevcut tag'ler
           if device.get('device_type', {}).get('manufacturer', {}).get('name'):
               tags['Manufacturer'] = device['device_type']['manufacturer']['name']
           if device.get('device_type', {}).get('model'):
@@ -237,7 +239,53 @@
               tags['Sorumlu_Ekip'] = custom_fields['Sorumlu_Ekip']
           if device.get('id'):
               tags['Loki_ID'] = str(device['id'])
-          return tags  # Return as dict, not JSON string
+          
+          # YENİ TAG'LER - Rack bilgileri
+          rack = device.get('rack')
+          if rack:
+              # Rack dict olarak geliyor veya ID olarak
+              if isinstance(rack, dict):
+                  if rack.get('name'):
+                      tags['Rack_Name'] = rack['name']
+                  # Rack type için role kullanılacak (rack_type genellikle null)
+                  if rack.get('role', {}).get('name'):
+                      tags['Rack_Type'] = rack['role']['name']
+          
+          # YENİ TAG'LER - Cluster bilgisi
+          cluster = device.get('cluster')
+          if cluster:
+              if isinstance(cluster, dict) and cluster.get('name'):
+                  tags['Cluster'] = cluster['name']
+          
+          # YENİ TAG'LER - Hall bilgisi (location description veya name)
+          location = device.get('location')
+          if location:
+              if isinstance(location, dict):
+                  # Description'da "DATA HALL X" formatı var
+                  if location.get('description'):
+                      tags['Hall'] = location['description']
+                  elif location.get('name'):
+                      tags['Hall'] = location['name']
+          
+          # YENİ TAG'LER - Kurulum Tarihi (custom field)
+          if custom_fields.get('Kurulum_Tarihi'):
+              tags['Kurulum_Tarihi'] = custom_fields['Kurulum_Tarihi']
+          
+          # Loki tags (device['tags'] array'inden) - ayrı return edilecek
+          loki_tags = []
+          device_tags = device.get('tags', [])
+          for tag in device_tags:
+              if isinstance(tag, dict):
+                  tag_name = tag.get('name')
+                  if tag_name:
+                      loki_tags.append(tag_name)
+              elif isinstance(tag, str):
+                  loki_tags.append(tag)
+          
+          # None değerleri temizle
+          tags = {k: v for k, v in tags.items() if v is not None and v != ''}
+          
+          return tags, loki_tags  # İki ayrı return: tags dict ve loki_tags list
       
       if __name__ == '__main__':
           device_file = sys.argv[1]
@@ -256,11 +304,20 @@
           
           device_type = determine_device_type(device, device_type_mapping)
           location_name = get_location_name(device, netbox_url, netbox_token, verify_ssl)
+          tags_dict, loki_tags_list = extract_tags(device)
+          
+          # Loki tags'i tags dict'ine ekle (her biri ayrı tag olarak)
+          for loki_tag in loki_tags_list:
+              if loki_tag:
+                  # Loki tag'leri "Loki_Tag_" prefix'i ile ekle
+                  tags_dict[f'Loki_Tag_{loki_tag}'] = loki_tag
+          
           result = {
               'device_type': device_type,
               'primary_ip': get_primary_ip(device, netbox_url, netbox_token, verify_ssl),
               'host_groups': extract_host_groups(device, device_type, netbox_url, netbox_token, verify_ssl),
-              'tags': extract_tags(device),
+              'tags': tags_dict,
+              'loki_tags': loki_tags_list,
               'location': location_name,
               'dc_id': location_name if location_name else device.get('site', {}).get('name', '')
           }
@@ -298,6 +355,69 @@
 - name: Parse device processing result
   set_fact:
     device_info: "{{ device_processing_result.stdout | from_json }}"
+
+- name: Check if host exists in Zabbix by Loki_ID
+  set_fact:
+    zbx_existing_host: "{{ zabbix_hosts_by_loki_id.get(device_info.tags.Loki_ID | string) }}"
+  when: 
+    - zabbix_hosts_by_loki_id is defined
+    - device_info.tags.Loki_ID is defined
+    - device_info.device_type is not none
+    - device_info.device_type != ""
+    - device_info.primary_ip is not none
+    - device_info.primary_ip != ""
+
+- name: Fallback to hostname matching if Loki_ID not found
+  set_fact:
+    zbx_existing_host: "{{ zabbix_hosts_by_hostname.get(netbox_device.name) }}"
+  when:
+    - zbx_existing_host is not defined
+    - zabbix_hosts_by_hostname is defined
+    - device_info.device_type is not none
+    - device_info.device_type != ""
+    - device_info.primary_ip is not none
+    - device_info.primary_ip != ""
+
+- name: Determine scenario (create or update)
+  set_fact:
+    zbx_scenario: "{{ 'update' if zbx_existing_host is defined else 'create' }}"
+  when: 
+    - device_info.device_type is not none
+    - device_info.device_type != ""
+    - device_info.primary_ip is not none
+    - device_info.primary_ip != ""
+
+- name: Display scenario for device
+  debug:
+    msg: "Device {{ netbox_device.name }}: Scenario = {{ zbx_scenario }} ({{ 'Host exists in Zabbix' if zbx_existing_host is defined else 'New host - will be created' }})"
+  when: 
+    - device_info.device_type is not none
+    - device_info.device_type != ""
+    - device_info.primary_ip is not none
+    - device_info.primary_ip != ""
+
+- name: Record skipped device (no device type)
+  set_fact:
+    device_result:
+      hostname: "{{ netbox_device.name | default('N/A') }}"
+      status: "eklenemedi"
+      reason: "Device type bulunamadı"
+      ip: "{{ device_info.primary_ip | default('N/A') }}"
+  when: device_info.device_type is none or device_info.device_type == ""
+  run_once: false
+
+- name: Record skipped device (no IP)
+  set_fact:
+    device_result:
+      hostname: "{{ netbox_device.name | default('N/A') }}"
+      status: "eklenemedi"
+      reason: "IP adresi bulunamadı"
+      ip: "N/A"
+  when: 
+    - device_info.device_type is not none
+    - device_info.device_type != ""
+    - (device_info.primary_ip is none or device_info.primary_ip == "")
+  run_once: false
 
 - name: Skip device if no matching device type
   debug:
@@ -368,6 +488,8 @@
   set_fact:
     _zbx_record_for_role: "{{ zbx_record }}"
     _zabbix_auth_for_role: "{{ zabbix_auth }}"
+    _zbx_existing_host_for_role: "{{ zbx_existing_host | default(omit) }}"
+    _zbx_scenario_for_role: "{{ zbx_scenario | default('create') }}"
   when: 
     - device_info.device_type is not none
     - device_info.device_type != ""
@@ -387,6 +509,8 @@
     zabbix_password: "{{ zabbix_password }}"
     zabbix_validate_certs: "{{ zabbix_validate_certs }}"
     zabbix_auth: "{{ _zabbix_auth_for_role }}"
+    zbx_existing_host: "{{ _zbx_existing_host_for_role }}"
+    zbx_scenario: "{{ _zbx_scenario_for_role }}"
   when: 
     - device_info.device_type is not none
     - device_info.device_type != ""
@@ -394,3 +518,21 @@
     - device_info.primary_ip != ""
     - _zbx_record_for_role is defined
     - _zabbix_auth_for_role is defined
+
+- name: Collect device result from zabbix_migration role
+  set_fact:
+    current_device_result: "{{ device_result | default({}) }}"
+  when: device_result is defined
+
+- name: Record skipped device result (no device type or IP)
+  set_fact:
+    current_device_result: "{{ device_result | default({}) }}"
+  when: device_result is defined
+
+- name: Save device result to temporary file
+  copy:
+    content: "{{ current_device_result | default({}) | to_json }}"
+    dest: "/tmp/zabbix_migration_result_{{ netbox_device.id | default('unknown') }}.json"
+  when: current_device_result is defined
+  delegate_to: localhost
+  run_once: false

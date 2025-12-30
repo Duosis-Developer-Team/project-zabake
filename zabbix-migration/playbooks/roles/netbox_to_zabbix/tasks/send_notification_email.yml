@@ -1,0 +1,125 @@
+---
+- name: Check if there are failed devices
+  set_fact:
+    has_failed_devices: "{{ processing_results | default([]) | selectattr('status', 'equalto', 'eklenemedi') | list | length > 0 }}"
+    failed_devices_count: "{{ processing_results | default([]) | selectattr('status', 'equalto', 'eklenemedi') | list | length }}"
+
+- name: Generate email HTML content
+  set_fact:
+    email_html_content: >-
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; }
+          table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+          th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+          th { background-color: #4CAF50; color: white; }
+          tr:nth-child(even) { background-color: #f2f2f2; }
+          .status-eklendi { color: #4CAF50; font-weight: bold; }
+          .status-guncellendi { color: #2196F3; font-weight: bold; }
+          .status-eklenemedi { color: #f44336; font-weight: bold; }
+          .summary { margin: 20px 0; padding: 15px; background-color: #f9f9f9; border-left: 4px solid #4CAF50; }
+        </style>
+      </head>
+      <body>
+        <h2>Zabbix Migration İşlem Raporu</h2>
+        <div class="summary">
+          <h3>Özet</h3>
+          <p><strong>Toplam İşlem:</strong> {{ processing_results | default([]) | length }}</p>
+          <p><strong>Başarılı (Eklendi):</strong> {{ processing_results | default([]) | selectattr('status', 'equalto', 'eklendi') | list | length }}</p>
+          <p><strong>Güncellendi:</strong> {{ processing_results | default([]) | selectattr('status', 'equalto', 'güncellendi') | list | length }}</p>
+          <p><strong>Başarısız (Eklenemedi):</strong> {{ failed_devices_count }}</p>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Sunucu Adı</th>
+              <th>IP Adresi</th>
+              <th>İşlem Durumu</th>
+              <th>Sebep/Açıklama</th>
+            </tr>
+          </thead>
+          <tbody>
+            {%- for result in processing_results | default([]) -%}
+            <tr>
+              <td>{{ result.hostname | default('N/A') }}</td>
+              <td>{{ result.ip | default('N/A') }}</td>
+              <td class="status-{{ result.status | default('eklenemedi') }}">
+                {{ result.status | default('eklenemedi') | upper }}
+              </td>
+              <td>{{ result.reason | default('-') }}</td>
+            </tr>
+            {%- endfor -%}
+          </tbody>
+        </table>
+        <p style="margin-top: 30px; color: #666; font-size: 12px;">
+          Bu e-posta otomatik olarak Zabbix Migration playbook'u tarafından oluşturulmuştur.
+        </p>
+      </body>
+      </html>
+
+- name: Generate email plain text content
+  set_fact:
+    email_text_content: >-
+      ZABBIX MIGRATION İŞLEM RAPORU
+      =============================
+      
+      ÖZET:
+      -----
+      Toplam İşlem: {{ processing_results | default([]) | length }}
+      Başarılı (Eklendi): {{ processing_results | default([]) | selectattr('status', 'equalto', 'eklendi') | list | length }}
+      Güncellendi: {{ processing_results | default([]) | selectattr('status', 'equalto', 'güncellendi') | list | length }}
+      Başarısız (Eklenemedi): {{ failed_devices_count }}
+      
+      DETAYLI LİSTE:
+      --------------
+      {%- for result in processing_results | default([]) -%}
+      
+      Sunucu: {{ result.hostname | default('N/A') }}
+      IP: {{ result.ip | default('N/A') }}
+      Durum: {{ result.status | default('eklenemedi') | upper }}
+      Sebep: {{ result.reason | default('-') }}
+      {%- endfor -%}
+      
+      ---
+      Bu e-posta otomatik olarak Zabbix Migration playbook'u tarafından oluşturulmuştur.
+
+- name: Send notification email (if there are failed devices)
+  community.general.mail:
+    host: "{{ mail_smtp_host }}"
+    port: "{{ mail_smtp_port }}"
+    username: "{{ mail_smtp_username if mail_smtp_username else omit }}"
+    password: "{{ mail_smtp_password if mail_smtp_password else omit }}"
+    to: "{{ mail_recipients }}"
+    subject: "Zabbix Migration Raporu - {{ failed_devices_count }} Sunucu Eklenemedi"
+    body: "{{ email_text_content }}"
+    subtype: html
+    html_body: "{{ email_html_content }}"
+    from: "{{ mail_from }}"
+    secure: never  # TLS: False
+  when: 
+    - has_failed_devices | default(false)
+    - mail_recipients is defined
+    - mail_recipients | length > 0
+  delegate_to: localhost
+  run_once: true
+
+- name: Display email notification status
+  debug:
+    msg: |
+      ============================================
+      EMAIL NOTIFICATION STATUS
+      ============================================
+      {% if has_failed_devices %}
+      Başarısız işlem var: {{ failed_devices_count }} sunucu eklenemedi
+      {% if mail_recipients is defined and mail_recipients | length > 0 %}
+      E-posta gönderildi: {{ mail_recipients | join(', ') }}
+      {% else %}
+      E-posta gönderilmedi: mail_recipients tanımlı değil
+      {% endif %}
+      {% else %}
+      Tüm işlemler başarılı, e-posta gönderilmedi
+      {% endif %}
+      ============================================
+  run_once: true
+

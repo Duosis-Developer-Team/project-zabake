@@ -16,6 +16,12 @@
     
     # Optional: Limit number of devices to process
     _device_limit: "{{ device_limit | default(0) | int }}"
+    
+    # Optional: Location filter for Netbox devices
+    _location_filter: "{{ location_filter | default('') }}"
+    
+    # Email notification settings (optional)
+    _mail_recipients: "{{ mail_recipients | default([]) }}"
   
   pre_tasks:
     - name: Validate netbox_url
@@ -54,4 +60,6 @@
         zabbix_password: "{{ _zabbix_password }}"
         zabbix_validate_certs: "{{ _zabbix_validate_certs }}"
         device_limit: "{{ _device_limit }}"
+        location_filter: "{{ _location_filter }}"
+        mail_recipients: "{{ _mail_recipients }}"
         # Note: Device filtering is now based on conditions in netbox_device_type_mapping.yml

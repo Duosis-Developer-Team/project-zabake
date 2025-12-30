@@ -1,0 +1,93 @@
+---
+- name: Zabbix login to obtain auth token
+  uri:
+    url: "{{ zabbix_url }}"
+    method: POST
+    body_format: json
+    validate_certs: "{{ zabbix_validate_certs | default(false) }}"
+    body:
+      jsonrpc: "2.0"
+      method: "user.login"
+      params:
+        username: "{{ zabbix_user }}"
+        password: "{{ zabbix_password }}"
+      id: 0
+  register: zbx_login_resp
+  run_once: true
+  delegate_to: localhost
+
+- name: Set zabbix_auth from login
+  set_fact:
+    zabbix_auth: "{{ zbx_login_resp.json.result }}"
+  run_once: true
+  delegate_to: localhost
+  when: zbx_login_resp.json.result is defined
+
+- name: Fetch all hosts from Zabbix
+  uri:
+    url: "{{ zabbix_url }}"
+    method: POST
+    body_format: json
+    validate_certs: "{{ zabbix_validate_certs | default(false) }}"
+    body:
+      jsonrpc: "2.0"
+      method: "host.get"
+      params:
+        output: ["hostid", "host", "name"]
+        selectInterfaces: ["interfaceid", "ip", "dns", "port", "type", "main"]
+        selectTags: ["tag", "value"]
+        selectGroups: ["groupid", "name"]
+      auth: "{{ zabbix_auth }}"
+      id: 100
+  register: zbx_hosts_resp
+  run_once: true
+  delegate_to: localhost
+
+- name: Display Zabbix hosts fetch results
+  debug:
+    msg: |
+      ============================================
+      ZABBIX HOSTS FETCH RESULTS
+      ============================================
+      Total hosts found: {{ zbx_hosts_resp.json.result | default([]) | length }}
+      ============================================
+  when: zbx_hosts_resp.json.result is defined
+
+- name: Build Loki_ID to host mapping
+  set_fact:
+    zabbix_hosts_by_loki_id: >-
+      {%- set mapping = {} -%}
+      {%- for host in zbx_hosts_resp.json.result | default([]) -%}
+      {%- set loki_id = None -%}
+      {%- for tag in host.tags | default([]) -%}
+      {%- if tag.tag == 'Loki_ID' -%}
+      {%- set loki_id = tag.value | string -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- if loki_id -%}
+      {%- set _ = mapping.update({loki_id: host}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ mapping }}
+  run_once: true
+  delegate_to: localhost
+
+- name: Build hostname to host mapping (fallback)
+  set_fact:
+    zabbix_hosts_by_hostname: >-
+      {{ zbx_hosts_resp.json.result | default([]) | items2dict(key_name='host', value_name='host') }}
+  run_once: true
+  delegate_to: localhost
+  when: zbx_hosts_resp.json.result is defined
+
+- name: Display mapping statistics
+  debug:
+    msg: |
+      ============================================
+      ZABBIX HOST MAPPING STATISTICS
+      ============================================
+      Hosts with Loki_ID tag: {{ zabbix_hosts_by_loki_id | default({}) | length }}
+      Total hosts: {{ zbx_hosts_resp.json.result | default([]) | length }}
+      ============================================
+  when: zbx_hosts_resp.json.result is defined
+
