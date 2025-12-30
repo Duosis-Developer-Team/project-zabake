@@ -92,7 +92,8 @@
       all_devices = []
       # Build API URL - we'll filter by location in Python after fetching
       # Netbox API location filtering can be unreliable, so we filter in code
-      api_url = f"{netbox_url}/api/dcim/devices/?limit=1000"
+      # Request location expansion to get parent information
+      api_url = f"{netbox_url}/api/dcim/devices/?limit=1000&expand=location"
       if location_filter:
           print(f"DEBUG: Location filter will be applied: {location_filter}", file=sys.stderr)
           print(f"DEBUG: Fetching all devices first, then filtering by location in Python", file=sys.stderr)
@@ -128,29 +129,56 @@
                       manufacturer_name = device.get('device_type', {}).get('manufacturer', {}).get('name', 'N/A') if device.get('device_type', {}).get('manufacturer') else 'N/A'
                       model = device.get('device_type', {}).get('model', 'N/A') if device.get('device_type') else 'N/A'
                       name = device.get('name', 'N/A')
-                      # Get location info
+                      # Get location info with parent
                       device_location = 'N/A'
+                      device_location_parent = 'N/A'
                       if device.get('location'):
-                          device_location = device.get('location', {}).get('name', 'N/A') if isinstance(device.get('location'), dict) else 'N/A'
+                          if isinstance(device.get('location'), dict):
+                              device_location = device.get('location', {}).get('name', 'N/A')
+                              parent = device.get('location', {}).get('parent')
+                              if parent and isinstance(parent, dict):
+                                  device_location_parent = parent.get('name', 'N/A')
                       elif device.get('site'):
-                          device_location = device.get('site', {}).get('name', 'N/A') if isinstance(device.get('site'), dict) else 'N/A'
-                      print(f"  Device {i+1}: name={name}, location={device_location}, role={role_name}, manufacturer={manufacturer_name}, model={model}", file=sys.stderr)
+                          if isinstance(device.get('site'), dict):
+                              device_location = device.get('site', {}).get('name', 'N/A')
+                      print(f"  Device {i+1}: name={name}, location={device_location}, parent={device_location_parent}, role={role_name}, manufacturer={manufacturer_name}, model={model}", file=sys.stderr)
               
               # Apply mapping-based filters and location filter
               filtered_devices = []
               unmatched_count = 0
+              location_filtered_count = 0
               for device in devices:
                   # First check location filter if provided
                   if location_filter:
                       # Check both 'location' and 'site' fields (Netbox can use either)
+                      # Also check parent location if exists
                       device_location = None
+                      device_location_parent = None
+                      
                       if device.get('location'):
-                          device_location = device.get('location', {}).get('name', '') if isinstance(device.get('location'), dict) else ''
+                          if isinstance(device.get('location'), dict):
+                              device_location = device.get('location', {}).get('name', '')
+                              # Check parent location if exists
+                              parent = device.get('location', {}).get('parent')
+                              if parent and isinstance(parent, dict):
+                                  device_location_parent = parent.get('name', '')
                       elif device.get('site'):
-                          device_location = device.get('site', {}).get('name', '') if isinstance(device.get('site'), dict) else ''
+                          if isinstance(device.get('site'), dict):
+                              device_location = device.get('site', {}).get('name', '')
+                      
+                      # Check if location matches (either location name or parent location name)
+                      location_matches = False
+                      if device_location and device_location.upper() == location_filter.upper():
+                          location_matches = True
+                      elif device_location_parent and device_location_parent.upper() == location_filter.upper():
+                          location_matches = True
                       
                       # If location doesn't match, skip this device
-                      if not device_location or device_location.upper() != location_filter.upper():
+                      if not location_matches:
+                          location_filtered_count += 1
+                          # Debug: Print first few filtered devices
+                          if location_filtered_count <= 3:
+                              print(f"DEBUG: Device filtered by location: name={device.get('name', 'N/A')}, location={device_location or 'N/A'}, parent={device_location_parent or 'N/A'}, filter={location_filter}", file=sys.stderr)
                           continue
                   
                   # Then check mapping-based filters
@@ -195,6 +223,7 @@
               filter_info = "mapping filters"
               if location_filter:
                   filter_info += f" + location filter ({location_filter})"
+                  print(f"DEBUG: Location filter stats: {location_filtered_count} devices filtered out by location on this page", file=sys.stderr)
               print(f"DEBUG: After {filter_info}, {len(filtered_devices)} devices match on this page", file=sys.stderr)
               next_url = data.get('next')
               
