@@ -90,13 +90,12 @@
           return False
       
       all_devices = []
-      # Build API URL with location filter if provided
+      # Build API URL - we'll filter by location in Python after fetching
+      # Netbox API location filtering can be unreliable, so we filter in code
       api_url = f"{netbox_url}/api/dcim/devices/?limit=1000"
       if location_filter:
-          # Location filter can be by name (location__name) or by ID (location_id)
-          # Try to match by name first
-          api_url += f"&location__name={location_filter}"
-          print(f"DEBUG: Applying location filter: {location_filter}", file=sys.stderr)
+          print(f"DEBUG: Location filter will be applied: {location_filter}", file=sys.stderr)
+          print(f"DEBUG: Fetching all devices first, then filtering by location in Python", file=sys.stderr)
       
       next_url = api_url
       
@@ -129,12 +128,32 @@
                       manufacturer_name = device.get('device_type', {}).get('manufacturer', {}).get('name', 'N/A') if device.get('device_type', {}).get('manufacturer') else 'N/A'
                       model = device.get('device_type', {}).get('model', 'N/A') if device.get('device_type') else 'N/A'
                       name = device.get('name', 'N/A')
-                      print(f"  Device {i+1}: name={name}, role={role_name}, manufacturer={manufacturer_name}, model={model}", file=sys.stderr)
+                      # Get location info
+                      device_location = 'N/A'
+                      if device.get('location'):
+                          device_location = device.get('location', {}).get('name', 'N/A') if isinstance(device.get('location'), dict) else 'N/A'
+                      elif device.get('site'):
+                          device_location = device.get('site', {}).get('name', 'N/A') if isinstance(device.get('site'), dict) else 'N/A'
+                      print(f"  Device {i+1}: name={name}, location={device_location}, role={role_name}, manufacturer={manufacturer_name}, model={model}", file=sys.stderr)
               
-              # Apply mapping-based filters
+              # Apply mapping-based filters and location filter
               filtered_devices = []
               unmatched_count = 0
               for device in devices:
+                  # First check location filter if provided
+                  if location_filter:
+                      # Check both 'location' and 'site' fields (Netbox can use either)
+                      device_location = None
+                      if device.get('location'):
+                          device_location = device.get('location', {}).get('name', '') if isinstance(device.get('location'), dict) else ''
+                      elif device.get('site'):
+                          device_location = device.get('site', {}).get('name', '') if isinstance(device.get('site'), dict) else ''
+                      
+                      # If location doesn't match, skip this device
+                      if not device_location or device_location.upper() != location_filter.upper():
+                          continue
+                  
+                  # Then check mapping-based filters
                   if device_matches_any_mapping(device):
                       filtered_devices.append(device)
                   else:
@@ -173,7 +192,10 @@
                           break
               
               all_devices.extend(filtered_devices)
-              print(f"DEBUG: After mapping filters, {len(filtered_devices)} devices match on this page", file=sys.stderr)
+              filter_info = "mapping filters"
+              if location_filter:
+                  filter_info += f" + location filter ({location_filter})"
+              print(f"DEBUG: After {filter_info}, {len(filtered_devices)} devices match on this page", file=sys.stderr)
               next_url = data.get('next')
               
               if not next_url:
@@ -183,7 +205,10 @@
               sys.exit(1)
       
       # Debug: Print final results
-      print(f"DEBUG: Total devices after mapping filters: {len(all_devices)}", file=sys.stderr)
+      filter_info = "mapping filters"
+      if location_filter:
+          filter_info += f" + location filter ({location_filter})"
+      print(f"DEBUG: Total devices after {filter_info}: {len(all_devices)}", file=sys.stderr)
       
       result = {
           'devices': all_devices,
