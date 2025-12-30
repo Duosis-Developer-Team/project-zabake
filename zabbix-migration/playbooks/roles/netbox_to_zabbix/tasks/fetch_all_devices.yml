@@ -21,94 +21,35 @@
           device_type_mapping = json.load(f)
       mappings = device_type_mapping.get('mappings', [])
       
-      # Cache for location data (to avoid multiple API calls)
-      location_cache = {}
-      
-      def get_location_name(device):
-          """Get location name from device, expanding if needed"""
-          location_obj = device.get('location')
-          if not location_obj:
-              # Fallback to site
-              if device.get('site'):
-                  if isinstance(device.get('site'), dict):
-                      return device.get('site', {}).get('name', ''), None
-              return None, None
-          
-          # If location is a dict (expanded), use it directly
-          if isinstance(location_obj, dict):
-              location_name = location_obj.get('name', '')
-              parent = location_obj.get('parent')
-              parent_name = None
-              if parent:
-                  if isinstance(parent, dict):
-                      parent_name = parent.get('name', '')
-                  elif isinstance(parent, int):
-                      # Parent is just an ID, fetch it
-                      if parent not in location_cache:
-                          try:
-                              parent_response = requests.get(
-                                  f"{netbox_url}/api/dcim/locations/{parent}/",
-                                  headers={'Authorization': f'Token {netbox_token}', 'Accept': 'application/json'},
-                                  verify=verify_ssl,
-                                  timeout=10
-                              )
-                              if parent_response.status_code == 200:
-                                  parent_data = parent_response.json()
-                                  location_cache[parent] = parent_data.get('name', '')
-                                  parent_name = location_cache[parent]
-                          except Exception:
-                              pass
-                      else:
-                          parent_name = location_cache[parent]
-              return location_name, parent_name
-          
-          # If location is just an ID, fetch it
-          elif isinstance(location_obj, int):
-              location_id = location_obj
-              if location_id not in location_cache:
-                  try:
-                      location_response = requests.get(
-                          f"{netbox_url}/api/dcim/locations/{location_id}/",
-                          headers={'Authorization': f'Token {netbox_token}', 'Accept': 'application/json'},
-                          verify=verify_ssl,
-                          timeout=10
-                      )
-                      if location_response.status_code == 200:
-                          location_data = location_response.json()
-                          location_cache[location_id] = {
-                              'name': location_data.get('name', ''),
-                              'parent': location_data.get('parent')
-                          }
-                          # If parent exists and is just an ID, fetch it too
-                          parent = location_data.get('parent')
-                          if parent and isinstance(parent, int):
-                              if parent not in location_cache:
-                                  try:
-                                      parent_response = requests.get(
-                                          f"{netbox_url}/api/dcim/locations/{parent}/",
-                                          headers={'Authorization': f'Token {netbox_token}', 'Accept': 'application/json'},
-                                          verify=verify_ssl,
-                                          timeout=10
-                                      )
-                                      if parent_response.status_code == 200:
-                                          parent_data = parent_response.json()
-                                          location_cache[parent] = parent_data.get('name', '')
-                                  except Exception:
-                                      pass
-                  except Exception:
-                      pass
+      # Resolve location ID from location name if filter is provided
+      location_id_filter = None
+      if location_filter:
+          print(f"DEBUG: Resolving location ID for location name: {location_filter}", file=sys.stderr)
+          try:
+              # Search for location by name
+              location_response = requests.get(
+                  f"{netbox_url}/api/dcim/locations/",
+                  headers={'Authorization': f'Token {netbox_token}', 'Accept': 'application/json'},
+                  params={'name': location_filter, 'limit': 1000},
+                  verify=verify_ssl,
+                  timeout=30
+              )
+              location_response.raise_for_status()
+              location_data = location_response.json()
+              locations = location_data.get('results', [])
               
-              if location_id in location_cache:
-                  cached = location_cache[location_id]
-                  if isinstance(cached, dict):
-                      location_name = cached.get('name', '')
-                      parent_id = cached.get('parent')
-                      parent_name = None
-                      if parent_id and isinstance(parent_id, int) and parent_id in location_cache:
-                          parent_name = location_cache[parent_id]
-                      return location_name, parent_name
-          
-          return None, None
+              # Find exact match (case-insensitive)
+              for loc in locations:
+                  if loc.get('name', '').upper() == location_filter.upper():
+                      location_id_filter = loc.get('id')
+                      print(f"DEBUG: Found location ID {location_id_filter} for location name '{location_filter}'", file=sys.stderr)
+                      break
+              
+              if not location_id_filter:
+                  print(f"WARNING: Location '{location_filter}' not found in Netbox. Will fetch all devices.", file=sys.stderr)
+          except Exception as e:
+              print(f"ERROR: Failed to resolve location ID: {e}", file=sys.stderr)
+              print(f"WARNING: Will continue without location filter.", file=sys.stderr)
       
       # Debug: Print mapping info
       print(f"DEBUG: Loaded {len(mappings)} device type mappings", file=sys.stderr)
@@ -179,13 +120,11 @@
           return False
       
       all_devices = []
-      # Build API URL - we'll filter by location in Python after fetching
-      # Netbox API location filtering can be unreliable, so we filter in code
-      # Request location expansion to get parent information
-      api_url = f"{netbox_url}/api/dcim/devices/?limit=1000&expand=location"
-      if location_filter:
-          print(f"DEBUG: Location filter will be applied: {location_filter}", file=sys.stderr)
-          print(f"DEBUG: Fetching all devices first, then filtering by location in Python", file=sys.stderr)
+      # Build API URL with location filter if location ID was resolved
+      api_url = f"{netbox_url}/api/dcim/devices/?limit=1000"
+      if location_id_filter:
+          api_url += f"&location_id={location_id_filter}"
+          print(f"DEBUG: Applying location filter at API level: location_id={location_id_filter}", file=sys.stderr)
       
       next_url = api_url
       
@@ -218,38 +157,23 @@
                       manufacturer_name = device.get('device_type', {}).get('manufacturer', {}).get('name', 'N/A') if device.get('device_type', {}).get('manufacturer') else 'N/A'
                       model = device.get('device_type', {}).get('model', 'N/A') if device.get('device_type') else 'N/A'
                       name = device.get('name', 'N/A')
-                      # Get location info with parent using helper function
-                      device_location, device_location_parent = get_location_name(device)
-                      device_location = device_location or 'N/A'
-                      device_location_parent = device_location_parent or 'N/A'
-                      print(f"  Device {i+1}: name={name}, location={device_location}, parent={device_location_parent}, role={role_name}, manufacturer={manufacturer_name}, model={model}", file=sys.stderr)
+                      # Get location info
+                      device_location = 'N/A'
+                      if device.get('location'):
+                          if isinstance(device.get('location'), dict):
+                              device_location = device.get('location', {}).get('name', 'N/A')
+                          elif isinstance(device.get('location'), int):
+                              device_location = f"ID:{device.get('location')}"
+                      elif device.get('site'):
+                          if isinstance(device.get('site'), dict):
+                              device_location = device.get('site', {}).get('name', 'N/A')
+                      print(f"  Device {i+1}: name={name}, location={device_location}, role={role_name}, manufacturer={manufacturer_name}, model={model}", file=sys.stderr)
               
-              # Apply mapping-based filters and location filter
+              # Apply mapping-based filters (location filter already applied at API level)
               filtered_devices = []
               unmatched_count = 0
-              location_filtered_count = 0
               for device in devices:
-                  # First check location filter if provided
-                  if location_filter:
-                      # Get location name using helper function (handles expansion)
-                      device_location, device_location_parent = get_location_name(device)
-                      
-                      # Check if location matches (either location name or parent location name)
-                      location_matches = False
-                      if device_location and device_location.upper() == location_filter.upper():
-                          location_matches = True
-                      elif device_location_parent and device_location_parent.upper() == location_filter.upper():
-                          location_matches = True
-                      
-                      # If location doesn't match, skip this device
-                      if not location_matches:
-                          location_filtered_count += 1
-                          # Debug: Print first few filtered devices
-                          if location_filtered_count <= 3:
-                              print(f"DEBUG: Device filtered by location: name={device.get('name', 'N/A')}, location={device_location or 'N/A'}, parent={device_location_parent or 'N/A'}, filter={location_filter}", file=sys.stderr)
-                          continue
-                  
-                  # Then check mapping-based filters
+                  # Check mapping-based filters
                   if device_matches_any_mapping(device):
                       filtered_devices.append(device)
                   else:
@@ -289,9 +213,8 @@
               
               all_devices.extend(filtered_devices)
               filter_info = "mapping filters"
-              if location_filter:
-                  filter_info += f" + location filter ({location_filter})"
-                  print(f"DEBUG: Location filter stats: {location_filtered_count} devices filtered out by location on this page", file=sys.stderr)
+              if location_id_filter:
+                  filter_info += f" + location filter (ID: {location_id_filter})"
               print(f"DEBUG: After {filter_info}, {len(filtered_devices)} devices match on this page", file=sys.stderr)
               next_url = data.get('next')
               
@@ -303,8 +226,8 @@
       
       # Debug: Print final results
       filter_info = "mapping filters"
-      if location_filter:
-          filter_info += f" + location filter ({location_filter})"
+      if location_id_filter:
+          filter_info += f" + location filter (ID: {location_id_filter}, name: {location_filter})"
       print(f"DEBUG: Total devices after {filter_info}: {len(all_devices)}", file=sys.stderr)
       
       result = {
