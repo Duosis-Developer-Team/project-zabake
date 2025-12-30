@@ -107,11 +107,22 @@
           if 'manufacturer' in conditions:
               manufacturer_name = device.get('device_type', {}).get('manufacturer', {}).get('name', '') if device.get('device_type', {}).get('manufacturer') else ''
               expected_manufacturers = conditions['manufacturer']
+              
+              # Debug for HOST devices
+              role_obj = device.get('role') or device.get('device_role')
+              role_name = role_obj.get('name', '') if role_obj and isinstance(role_obj, dict) else ''
+              if 'HOST' in role_name.upper():
+                  print(f"DEBUG: Checking manufacturer for HOST device: manufacturer='{manufacturer_name}', expected={expected_manufacturers}", file=sys.stderr)
+              
               if isinstance(expected_manufacturers, list):
                   if not manufacturer_name or manufacturer_name.upper() not in [m.upper() for m in expected_manufacturers]:
+                      if 'HOST' in role_name.upper():
+                          print(f"DEBUG: HOST device manufacturer '{manufacturer_name}' does not match expected manufacturers {expected_manufacturers}", file=sys.stderr)
                       return False
               else:
                   if not manufacturer_name or manufacturer_name.upper() != expected_manufacturers.upper():
+                      if 'HOST' in role_name.upper():
+                          print(f"DEBUG: HOST device manufacturer '{manufacturer_name}' does not match expected manufacturer '{expected_manufacturers}'", file=sys.stderr)
                       return False
           
           # Model contains check
@@ -147,10 +158,25 @@
       
       def device_matches_any_mapping(device):
           """Check if device matches any mapping condition"""
+          # Debug: Check if this is a HOST device
+          role_obj = device.get('role') or device.get('device_role')
+          role_name = role_obj.get('name', '') if role_obj and isinstance(role_obj, dict) else ''
+          is_host = 'HOST' in role_name.upper()
+          
+          if is_host:
+              print(f"DEBUG: Checking HOST device '{device.get('name', 'N/A')}' against {len(mappings)} mappings", file=sys.stderr)
+          
           for mapping in mappings:
               conditions = mapping.get('conditions', {})
+              if is_host:
+                  print(f"DEBUG: Checking HOST device against mapping '{mapping.get('device_type', 'N/A')}'", file=sys.stderr)
               if device_matches_conditions(device, conditions):
+                  if is_host:
+                      print(f"DEBUG: HOST device '{device.get('name', 'N/A')}' MATCHED mapping '{mapping.get('device_type', 'N/A')}'", file=sys.stderr)
                   return True
+          
+          if is_host:
+              print(f"DEBUG: HOST device '{device.get('name', 'N/A')}' did NOT match any mapping", file=sys.stderr)
           return False
       
       all_devices = []
