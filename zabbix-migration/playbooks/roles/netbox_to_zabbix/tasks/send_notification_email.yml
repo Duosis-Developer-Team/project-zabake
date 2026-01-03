@@ -103,6 +103,8 @@
     - mail_recipients | length > 0
   delegate_to: localhost
   run_once: true
+  ignore_errors: true
+  register: mail_send_result
 
 - name: Display email notification status
   debug:
@@ -113,7 +115,14 @@
       {% if has_failed_devices %}
       Başarısız işlem var: {{ failed_devices_count }} sunucu eklenemedi
       {% if mail_recipients is defined and mail_recipients | length > 0 %}
-      E-posta gönderildi: {{ mail_recipients | join(', ') }}
+      {% if mail_send_result is defined and mail_send_result.failed %}
+      ⚠️  E-posta gönderilemedi: {{ mail_send_result.msg | default('community.general collection kurulu değil') }}
+      ℹ️  Kurulum: ansible-galaxy collection install community.general
+      {% elif mail_send_result is defined and not mail_send_result.failed %}
+      ✅ E-posta gönderildi: {{ mail_recipients | join(', ') }}
+      {% else %}
+      E-posta durumu: Belirsiz
+      {% endif %}
       {% else %}
       E-posta gönderilmedi: mail_recipients tanımlı değil
       {% endif %}
