@@ -97,7 +97,8 @@
   vars:
     pg_name: "{{ proxy_group_item }}"
     pg_upper: "{{ proxy_group_item | upper }}"
-    pg_dc_num: "{{ pg_upper | regex_replace('.*DC([0-9]+).*', '\\1') }}"
+    # Extract DC ID (supports both numeric like "DC11" and alphanumeric like "ICT11")
+    pg_dc_num: "{{ pg_upper | regex_replace('.*-PROXY.*', '') | regex_replace('DC', '') | regex_replace('-', '') | trim }}"
   set_fact:
     zbx_matched_proxy_group: "{{ proxy_group_item }}"
     zbx_proxy_group_id: "{{ zbx_proxy_group_map[proxy_group_item] }}"
@@ -105,11 +106,11 @@
   loop: "{{ zbx_proxy_group_map.keys() | list if zbx_proxy_group_map is defined else [] }}"
   loop_control:
     loop_var: proxy_group_item
-    label: "{{ proxy_group_item }} (DC: {{ pg_dc_num }}, Match: {{ (zbx_dc_number | string == pg_dc_num | string) | bool }})"
+    label: "{{ proxy_group_item }} (DC: {{ pg_dc_num }}, Match: {{ (zbx_dc_number | string | upper == pg_dc_num | string | upper) | bool }})"
   when:
     - zbx_dc_number is defined
     - zbx_dc_number != ''
-    - zbx_dc_number | string == pg_dc_num | string
+    - zbx_dc_number | string | upper == pg_dc_num | string | upper
 
 - name: Debug proxy group matching
   vars:
@@ -398,6 +399,29 @@
     - zbx_create_resp.json.error.message is search('already exists')
     - zabbix_hosts_by_hostname is defined
 
+- name: Validate required parameters before update
+  set_fact:
+    _missing_params: >-
+      {{
+        (_missing_params | default([])) +
+        (['Proxy Group (DC_ID: ' + zbx_dc_number + ')'] if (zbx_dc_number is defined and zbx_dc_number != '' and (zbx_proxy_group_id is not defined or zbx_proxy_group_id == '')) else [])
+      }}
+  when: 
+    - zbx_scenario == 'update'
+    - zbx_existing_host.hostid is defined
+
+- name: Record validation failure (update scenario)
+  set_fact:
+    device_result:
+      hostname: "{{ zbx_record.HOSTNAME }}"
+      status: "eklenemedi"
+      reason: "{{ 'Proxy group bulunamadı (DC_ID: ' + zbx_dc_number + ')' if (zbx_dc_number is defined and zbx_dc_number != '' and (zbx_proxy_group_id is not defined or zbx_proxy_group_id == '')) else 'Gerekli parametreler eksik: ' + (_missing_params | default([]) | join(', ')) }}"
+      ip: "{{ zbx_record.HOST_IP | default('N/A') }}"
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host.hostid is defined
+    - _missing_params | default([]) | length > 0
+
 - name: Get existing interface for update
   set_fact:
     _existing_interface: "{{ zbx_existing_host.interfaces | default([]) | selectattr('main', 'equalto', 1) | first | default({}) }}"
@@ -405,6 +429,7 @@
   when:
     - zbx_scenario == 'update'
     - zbx_existing_host.hostid is defined
+    - _missing_params | default([]) | length == 0
 
 - name: Build interface for update
   set_fact:
@@ -412,6 +437,7 @@
   when:
     - zbx_scenario == 'update'
     - zbx_existing_host.hostid is defined
+    - _missing_params | default([]) | length == 0
 
 - name: Update existing host (scenario update - only continuous fields)
   uri:
@@ -436,6 +462,7 @@
   when:
     - zbx_scenario == 'update'
     - zbx_existing_host.hostid is defined
+    - _missing_params | default([]) | length == 0
 
 - name: Record update success
   set_fact:
