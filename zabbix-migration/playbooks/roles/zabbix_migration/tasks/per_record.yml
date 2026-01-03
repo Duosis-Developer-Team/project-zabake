@@ -453,7 +453,7 @@
         (
           (_existing_interface.ip | default('') != zbx_record.HOST_IP) or
           (zbx_existing_host.monitored_by | default('') | string != zbx_monitored_by | string) or
-          (zbx_existing_host.proxyid | default('') | string != zbx_proxy_group_id | string) or
+          (zbx_existing_host.proxy_groupid | default('') | string != zbx_proxy_group_id | string) or
           (zbx_existing_host.tags | default([]) | map(attribute='tag') | list | sort != zbx_continuous_tags | map(attribute='tag') | list | sort)
         ) | bool
       }}
@@ -472,7 +472,7 @@
       Needs update: {{ _needs_update | default('not_checked') }}
       Current IP: {{ _existing_interface.ip | default('N/A') }} -> New IP: {{ zbx_record.HOST_IP }}
       Current monitored_by: {{ zbx_existing_host.monitored_by | default('N/A') }} -> New: {{ zbx_monitored_by }}
-      Current proxy: {{ zbx_existing_host.proxyid | default('N/A') }} -> New: {{ zbx_proxy_group_id }}
+      Current proxy_groupid: {{ zbx_existing_host.proxy_groupid | default('N/A') }} -> New: {{ zbx_proxy_group_id }}
   when:
     - zbx_scenario == 'update'
     - zbx_existing_host.hostid is defined
@@ -488,12 +488,10 @@
       method: "host.update"
       params:
         hostid: "{{ zbx_existing_host.hostid }}"
-        host: "{{ zbx_record.HOSTNAME }}"
-        name: "{{ zbx_record.HOSTNAME }}"
         interfaces: "{{ _zbx_interface_update }}"
         tags: "{{ zbx_continuous_tags | default([]) }}"
         monitored_by: "{{ zbx_monitored_by | int }}"
-        proxyid: "{{ zbx_proxy_group_id | default('0') | int }}"
+        proxy_groupid: "{{ zbx_proxy_group_id | default('0') | int }}"
       auth: "{{ zabbix_auth }}"
       id: 2
   register: zbx_update_resp

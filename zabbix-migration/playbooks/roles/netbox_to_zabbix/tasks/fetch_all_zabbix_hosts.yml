@@ -33,7 +33,7 @@
       jsonrpc: "2.0"
       method: "host.get"
       params:
-        output: ["hostid", "host", "name"]
+        output: ["hostid", "host", "name", "monitored_by", "proxy_groupid"]
         selectInterfaces: "extend"
         selectTags: "extend"
         selectGroups: ["groupid", "name"]

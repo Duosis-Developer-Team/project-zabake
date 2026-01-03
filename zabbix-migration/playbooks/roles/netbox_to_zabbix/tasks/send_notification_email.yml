@@ -28,6 +28,7 @@
           <p><strong>Toplam İşlem:</strong> {{ processing_results | default([]) | length }}</p>
           <p><strong>Başarılı (Eklendi):</strong> {{ processing_results | default([]) | selectattr('status', 'equalto', 'eklendi') | list | length }}</p>
           <p><strong>Güncellendi:</strong> {{ processing_results | default([]) | selectattr('status', 'equalto', 'güncellendi') | list | length }}</p>
+          <p><strong>Güncel (Değişiklik Yok):</strong> {{ processing_results | default([]) | selectattr('status', 'equalto', 'güncel') | list | length }}</p>
           <p><strong>Başarısız (Eklenemedi):</strong> {{ failed_devices_count }}</p>
         </div>
         <table>
@@ -69,6 +70,7 @@
       Toplam İşlem: {{ processing_results | default([]) | length }}
       Başarılı (Eklendi): {{ processing_results | default([]) | selectattr('status', 'equalto', 'eklendi') | list | length }}
       Güncellendi: {{ processing_results | default([]) | selectattr('status', 'equalto', 'güncellendi') | list | length }}
+      Güncel (Değişiklik Yok): {{ processing_results | default([]) | selectattr('status', 'equalto', 'güncel') | list | length }}
       Başarısız (Eklenemedi): {{ failed_devices_count }}
       
       DETAYLI LİSTE:
