@@ -1,4 +1,11 @@
 ---
+- name: Reset device processing variables
+  set_fact:
+    device_result: {}
+    current_device_result: {}
+    device_info: {}
+  run_once: false
+
 - name: Create temporary Python script for device processing
   copy:
     content: |
@@ -419,12 +426,22 @@
       status: "eklenemedi"
       reason: "Device type bulunamadı"
       ip: "{{ device_info.primary_ip | default('N/A') }}"
+    current_device_result:
+      hostname: "{{ netbox_device.name | default('N/A') }}"
+      status: "eklenemedi"
+      reason: "Device type bulunamadı"
+      ip: "{{ device_info.primary_ip | default('N/A') }}"
   when: device_info.device_type is none or device_info.device_type == ""
   run_once: false
 
 - name: Record skipped device (no IP)
   set_fact:
     device_result:
+      hostname: "{{ netbox_device.name | default('N/A') }}"
+      status: "eklenemedi"
+      reason: "IP adresi bulunamadı"
+      ip: "N/A"
+    current_device_result:
       hostname: "{{ netbox_device.name | default('N/A') }}"
       status: "eklenemedi"
       reason: "IP adresi bulunamadı"
@@ -535,20 +552,21 @@
     - _zbx_record_for_role is defined
     - _zabbix_auth_for_role is defined
 
-- name: Collect device result from zabbix_migration role
+- name: Collect device result from zabbix_migration role (if processed)
   set_fact:
-    current_device_result: "{{ device_result | default({}) }}"
-  when: device_result is defined
-
-- name: Record skipped device result (no device type or IP)
-  set_fact:
-    current_device_result: "{{ device_result | default({}) }}"
-  when: device_result is defined
+    current_device_result: "{{ device_result }}"
+  when: 
+    - device_result is defined
+    - device_result | length > 0
+    - device_result.hostname is defined
 
 - name: Save device result to temporary file
   copy:
-    content: "{{ current_device_result | default({}) | to_json }}"
+    content: "{{ current_device_result | to_json }}"
     dest: "/tmp/zabbix_migration_result_{{ netbox_device.id | default('unknown') }}.json"
-  when: current_device_result is defined
+  when: 
+    - current_device_result is defined
+    - current_device_result | length > 0
+    - current_device_result.hostname is defined
   delegate_to: localhost
   run_once: false
