@@ -11,24 +11,32 @@
 ERROR! couldn't resolve module/action 'community.general.mail'
 ```
 
+**Root Cause:**
+- `community.general` collection not installed in CI/CD environment
+- `ignore_errors: true` doesn't work for parse-time errors
+- Ansible tries to resolve module before runtime
+
 **Solution:**
-- Added `ignore_errors: true` to mail task
-- Added `register: mail_send_result` for status tracking
-- Enhanced error reporting with installation instructions
-- Created `requirements.yml` for Ansible collections
-- Created `COLLECTION_INSTALL.md` guide
+- **Replaced** `community.general.mail` with **native Python SMTP**
+- Uses `shell` module with embedded Python script
+- No external Ansible collection dependency required
+- Works in any environment with Python 3
 
 **Files Modified:**
 - `playbooks/roles/netbox_to_zabbix/tasks/send_notification_email.yml`
+  - Removed `community.general.mail` task
+  - Added Python SMTP email sender
+  - Updated status reporting
 
 **Files Created:**
-- `requirements.yml`
-- `COLLECTION_INSTALL.md`
+- `requirements.yml` (optional, for reference)
+- `COLLECTION_INSTALL.md` (optional documentation)
 
 **Result:** 
-- Playbook will no longer fail if collection is missing
-- Users will see helpful error message with installation command
-- Email will be sent if collection is properly installed
+- ✅ Playbook works **without any collection installation**
+- ✅ Email functionality preserved with Python SMTP
+- ✅ No parse-time errors
+- ✅ Works in containers, CI/CD, and local environments
 
 ### 2. Performance Analysis 📊
 
