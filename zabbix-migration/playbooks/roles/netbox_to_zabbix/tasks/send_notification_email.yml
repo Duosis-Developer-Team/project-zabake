@@ -95,6 +95,8 @@
     # Email configuration
     smtp_host = "{{ mail_smtp_host }}"
     smtp_port = {{ mail_smtp_port }}
+    smtp_user = "{{ mail_smtp_username | default('') }}"
+    smtp_pass = "{{ mail_smtp_password | default('') }}"
     from_addr = "{{ mail_from }}"
     to_addrs = "{{ mail_recipients | join(',') }}"
     subject = "Zabbix Migration Raporu - {{ failed_devices_count }} Sunucu Eklenemedi"
@@ -120,9 +122,8 @@
     # Send email
     try:
         server = smtplib.SMTP(smtp_host, smtp_port, timeout=30)
-        {% if mail_smtp_username is defined and mail_smtp_username %}
-        server.login("{{ mail_smtp_username }}", "{{ mail_smtp_password }}")
-        {% endif %}
+        if smtp_user and smtp_pass:
+            server.login(smtp_user, smtp_pass)
         server.sendmail(from_addr, [addr.strip() for addr in to_addrs.split(',')], msg.as_string())
         server.quit()
         print("✅ Email sent successfully")
