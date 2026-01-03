@@ -75,7 +75,11 @@
 - name: Build hostname to host mapping (fallback)
   set_fact:
     zabbix_hosts_by_hostname: >-
-      {{ zbx_hosts_resp.json.result | default([]) | items2dict(key_name='host', value_name='host') }}
+      {%- set mapping = {} -%}
+      {%- for host in zbx_hosts_resp.json.result | default([]) -%}
+      {%- set _ = mapping.update({host.host: host}) -%}
+      {%- endfor -%}
+      {{ mapping }}
   run_once: true
   delegate_to: localhost
   when: zbx_hosts_resp.json.result is defined
