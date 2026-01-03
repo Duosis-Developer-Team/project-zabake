@@ -389,6 +389,8 @@
     - device_info.device_type != ""
     - device_info.primary_ip is not none
     - device_info.primary_ip != ""
+    - zabbix_hosts_by_loki_id.get(device_info.tags.Loki_ID | string) is not none
+    - zabbix_hosts_by_loki_id.get(device_info.tags.Loki_ID | string) != None
 
 - name: Fallback to hostname matching if Loki_ID not found
   set_fact:
@@ -400,6 +402,8 @@
     - device_info.device_type != ""
     - device_info.primary_ip is not none
     - device_info.primary_ip != ""
+    - zabbix_hosts_by_hostname.get(netbox_device.name) is not none
+    - zabbix_hosts_by_hostname.get(netbox_device.name) != None
 
 - name: Determine scenario (create or update)
   set_fact:
