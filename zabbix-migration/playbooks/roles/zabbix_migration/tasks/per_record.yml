@@ -518,12 +518,38 @@
     - _needs_update is defined
     - not (_needs_update | bool)
 
+- name: Build updated fields list
+  set_fact:
+    _updated_fields: >-
+      {%- set fields = [] -%}
+      {%- if _existing_interface.ip | default('') != zbx_record.HOST_IP -%}
+        {%- set _ = fields.append('IP: ' ~ _existing_interface.ip | default('N/A') ~ ' → ' ~ zbx_record.HOST_IP) -%}
+      {%- endif -%}
+      {%- if zbx_existing_host.monitored_by | default('') | string != zbx_monitored_by | string -%}
+        {%- set _ = fields.append('Monitored By: ' ~ zbx_existing_host.monitored_by | default('N/A') ~ ' → ' ~ zbx_monitored_by) -%}
+      {%- endif -%}
+      {%- if zbx_existing_host.proxy_groupid | default('') | string != zbx_proxy_group_id | string -%}
+        {%- set _ = fields.append('Proxy Group: ' ~ zbx_existing_host.proxy_groupid | default('N/A') ~ ' → ' ~ zbx_proxy_group_id) -%}
+      {%- endif -%}
+      {%- if (zbx_existing_host.tags | default([]) | map(attribute='tag') | list | sort) != (zbx_continuous_tags | map(attribute='tag') | list | sort) -%}
+        {%- set _ = fields.append('Tags güncellendi') -%}
+      {%- endif -%}
+      {{ fields | join(', ') }}
+  when:
+    - zbx_scenario == 'update'
+    - _needs_update is defined
+    - _needs_update | bool
+    - zbx_update_resp is defined
+    - zbx_update_resp.json is defined
+    - zbx_update_resp.json.result is defined
+    - zbx_update_resp.json.error is not defined
+
 - name: Record update success
   set_fact:
     device_result:
       hostname: "{{ zbx_record.HOSTNAME }}"
       status: "güncellendi"
-      reason: ""
+      reason: "{{ _updated_fields | default('Bilinmeyen değişiklikler') }}"
       ip: "{{ zbx_record.HOST_IP }}"
   when:
     - zbx_scenario == 'update'

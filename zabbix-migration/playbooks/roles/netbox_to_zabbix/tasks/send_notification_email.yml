@@ -19,6 +19,7 @@
           .status-guncellendi { color: #2196F3; font-weight: bold; }
           .status-eklenemedi { color: #f44336; font-weight: bold; }
           .summary { margin: 20px 0; padding: 15px; background-color: #f9f9f9; border-left: 4px solid #4CAF50; }
+          .section-header { margin-top: 30px; padding: 10px; background-color: #e8f5e9; border-left: 4px solid #4CAF50; }
         </style>
       </head>
       <body>
@@ -31,28 +32,82 @@
           <p><strong>Güncel (Değişiklik Yok):</strong> {{ processing_results | default([]) | selectattr('status', 'equalto', 'güncel') | list | length }}</p>
           <p><strong>Başarısız (Eklenemedi):</strong> {{ failed_devices_count }}</p>
         </div>
+        
+        {%- set added_devices = processing_results | default([]) | selectattr('status', 'equalto', 'eklendi') | list -%}
+        {%- if added_devices | length > 0 -%}
+        <div class="section-header"><h3>✅ Eklenen Cihazlar ({{ added_devices | length }})</h3></div>
         <table>
           <thead>
             <tr>
               <th>Sunucu Adı</th>
               <th>IP Adresi</th>
               <th>İşlem Durumu</th>
-              <th>Sebep/Açıklama</th>
+              <th>Açıklama</th>
             </tr>
           </thead>
           <tbody>
-            {%- for result in processing_results | default([]) | selectattr('status', 'equalto', 'eklenemedi') -%}
+            {%- for result in added_devices -%}
             <tr>
               <td>{{ result.hostname | default('N/A') }}</td>
               <td>{{ result.ip | default('N/A') }}</td>
-              <td class="status-{{ result.status | default('eklenemedi') }}">
-                {{ result.status | default('eklenemedi') | upper }}
-              </td>
+              <td class="status-eklendi">EKLENDİ</td>
+              <td>{{ result.reason | default('Başarıyla eklendi') }}</td>
+            </tr>
+            {%- endfor -%}
+          </tbody>
+        </table>
+        {%- endif -%}
+        
+        {%- set updated_devices = processing_results | default([]) | selectattr('status', 'equalto', 'güncellendi') | list -%}
+        {%- if updated_devices | length > 0 -%}
+        <div class="section-header"><h3>🔄 Güncellenen Cihazlar ({{ updated_devices | length }})</h3></div>
+        <table>
+          <thead>
+            <tr>
+              <th>Sunucu Adı</th>
+              <th>IP Adresi</th>
+              <th>İşlem Durumu</th>
+              <th>Güncellenen Alanlar</th>
+            </tr>
+          </thead>
+          <tbody>
+            {%- for result in updated_devices -%}
+            <tr>
+              <td>{{ result.hostname | default('N/A') }}</td>
+              <td>{{ result.ip | default('N/A') }}</td>
+              <td class="status-guncellendi">GÜNCELLENDİ</td>
+              <td>{{ result.reason | default('Bilinmeyen değişiklikler') }}</td>
+            </tr>
+            {%- endfor -%}
+          </tbody>
+        </table>
+        {%- endif -%}
+        
+        {%- set failed_devices = processing_results | default([]) | selectattr('status', 'equalto', 'eklenemedi') | list -%}
+        {%- if failed_devices | length > 0 -%}
+        <div class="section-header" style="background-color: #ffebee; border-left-color: #f44336;"><h3>❌ Eklenemeyen Cihazlar ({{ failed_devices | length }})</h3></div>
+        <table>
+          <thead>
+            <tr>
+              <th>Sunucu Adı</th>
+              <th>IP Adresi</th>
+              <th>İşlem Durumu</th>
+              <th>Hata Sebebi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {%- for result in failed_devices -%}
+            <tr>
+              <td>{{ result.hostname | default('N/A') }}</td>
+              <td>{{ result.ip | default('N/A') }}</td>
+              <td class="status-eklenemedi">EKLENEMEDI</td>
               <td>{{ result.reason | default('-') }}</td>
             </tr>
             {%- endfor -%}
           </tbody>
         </table>
+        {%- endif -%}
+        
         <p style="margin-top: 30px; color: #666; font-size: 12px;">
           Bu e-posta otomatik olarak Zabbix Migration playbook'u tarafından oluşturulmuştur.
         </p>
@@ -73,15 +128,47 @@
       Güncel (Değişiklik Yok): {{ processing_results | default([]) | selectattr('status', 'equalto', 'güncel') | list | length }}
       Başarısız (Eklenemedi): {{ failed_devices_count }}
       
-      DETAYLI LİSTE:
-      --------------
-      {%- for result in processing_results | default([]) | selectattr('status', 'equalto', 'eklenemedi') -%}
+      {%- set added_devices = processing_results | default([]) | selectattr('status', 'equalto', 'eklendi') | list -%}
+      {%- if added_devices | length > 0 %}
+      
+      ✅ EKLENEN CİHAZLAR ({{ added_devices | length }}):
+      ---------------------------------------
+      {%- for result in added_devices %}
       
       Sunucu: {{ result.hostname | default('N/A') }}
       IP: {{ result.ip | default('N/A') }}
-      Durum: {{ result.status | default('eklenemedi') | upper }}
-      Sebep: {{ result.reason | default('-') }}
+      Durum: EKLENDİ
+      Açıklama: {{ result.reason | default('Başarıyla eklendi') }}
       {%- endfor -%}
+      {%- endif -%}
+      
+      {%- set updated_devices = processing_results | default([]) | selectattr('status', 'equalto', 'güncellendi') | list -%}
+      {%- if updated_devices | length > 0 %}
+      
+      🔄 GÜNCELLENEN CİHAZLAR ({{ updated_devices | length }}):
+      ------------------------------------------
+      {%- for result in updated_devices %}
+      
+      Sunucu: {{ result.hostname | default('N/A') }}
+      IP: {{ result.ip | default('N/A') }}
+      Durum: GÜNCELLENDİ
+      Güncellenen Alanlar: {{ result.reason | default('Bilinmeyen değişiklikler') }}
+      {%- endfor -%}
+      {%- endif -%}
+      
+      {%- set failed_devices = processing_results | default([]) | selectattr('status', 'equalto', 'eklenemedi') | list -%}
+      {%- if failed_devices | length > 0 %}
+      
+      ❌ EKLENEMEYEN CİHAZLAR ({{ failed_devices | length }}):
+      ------------------------------------------
+      {%- for result in failed_devices %}
+      
+      Sunucu: {{ result.hostname | default('N/A') }}
+      IP: {{ result.ip | default('N/A') }}
+      Durum: EKLENEMEDI
+      Hata Sebebi: {{ result.reason | default('-') }}
+      {%- endfor -%}
+      {%- endif %}
       
       ---
       Bu e-posta otomatik olarak Zabbix Migration playbook'u tarafından oluşturulmuştur.
