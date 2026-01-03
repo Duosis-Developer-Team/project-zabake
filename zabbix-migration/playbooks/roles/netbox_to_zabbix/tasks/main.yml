@@ -56,9 +56,10 @@
   include_tasks: process_device.yml
   loop: "{{ netbox_devices_final }}"
   loop_control:
-    label: "{{ item.name | default('Unknown') }}"
+    loop_var: outer_device_item
+    label: "{{ outer_device_item.name | default('Unknown') }}"
   vars:
-    netbox_device: "{{ item }}"
+    netbox_device: "{{ outer_device_item }}"
 
 - name: Collect all device results from temporary files
   find:

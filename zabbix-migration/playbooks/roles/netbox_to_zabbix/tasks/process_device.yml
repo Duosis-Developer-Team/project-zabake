@@ -560,6 +560,14 @@
     - device_result | length > 0
     - device_result.hostname is defined
 
+- name: Debug - Show current device result before save
+  debug:
+    msg: |
+      Device: {{ netbox_device.name | default('Unknown') }}
+      Result defined: {{ current_device_result is defined }}
+      Result content: {{ current_device_result | default('NOT DEFINED') }}
+  when: true
+
 - name: Save device result to temporary file
   copy:
     content: "{{ current_device_result | to_json }}"
@@ -567,6 +575,5 @@
   when: 
     - current_device_result is defined
     - current_device_result | length > 0
-    - current_device_result.hostname is defined
   delegate_to: localhost
   run_once: false

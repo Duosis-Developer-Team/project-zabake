@@ -95,16 +95,17 @@
 
 - name: Find matching proxy group
   vars:
-    pg_name: "{{ item }}"
-    pg_upper: "{{ item | upper }}"
+    pg_name: "{{ proxy_group_item }}"
+    pg_upper: "{{ proxy_group_item | upper }}"
     pg_dc_num: "{{ pg_upper | regex_replace('.*DC([0-9]+).*', '\\1') }}"
   set_fact:
-    zbx_matched_proxy_group: "{{ item }}"
-    zbx_proxy_group_id: "{{ zbx_proxy_group_map[item] }}"
+    zbx_matched_proxy_group: "{{ proxy_group_item }}"
+    zbx_proxy_group_id: "{{ zbx_proxy_group_map[proxy_group_item] }}"
     zbx_monitored_by: "2"
   loop: "{{ zbx_proxy_group_map.keys() | list if zbx_proxy_group_map is defined else [] }}"
   loop_control:
-    label: "{{ item }} (DC: {{ pg_dc_num }}, Match: {{ (zbx_dc_number | string == pg_dc_num | string) | bool }})"
+    loop_var: proxy_group_item
+    label: "{{ proxy_group_item }} (DC: {{ pg_dc_num }}, Match: {{ (zbx_dc_number | string == pg_dc_num | string) | bool }})"
   when:
     - zbx_dc_number is defined
     - zbx_dc_number != ''
@@ -157,8 +158,10 @@
 
 - name: Append each templateid as dict
   set_fact:
-    zbx_template_id_list: "{{ zbx_template_id_list + [ { 'templateid': item } ] }}"
+    zbx_template_id_list: "{{ zbx_template_id_list + [ { 'templateid': template_item } ] }}"
   loop: "{{ zbx_tpl_get_resp.json.result | default([]) | map(attribute='templateid') | list }}"
+  loop_control:
+    loop_var: template_item
   when: zbx_tpl_get_resp.json.result is defined and zbx_tpl_get_resp.json.result | length > 0
 
 - name: Warn if no templates found
@@ -213,10 +216,12 @@
           jsonrpc: "2.0"
           method: "hostgroup.create"
           params:
-            name: "{{ item }}"
+            name: "{{ missing_group_item }}"
           auth: "{{ zabbix_auth }}"
           id: 102
       loop: "{{ zbx_missing_groups }}"
+      loop_control:
+        loop_var: missing_group_item
       register: zbx_created_groups_resp
       run_once: true
       delegate_to: localhost
