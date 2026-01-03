@@ -398,7 +398,7 @@
   set_fact:
     zbx_existing_host: "{{ zabbix_hosts_by_hostname.get(netbox_device.name) }}"
   when:
-    - zbx_existing_host is not defined
+    - zbx_existing_host is not defined or zbx_existing_host == {} or zbx_existing_host.hostid is not defined
     - zabbix_hosts_by_hostname is defined
     - device_info.device_type is not none
     - device_info.device_type != ""
