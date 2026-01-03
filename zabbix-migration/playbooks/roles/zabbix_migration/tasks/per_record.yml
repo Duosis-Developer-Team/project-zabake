@@ -98,7 +98,8 @@
     pg_name: "{{ proxy_group_item }}"
     pg_upper: "{{ proxy_group_item | upper }}"
     # Extract DC ID (supports both numeric like "DC11" and alphanumeric like "ICT11")
-    pg_dc_num: "{{ pg_upper | regex_replace('.*-PROXY.*', '') | regex_replace('DC', '') | regex_replace('-', '') | trim }}"
+    # First remove '-PROXY...' suffix, then remove 'DC' prefix if exists
+    pg_dc_num: "{{ pg_upper | regex_replace('[-\\s]*PROXY.*$', '') | regex_replace('^DC', '') | trim }}"
   set_fact:
     zbx_matched_proxy_group: "{{ proxy_group_item }}"
     zbx_proxy_group_id: "{{ zbx_proxy_group_map[proxy_group_item] }}"
@@ -114,17 +115,20 @@
 
 - name: Debug proxy group matching
   vars:
-    _test_pg: "Dc14-proxy Group"
-    _test_upper: "{{ _test_pg | upper }}"
-    _test_after_dc: "{{ _test_upper | regex_replace('.*DC', '') }}"
-    _test_dc_num: "{{ _test_after_dc | regex_replace('[^0-9].*', '') }}"
+    _test_pg_numeric: "Dc14-proxy Group"
+    _test_pg_alpha: "Ict11-Proxy Group"
+    _test_upper_numeric: "{{ _test_pg_numeric | upper }}"
+    _test_upper_alpha: "{{ _test_pg_alpha | upper }}"
+    _test_dc_num_numeric: "{{ _test_upper_numeric | regex_replace('[-\\s]*PROXY.*$', '') | regex_replace('^DC', '') | trim }}"
+    _test_dc_num_alpha: "{{ _test_upper_alpha | regex_replace('[-\\s]*PROXY.*$', '') | regex_replace('^DC', '') | trim }}"
   debug:
     msg: |
       Location: {{ zbx_location_name }}
       DC Number: {{ zbx_dc_number }}
       Matched proxy group: {{ zbx_matched_proxy_group }}
       Proxy group ID: {{ zbx_proxy_group_id }}
-      Test - PG: {{ _test_pg }}, Upper: {{ _test_upper }}, After DC: {{ _test_after_dc }}, DC Num: {{ _test_dc_num }}
+      Test Numeric - PG: {{ _test_pg_numeric }}, Upper: {{ _test_upper_numeric }}, Extracted: {{ _test_dc_num_numeric }}
+      Test Alpha - PG: {{ _test_pg_alpha }}, Upper: {{ _test_upper_alpha }}, Extracted: {{ _test_dc_num_alpha }}
       Available proxy groups: {{ zbx_proxy_group_map.keys() | list if zbx_proxy_group_map is defined else [] }}
 
 - name: Debug template names
