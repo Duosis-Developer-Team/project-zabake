@@ -407,7 +407,7 @@
 
 - name: Determine scenario (create or update)
   set_fact:
-    zbx_scenario: "{{ 'update' if zbx_existing_host is defined else 'create' }}"
+    zbx_scenario: "{{ 'update' if (zbx_existing_host is defined and zbx_existing_host is not none and zbx_existing_host != None and zbx_existing_host.hostid is defined) else 'create' }}"
   when: 
     - device_info.device_type is not none
     - device_info.device_type != ""
@@ -416,7 +416,7 @@
 
 - name: Display scenario for device
   debug:
-    msg: "Device {{ netbox_device.name }}: Scenario = {{ zbx_scenario }} ({{ 'Host exists in Zabbix' if zbx_existing_host is defined else 'New host - will be created' }})"
+    msg: "Device {{ netbox_device.name }}: Scenario = {{ zbx_scenario }} ({{ 'Host exists in Zabbix' if (zbx_existing_host is defined and zbx_existing_host is not none and zbx_existing_host.hostid is defined) else 'New host - will be created' }})"
   when: 
     - device_info.device_type is not none
     - device_info.device_type != ""
