@@ -332,7 +332,6 @@
                               if 'model_suffix' in conditions:
                                   expected_suffix = conditions['model_suffix']
                                   print(f"    model_suffix: expected '{expected_suffix}', got model '{model}'", file=sys.stderr)
-                          break
               
               all_devices.extend(filtered_devices)
               filter_info = "mapping filters"
