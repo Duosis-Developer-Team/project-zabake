@@ -105,7 +105,9 @@
           
           # Manufacturer check
           if 'manufacturer' in conditions:
-              manufacturer_name = device.get('device_type', {}).get('manufacturer', {}).get('name', '') if device.get('device_type', {}).get('manufacturer') else ''
+              device_type = device.get('device_type') or {}
+              manufacturer_obj = device_type.get('manufacturer') or {}
+              manufacturer_name = manufacturer_obj.get('name', '')
               expected_manufacturers = conditions['manufacturer']
               
               # Debug for HOST devices
@@ -127,7 +129,8 @@
           
           # Model contains check
           if 'model_contains' in conditions:
-              model = device.get('device_type', {}).get('model', '') if device.get('device_type') else ''
+              device_type = device.get('device_type') or {}
+              model = device_type.get('model', '')
               expected_contains = conditions['model_contains']
               if isinstance(expected_contains, list):
                   if not any(contain.upper() in model.upper() for contain in expected_contains):
@@ -138,7 +141,8 @@
           
           # Model suffix check
           if 'model_suffix' in conditions:
-              model = device.get('device_type', {}).get('model', '') if device.get('device_type') else ''
+              device_type = device.get('device_type') or {}
+              model = device_type.get('model', '')
               expected_suffix = conditions['model_suffix']
               if not model.upper().endswith(expected_suffix.upper()):
                   return False
@@ -237,18 +241,24 @@
                   for i, device in enumerate(host_devices[:10]):  # Show first 10 HOST devices
                       role_obj = device.get('role') or device.get('device_role')
                       role_name = role_obj.get('name', 'N/A') if role_obj and isinstance(role_obj, dict) else 'N/A'
-                      manufacturer_name = device.get('device_type', {}).get('manufacturer', {}).get('name', 'N/A') if device.get('device_type', {}).get('manufacturer') else 'N/A'
-                      model = device.get('device_type', {}).get('model', 'N/A') if device.get('device_type') else 'N/A'
+                      
+                      device_type = device.get('device_type') or {}
+                      manufacturer_obj = device_type.get('manufacturer') or {}
+                      manufacturer_name = manufacturer_obj.get('name', 'N/A')
+                      model = device_type.get('model', 'N/A')
                       name = device.get('name', 'N/A')
+                      
                       device_location = 'N/A'
-                      if device.get('location'):
-                          if isinstance(device.get('location'), dict):
-                              device_location = device.get('location', {}).get('name', 'N/A')
-                          elif isinstance(device.get('location'), int):
-                              device_location = f"ID:{device.get('location')}"
-                      elif device.get('site'):
-                          if isinstance(device.get('site'), dict):
-                              device_location = device.get('site', {}).get('name', 'N/A')
+                      location_obj = device.get('location')
+                      if location_obj:
+                          if isinstance(location_obj, dict):
+                              device_location = location_obj.get('name', 'N/A')
+                          elif isinstance(location_obj, int):
+                              device_location = f"ID:{location_obj}"
+                      else:
+                          site_obj = device.get('site')
+                          if site_obj and isinstance(site_obj, dict):
+                              device_location = site_obj.get('name', 'N/A')
                       print(f"  HOST Device {i+1}: name={name}, location={device_location}, role={role_name}, manufacturer={manufacturer_name}, model={model}", file=sys.stderr)
               else:
                   print("DEBUG: No HOST devices found on this page", file=sys.stderr)
@@ -260,19 +270,25 @@
                       # Try 'role' first (Netbox API field name), then 'device_role' as fallback
                       role_obj = device.get('role') or device.get('device_role')
                       role_name = role_obj.get('name', 'N/A') if role_obj and isinstance(role_obj, dict) else 'N/A'
-                      manufacturer_name = device.get('device_type', {}).get('manufacturer', {}).get('name', 'N/A') if device.get('device_type', {}).get('manufacturer') else 'N/A'
-                      model = device.get('device_type', {}).get('model', 'N/A') if device.get('device_type') else 'N/A'
+                      
+                      device_type = device.get('device_type') or {}
+                      manufacturer_obj = device_type.get('manufacturer') or {}
+                      manufacturer_name = manufacturer_obj.get('name', 'N/A')
+                      model = device_type.get('model', 'N/A')
                       name = device.get('name', 'N/A')
+                      
                       # Get location info
                       device_location = 'N/A'
-                      if device.get('location'):
-                          if isinstance(device.get('location'), dict):
-                              device_location = device.get('location', {}).get('name', 'N/A')
-                          elif isinstance(device.get('location'), int):
-                              device_location = f"ID:{device.get('location')}"
-                      elif device.get('site'):
-                          if isinstance(device.get('site'), dict):
-                              device_location = device.get('site', {}).get('name', 'N/A')
+                      location_obj = device.get('location')
+                      if location_obj:
+                          if isinstance(location_obj, dict):
+                              device_location = location_obj.get('name', 'N/A')
+                          elif isinstance(location_obj, int):
+                              device_location = f"ID:{location_obj}"
+                      else:
+                          site_obj = device.get('site')
+                          if site_obj and isinstance(site_obj, dict):
+                              device_location = site_obj.get('name', 'N/A')
                       print(f"  Device {i+1}: name={name}, location={device_location}, role={role_name}, manufacturer={manufacturer_name}, model={model}", file=sys.stderr)
               
               # Apply mapping-based filters (location filter already applied at API level)
@@ -293,7 +309,9 @@
                   if role_name and 'HOST' in role_name.upper():
                       host_device_count += 1
                       if host_device_count <= 3:  # Debug first 3 HOST devices
-                          manufacturer_name = device.get('device_type', {}).get('manufacturer', {}).get('name', 'N/A') if device.get('device_type', {}).get('manufacturer') else 'N/A'
+                          device_type = device.get('device_type') or {}
+                          manufacturer_obj = device_type.get('manufacturer') or {}
+                          manufacturer_name = manufacturer_obj.get('name', 'N/A')
                           print(f"DEBUG: Processing HOST device #{host_device_count}: name={device.get('name', 'N/A')}, role={role_name}, manufacturer={manufacturer_name}", file=sys.stderr)
                   
                   # Check mapping-based filters
@@ -306,8 +324,11 @@
                           # Try 'role' first (Netbox API field name), then 'device_role' as fallback
                           role_obj = device.get('role') or device.get('device_role')
                           role_name = role_obj.get('name', 'N/A') if role_obj and isinstance(role_obj, dict) else 'N/A'
-                          manufacturer_name = device.get('device_type', {}).get('manufacturer', {}).get('name', 'N/A') if device.get('device_type', {}).get('manufacturer') else 'N/A'
-                          model = device.get('device_type', {}).get('model', 'N/A') if device.get('device_type') else 'N/A'
+                          
+                          device_type = device.get('device_type') or {}
+                          manufacturer_obj = device_type.get('manufacturer') or {}
+                          manufacturer_name = manufacturer_obj.get('name', 'N/A')
+                          model = device_type.get('model', 'N/A')
                           name = device.get('name', 'N/A')
                           print(f"DEBUG: First unmatched device: name={name}, role={role_name}, manufacturer={manufacturer_name}, model={model}", file=sys.stderr)
                           # Check why it doesn't match

@@ -18,19 +18,23 @@
               return role.upper() == condition_value.upper()
           
           elif condition_key == 'manufacturer':
-              manufacturer = device.get('device_type', {}).get('manufacturer', {}).get('name', '').upper()
+              device_type = device.get('device_type') or {}
+              manufacturer_obj = device_type.get('manufacturer') or {}
+              manufacturer = manufacturer_obj.get('name', '').upper()
               if isinstance(condition_value, list):
                   return manufacturer in [v.upper() for v in condition_value]
               return manufacturer == condition_value.upper()
           
           elif condition_key == 'model_contains':
-              model = device.get('device_type', {}).get('model', '').upper()
+              device_type = device.get('device_type') or {}
+              model = device_type.get('model', '').upper()
               if isinstance(condition_value, list):
                   return any(item.upper() in model for item in condition_value)
               return condition_value.upper() in model
           
           elif condition_key == 'model_suffix':
-              model = device.get('device_type', {}).get('model', '').upper()
+              device_type = device.get('device_type') or {}
+              model = device_type.get('model', '').upper()
               if isinstance(condition_value, list):
                   return any(model.endswith(item.upper()) for item in condition_value)
               return model.endswith(condition_value.upper())
@@ -120,8 +124,9 @@
           location_obj = device.get('location')
           if not location_obj:
               # No location, fallback to site name
-              if device.get('site', {}).get('name'):
-                  return device['site']['name']
+              site = device.get('site') or {}
+              if site.get('name'):
+                  return site['name']
               return ''
           
           location_id = None
@@ -198,8 +203,9 @@
               return location_obj.get('name', '')
           
           # Final fallback to site name
-          if device.get('site', {}).get('name'):
-              return device['site']['name']
+          site = device.get('site') or {}
+          if site.get('name'):
+              return site['name']
           return ''
       
       def extract_host_groups(device, device_type, netbox_url, netbox_token, verify_ssl):
@@ -212,29 +218,38 @@
           if location_name:
               groups.append(location_name)
           # 3. Contact (Tenant/Ownership)
-          if device.get('tenant', {}).get('name'):
-              groups.append(device['tenant']['name'])
+          tenant = device.get('tenant') or {}
+          if tenant.get('name'):
+              groups.append(tenant['name'])
           return ','.join(groups) if groups else ''
       
       def extract_tags(device):
           tags = {}
           
           # Mevcut tag'ler
-          if device.get('device_type', {}).get('manufacturer', {}).get('name'):
-              tags['Manufacturer'] = device['device_type']['manufacturer']['name']
-          if device.get('device_type', {}).get('model'):
-              tags['Device_Type'] = device['device_type']['model']
-          elif device.get('device_type', {}).get('display'):
-              tags['Device_Type'] = device['device_type']['display']
-          if device.get('location', {}).get('name'):
-              tags['Location_Detail'] = device['location']['name']
-          elif device.get('site', {}).get('name'):
-              tags['Location_Detail'] = device['site']['name']
-          if device.get('site', {}).get('name'):
-              tags['City'] = device['site']['name']
-          if device.get('tenant', {}).get('name'):
-              tags['Contact'] = device['tenant']['name']
-          custom_fields = device.get('custom_fields', {})
+          device_type = device.get('device_type') or {}
+          manufacturer = device_type.get('manufacturer') or {}
+          if manufacturer.get('name'):
+              tags['Manufacturer'] = manufacturer['name']
+          if device_type.get('model'):
+              tags['Device_Type'] = device_type['model']
+          elif device_type.get('display'):
+              tags['Device_Type'] = device_type['display']
+          
+          location = device.get('location') or {}
+          site = device.get('site') or {}
+          if location.get('name'):
+              tags['Location_Detail'] = location['name']
+          elif site.get('name'):
+              tags['Location_Detail'] = site['name']
+          if site.get('name'):
+              tags['City'] = site['name']
+          
+          tenant = device.get('tenant') or {}
+          if tenant.get('name'):
+              tags['Contact'] = tenant['name']
+          
+          custom_fields = device.get('custom_fields') or {}
           if custom_fields.get('Sorumlu_Ekip'):
               tags['Sorumlu_Ekip'] = custom_fields['Sorumlu_Ekip']
           if device.get('id'):
@@ -248,8 +263,9 @@
                   if rack.get('name'):
                       tags['Rack_Name'] = rack['name']
                   # Rack type için role kullanılacak (rack_type genellikle null)
-                  if rack.get('role', {}).get('name'):
-                      tags['Rack_Type'] = rack['role']['name']
+                  rack_role = rack.get('role') or {}
+                  if rack_role.get('name'):
+                      tags['Rack_Type'] = rack_role['name']
           
           # YENİ TAG'LER - Cluster bilgisi
           cluster = device.get('cluster')
@@ -319,7 +335,7 @@
               'tags': tags_dict,
               'loki_tags': loki_tags_list,
               'location': location_name,
-              'dc_id': location_name if location_name else device.get('site', {}).get('name', '')
+              'dc_id': location_name if location_name else (device.get('site') or {}).get('name', '')
           }
           
           print(json.dumps(result))
