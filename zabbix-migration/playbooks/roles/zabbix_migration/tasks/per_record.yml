@@ -429,18 +429,21 @@
 - name: Get existing interface for update
   set_fact:
     _existing_interface: "{{ zbx_existing_host.interfaces | default([]) | selectattr('main', 'equalto', 1) | first | default({}) }}"
-    _interface_id: "{{ (zbx_existing_host.interfaces | default([]) | selectattr('main', 'equalto', 1) | first | default({})).interfaceid | default(omit) }}"
+    _interface_id: "{{ (zbx_existing_host.interfaces | default([]) | selectattr('main', 'equalto', 1) | first | default({})).interfaceid | default('') }}"
   when:
     - zbx_scenario == 'update'
+    - zbx_existing_host is defined
     - zbx_existing_host.hostid is defined
-    - _missing_params | default([]) | length == 0
 
 - name: Build interface for update
   set_fact:
     _zbx_interface_update: "{{ [{'interfaceid': _interface_id, 'type': zbx_iface.type, 'main': 1, 'useip': 1, 'ip': zbx_record.HOST_IP, 'dns': zbx_iface.dns | default(''), 'port': (zbx_iface.port | default(161)) | string, 'details': zbx_iface.details | default(omit)}] if zbx_iface is not none else omit }}"
   when:
     - zbx_scenario == 'update'
+    - zbx_existing_host is defined
     - zbx_existing_host.hostid is defined
+    - _interface_id is defined
+    - _interface_id != ''
     - _missing_params | default([]) | length == 0
 
 - name: Update existing host (scenario update - only continuous fields)
