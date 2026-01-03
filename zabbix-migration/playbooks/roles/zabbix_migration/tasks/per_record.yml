@@ -468,7 +468,11 @@
   register: zbx_update_resp
   when:
     - zbx_scenario == 'update'
+    - zbx_existing_host is defined
     - zbx_existing_host.hostid is defined
+    - _interface_id is defined
+    - _interface_id != ''
+    - _zbx_interface_update is defined
     - _missing_params | default([]) | length == 0
 
 - name: Record update success
