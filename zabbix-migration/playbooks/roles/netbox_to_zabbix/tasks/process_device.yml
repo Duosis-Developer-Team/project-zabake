@@ -4,6 +4,8 @@
     device_result: {}
     current_device_result: {}
     device_info: {}
+    zbx_existing_host: {}
+    zbx_scenario: "create"
   run_once: false
 
 - name: Create temporary Python script for device processing
