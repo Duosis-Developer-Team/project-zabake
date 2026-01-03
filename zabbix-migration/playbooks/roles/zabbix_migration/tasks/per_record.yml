@@ -446,6 +446,37 @@
     - _interface_id != ''
     - _missing_params | default([]) | length == 0
 
+- name: Check if update is needed (compare with existing values)
+  set_fact:
+    _needs_update: >-
+      {{
+        (
+          (_existing_interface.ip | default('') != zbx_record.HOST_IP) or
+          (zbx_existing_host.monitored_by | default('') | string != zbx_monitored_by | string) or
+          (zbx_existing_host.proxyid | default('') | string != zbx_proxy_group_id | string) or
+          (zbx_existing_host.tags | default([]) | map(attribute='tag') | list | sort != zbx_continuous_tags | map(attribute='tag') | list | sort)
+        ) | bool
+      }}
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host is defined
+    - zbx_existing_host.hostid is defined
+    - _interface_id is defined
+    - _interface_id != ''
+    - _missing_params | default([]) | length == 0
+
+- name: Debug update check
+  debug:
+    msg: |
+      Host: {{ zbx_record.HOSTNAME }}
+      Needs update: {{ _needs_update | default('not_checked') }}
+      Current IP: {{ _existing_interface.ip | default('N/A') }} -> New IP: {{ zbx_record.HOST_IP }}
+      Current monitored_by: {{ zbx_existing_host.monitored_by | default('N/A') }} -> New: {{ zbx_monitored_by }}
+      Current proxy: {{ zbx_existing_host.proxyid | default('N/A') }} -> New: {{ zbx_proxy_group_id }}
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host.hostid is defined
+
 - name: Update existing host (scenario update - only continuous fields)
   uri:
     url: "{{ zabbix_url }}"
@@ -460,9 +491,9 @@
         host: "{{ zbx_record.HOSTNAME }}"
         name: "{{ zbx_record.HOSTNAME }}"
         interfaces: "{{ _zbx_interface_update }}"
-        tags: "{{ zbx_continuous_tags | default(omit) }}"
-        monitored_by: "{{ zbx_monitored_by }}"
-        proxy_groupid: "{{ zbx_proxy_group_id if (zbx_proxy_group_id is defined and zbx_proxy_group_id != '') else omit }}"
+        tags: "{{ zbx_continuous_tags | default([]) }}"
+        monitored_by: "{{ zbx_monitored_by | int }}"
+        proxyid: "{{ zbx_proxy_group_id | default('0') | int }}"
       auth: "{{ zabbix_auth }}"
       id: 2
   register: zbx_update_resp
@@ -474,6 +505,20 @@
     - _interface_id != ''
     - _zbx_interface_update is defined
     - _missing_params | default([]) | length == 0
+    - _needs_update | default(true) | bool
+
+- name: Record no update needed (already up-to-date)
+  set_fact:
+    device_result:
+      hostname: "{{ zbx_record.HOSTNAME }}"
+      status: "güncel"
+      reason: "Değişiklik yok, güncelleme yapılmadı"
+      ip: "{{ zbx_record.HOST_IP }}"
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host.hostid is defined
+    - _needs_update is defined
+    - not (_needs_update | bool)
 
 - name: Record update success
   set_fact:
@@ -484,17 +529,24 @@
       ip: "{{ zbx_record.HOST_IP }}"
   when:
     - zbx_scenario == 'update'
+    - _needs_update is defined
+    - _needs_update | bool
+    - zbx_update_resp is defined
+    - zbx_update_resp.json is defined
     - zbx_update_resp.json.result is defined
-    - zbx_update_resp.json.error is not defined or zbx_update_resp.json.error is none
+    - zbx_update_resp.json.error is not defined
 
 - name: Record update failure
   set_fact:
     device_result:
       hostname: "{{ zbx_record.HOSTNAME }}"
       status: "eklenemedi"
-      reason: "Güncelleme hatası: {{ zbx_update_resp.json.error.message | default('Bilinmeyen hata') }}"
+      reason: "Güncelleme hatası: {{ zbx_update_resp.json.error.message | default(zbx_update_resp.json.error.data | default('Bilinmeyen hata')) }}"
       ip: "{{ zbx_record.HOST_IP }}"
   when:
     - zbx_scenario == 'update'
+    - _needs_update is defined
+    - _needs_update | bool
+    - zbx_update_resp is defined
+    - zbx_update_resp.json is defined
     - zbx_update_resp.json.error is defined
-    - zbx_update_resp.json.error is not none
