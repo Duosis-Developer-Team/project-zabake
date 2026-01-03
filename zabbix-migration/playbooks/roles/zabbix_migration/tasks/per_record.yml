@@ -1,4 +1,13 @@
 ---
+- name: Reset per-record variables
+  set_fact:
+    _existing_interface: {}
+    _interface_id: ""
+    _zbx_interface_update: []
+    _needs_update: false
+    _updated_fields: ""
+  run_once: false
+
 - name: Load mappings
   vars:
     _tpl_map_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/templates.yml"
