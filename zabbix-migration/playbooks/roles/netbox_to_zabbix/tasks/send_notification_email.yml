@@ -40,7 +40,7 @@
             </tr>
           </thead>
           <tbody>
-            {%- for result in processing_results | default([]) -%}
+            {%- for result in processing_results | default([]) | selectattr('status', 'equalto', 'eklenemedi') -%}
             <tr>
               <td>{{ result.hostname | default('N/A') }}</td>
               <td>{{ result.ip | default('N/A') }}</td>
@@ -73,7 +73,7 @@
       
       DETAYLI LİSTE:
       --------------
-      {%- for result in processing_results | default([]) -%}
+      {%- for result in processing_results | default([]) | selectattr('status', 'equalto', 'eklenemedi') -%}
       
       Sunucu: {{ result.hostname | default('N/A') }}
       IP: {{ result.ip | default('N/A') }}

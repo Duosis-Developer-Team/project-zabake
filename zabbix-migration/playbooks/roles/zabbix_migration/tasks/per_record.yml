@@ -485,7 +485,7 @@
   when:
     - zbx_scenario == 'update'
     - zbx_update_resp.json.result is defined
-    - zbx_update_resp.json.error is not defined
+    - zbx_update_resp.json.error is not defined or zbx_update_resp.json.error is none
 
 - name: Record update failure
   set_fact:
@@ -497,3 +497,4 @@
   when:
     - zbx_scenario == 'update'
     - zbx_update_resp.json.error is defined
+    - zbx_update_resp.json.error is not none
