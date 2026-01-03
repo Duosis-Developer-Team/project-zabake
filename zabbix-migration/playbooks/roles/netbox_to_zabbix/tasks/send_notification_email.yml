@@ -84,25 +84,63 @@
       ---
       Bu e-posta otomatik olarak Zabbix Migration playbook'u tarafından oluşturulmuştur.
 
-- name: Send notification email (if there are failed devices)
-  community.general.mail:
-    host: "{{ mail_smtp_host }}"
-    port: "{{ mail_smtp_port }}"
-    username: "{{ mail_smtp_username if mail_smtp_username else omit }}"
-    password: "{{ mail_smtp_password if mail_smtp_password else omit }}"
-    to: "{{ mail_recipients }}"
-    subject: "Zabbix Migration Raporu - {{ failed_devices_count }} Sunucu Eklenemedi"
-    body: "{{ email_text_content }}"
-    subtype: html
-    html_body: "{{ email_html_content }}"
-    from: "{{ mail_from }}"
-    secure: never  # TLS: False
+- name: Send notification email using Python SMTP
+  shell: |
+    python3 << 'PYTHON_SCRIPT'
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    import sys
+    
+    # Email configuration
+    smtp_host = "{{ mail_smtp_host }}"
+    smtp_port = {{ mail_smtp_port }}
+    from_addr = "{{ mail_from }}"
+    to_addrs = "{{ mail_recipients | join(',') }}"
+    subject = "Zabbix Migration Raporu - {{ failed_devices_count }} Sunucu Eklenemedi"
+    
+    # Create message
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = subject
+    msg['From'] = from_addr
+    msg['To'] = to_addrs
+    
+    # Plain text version
+    text_content = r"""{{ email_text_content }}"""
+    
+    # HTML version  
+    html_content = r"""{{ email_html_content }}"""
+    
+    # Attach both versions
+    part1 = MIMEText(text_content, 'plain', 'utf-8')
+    part2 = MIMEText(html_content, 'html', 'utf-8')
+    msg.attach(part1)
+    msg.attach(part2)
+    
+    # Send email
+    try:
+        server = smtplib.SMTP(smtp_host, smtp_port, timeout=30)
+        {% if mail_smtp_username is defined and mail_smtp_username %}
+        server.login("{{ mail_smtp_username }}", "{{ mail_smtp_password }}")
+        {% endif %}
+        server.sendmail(from_addr, [addr.strip() for addr in to_addrs.split(',')], msg.as_string())
+        server.quit()
+        print("✅ Email sent successfully")
+        sys.exit(0)
+    except Exception as e:
+        print(f"⚠️  Failed to send email: {e}")
+        sys.exit(1)
+    PYTHON_SCRIPT
+  args:
+    executable: /bin/bash
   when: 
     - has_failed_devices | default(false)
     - mail_recipients is defined
     - mail_recipients | length > 0
   delegate_to: localhost
   run_once: true
+  ignore_errors: true
+  register: mail_send_result
 
 - name: Display email notification status
   debug:
@@ -111,14 +149,26 @@
       EMAIL NOTIFICATION STATUS
       ============================================
       {% if has_failed_devices %}
-      Başarısız işlem var: {{ failed_devices_count }} sunucu eklenemedi
+      ⚠️  Başarısız işlem var: {{ failed_devices_count }} sunucu eklenemedi
       {% if mail_recipients is defined and mail_recipients | length > 0 %}
-      E-posta gönderildi: {{ mail_recipients | join(', ') }}
+      {% if mail_send_result is defined and mail_send_result.rc is defined %}
+      {% if mail_send_result.rc == 0 %}
+      ✅ E-posta başarıyla gönderildi: {{ mail_recipients | join(', ') }}
+      Yöntem: Python SMTP
       {% else %}
-      E-posta gönderilmedi: mail_recipients tanımlı değil
+      ⚠️  E-posta gönderilemedi
+      Hata: {{ mail_send_result.stdout | default('Bilinmeyen hata') }}
+      {% endif %}
+      {% elif mail_send_result is skipped %}
+      ℹ️  E-posta gönderimi atlandı
+      {% else %}
+      ℹ️  E-posta durumu: Belirsiz
       {% endif %}
       {% else %}
-      Tüm işlemler başarılı, e-posta gönderilmedi
+      ℹ️  E-posta gönderilmedi: mail_recipients tanımlı değil
+      {% endif %}
+      {% else %}
+      ✅ Tüm işlemler başarılı, e-posta gönderilmedi
       {% endif %}
       ============================================
   run_once: true
