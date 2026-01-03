@@ -117,7 +117,7 @@
   loop_control:
     loop_var: proxy_group_item
     label: "{{ proxy_group_item }} (DC: {{ pg_dc_num }}, Match: {{ (zbx_dc_number | string | upper == pg_dc_num | string | upper) | bool }})"
-  when:
+  when: 
     - zbx_dc_number is defined
     - zbx_dc_number != ''
     - zbx_dc_number | string | upper == pg_dc_num | string | upper
@@ -463,7 +463,7 @@
           (_existing_interface.ip | default('') != zbx_record.HOST_IP) or
           (zbx_existing_host.monitored_by | default('') | string != zbx_monitored_by | string) or
           (zbx_existing_host.proxy_groupid | default('') | string != zbx_proxy_group_id | string) or
-          (zbx_existing_host.tags | default([]) | map(attribute='tag') | list | sort != zbx_continuous_tags | map(attribute='tag') | list | sort)
+          (zbx_existing_host.tags | default([]) | to_json != zbx_continuous_tags | to_json)
         ) | bool
       }}
   when:
@@ -540,7 +540,7 @@
       {%- if zbx_existing_host.proxy_groupid | default('') | string != zbx_proxy_group_id | string -%}
         {%- set _ = fields.append('Proxy Group: ' ~ zbx_existing_host.proxy_groupid | default('N/A') ~ ' → ' ~ zbx_proxy_group_id) -%}
       {%- endif -%}
-      {%- if (zbx_existing_host.tags | default([]) | map(attribute='tag') | list | sort) != (zbx_continuous_tags | map(attribute='tag') | list | sort) -%}
+      {%- if (zbx_existing_host.tags | default([]) | to_json) != (zbx_continuous_tags | to_json) -%}
         {%- set _ = fields.append('Tags güncellendi') -%}
       {%- endif -%}
       {{ fields | join(', ') }}

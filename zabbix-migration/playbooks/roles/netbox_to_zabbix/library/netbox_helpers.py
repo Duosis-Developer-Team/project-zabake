@@ -128,6 +128,10 @@ def extract_host_groups(device: Dict[str, Any]) -> str:
     elif device.get('device_type', {}).get('display'):
         groups.append(device['device_type']['display'])
     
+    # Contact (Tenant) - Add as host group
+    if device.get('tenant', {}).get('name'):
+        groups.append(device['tenant']['name'])
+    
     return ','.join(groups) if groups else ''
 
 
@@ -163,16 +167,17 @@ def extract_tags(device: Dict[str, Any]) -> str:
     if device.get('site', {}).get('name'):
         tags['City'] = device['site']['name']
     
-    # Customer (if exists)
+    # Customer/Contact (if exists)
     if device.get('tenant', {}).get('name'):
         tags['Customer'] = device['tenant']['name']
+        tags['Contact'] = device['tenant']['name']  # Also add as Contact for clarity
     
     # Sorumlu Ekip (if exists)
     custom_fields = device.get('custom_fields', {})
     if custom_fields.get('Sorumlu_Ekip'):
         tags['Sorumlu_Ekip'] = custom_fields['Sorumlu_Ekip']
     
-    # Loki ID
+    # Loki ID (PRIMARY unique identifier)
     if device.get('id'):
         tags['Loki_ID'] = str(device['id'])
     
