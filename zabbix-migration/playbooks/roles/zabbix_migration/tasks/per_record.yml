@@ -428,8 +428,8 @@
 
 - name: Get existing interface for update
   set_fact:
-    _existing_interface: "{{ zbx_existing_host.interfaces | default([]) | selectattr('main', 'equalto', 1) | first | default({}) }}"
-    _interface_id: "{{ (zbx_existing_host.interfaces | default([]) | selectattr('main', 'equalto', 1) | first | default({})).interfaceid | default('') }}"
+    _existing_interface: "{{ zbx_existing_host.interfaces[0] | default({}) if (zbx_existing_host.interfaces | default([]) | length > 0) else {} }}"
+    _interface_id: "{{ zbx_existing_host.interfaces[0].interfaceid | default('') if (zbx_existing_host.interfaces | default([]) | length > 0) else '' }}"
   when:
     - zbx_scenario == 'update'
     - zbx_existing_host is defined
