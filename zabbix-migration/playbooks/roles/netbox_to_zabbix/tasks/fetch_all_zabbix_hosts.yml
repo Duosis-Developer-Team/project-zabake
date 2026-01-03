@@ -34,8 +34,8 @@
       method: "host.get"
       params:
         output: ["hostid", "host", "name"]
-        selectInterfaces: ["interfaceid", "ip", "dns", "port", "type", "main"]
-        selectTags: ["tag", "value"]
+        selectInterfaces: "extend"
+        selectTags: "extend"
         selectGroups: ["groupid", "name"]
       auth: "{{ zabbix_auth }}"
       id: 100
