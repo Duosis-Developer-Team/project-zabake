@@ -53,6 +53,23 @@
       ============================================
   when: zbx_hosts_resp.json.result is defined
 
+- name: Debug first host tags (RAW)
+  debug:
+    msg: |
+      ============================================
+      FIRST HOST RAW TAG DATA
+      ============================================
+      Host: {{ zbx_hosts_resp.json.result[0].host | default('N/A') }}
+      Tags: {{ zbx_hosts_resp.json.result[0].tags | default([]) }}
+      Tag count: {{ zbx_hosts_resp.json.result[0].tags | default([]) | length }}
+      {% if zbx_hosts_resp.json.result[0].tags | default([]) | length > 0 %}
+      First tag structure: {{ zbx_hosts_resp.json.result[0].tags[0] }}
+      {% endif %}
+      ============================================
+  when: 
+    - zbx_hosts_resp.json.result is defined
+    - zbx_hosts_resp.json.result | length > 0
+
 - name: Build Loki_ID to host mapping
   set_fact:
     zabbix_hosts_by_loki_id: >-
@@ -60,9 +77,13 @@
       {%- for host in zbx_hosts_resp.json.result | default([]) -%}
       {%- set loki_id = None -%}
       {%- for tag in host.tags | default([]) -%}
-      {%- if tag.tag == 'Loki_ID' -%}
-      {%- set loki_id = tag.value | string -%}
-      {%- endif -%}
+        {%- if tag.tag is defined and tag.value is defined -%}
+          {%- if tag.tag == 'Loki_ID' or tag.tag == 'LOKI_ID' or tag.tag == 'loki_id' -%}
+            {%- set loki_id = tag.value | string -%}
+          {%- endif -%}
+        {%- elif tag is mapping and 'Loki_ID' in tag -%}
+          {%- set loki_id = tag['Loki_ID'] | string -%}
+        {%- endif -%}
       {%- endfor -%}
       {%- if loki_id -%}
       {%- set _ = mapping.update({loki_id: host}) -%}
@@ -71,6 +92,22 @@
       {{ mapping }}
   run_once: true
   delegate_to: localhost
+
+- name: Debug Loki_ID mapping results
+  debug:
+    msg: |
+      ============================================
+      LOKI_ID MAPPING DEBUG
+      ============================================
+      Total hosts checked: {{ zbx_hosts_resp.json.result | default([]) | length }}
+      Hosts with Loki_ID: {{ zabbix_hosts_by_loki_id | default({}) | length }}
+      {% if zabbix_hosts_by_loki_id | default({}) | length > 0 %}
+      Sample Loki_IDs found: {{ zabbix_hosts_by_loki_id.keys() | list | first(5) }}
+      {% else %}
+      WARNING: No Loki_ID tags found in any host!
+      {% endif %}
+      ============================================
+  when: zbx_hosts_resp.json.result is defined
 
 - name: Build hostname to host mapping (fallback)
   set_fact:
@@ -92,6 +129,7 @@
       ============================================
       Hosts with Loki_ID tag: {{ zabbix_hosts_by_loki_id | default({}) | length }}
       Total hosts: {{ zbx_hosts_resp.json.result | default([]) | length }}
+      Hostname mapping size: {{ zabbix_hosts_by_hostname | default({}) | length }}
       ============================================
   when: zbx_hosts_resp.json.result is defined
 
