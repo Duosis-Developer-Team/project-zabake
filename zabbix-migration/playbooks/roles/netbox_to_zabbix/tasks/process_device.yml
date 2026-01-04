@@ -226,10 +226,10 @@
           location_name = get_location_name(device, netbox_url, netbox_token, verify_ssl)
           if location_name:
               groups.append(location_name)
-          # 3. Contact (Ownership from custom_fields.Contacts)
+          # 3. Contact (Ownership from custom_fields.Sahiplik)
           custom_fields = device.get('custom_fields') or {}
-          if custom_fields.get('Contacts'):
-              groups.append(custom_fields['Contacts'])
+          if custom_fields.get('Sahiplik'):
+              groups.append(custom_fields['Sahiplik'])
           return ','.join(groups) if groups else ''
       
       def extract_tags(device):
@@ -259,10 +259,10 @@
           if tenant.get('name'):
               tags['Tenant'] = tenant['name']
           
-          # Contact (ownership from custom_fields)
+          # Contact (ownership from custom_fields.Sahiplik)
           custom_fields = device.get('custom_fields') or {}
-          if custom_fields.get('Contacts'):
-              tags['Contact'] = custom_fields['Contacts']
+          if custom_fields.get('Sahiplik'):
+              tags['Contact'] = custom_fields['Sahiplik']
           
           if custom_fields.get('Sorumlu_Ekip'):
               tags['Sorumlu_Ekip'] = custom_fields['Sorumlu_Ekip']

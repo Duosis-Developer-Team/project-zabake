@@ -305,10 +305,10 @@ def extract_host_groups(device, device_type):
     if location_name:
         groups.append(location_name)  # e.g., "ICT11"
     
-    # 3. Contact (Ownership from custom_fields.Contacts)
+    # 3. Contact (Ownership from custom_fields.Sahiplik)
     custom_fields = device.get('custom_fields', {})
-    if custom_fields.get('Contacts'):
-        groups.append(custom_fields['Contacts'])  # e.g., "IT Department"
+    if custom_fields.get('Sahiplik'):
+        groups.append(custom_fields['Sahiplik'])  # e.g., "TEAM VIRTUALIZATION"
     
     return ','.join(groups)
 ```
@@ -320,14 +320,14 @@ def extract_host_groups(device, device_type):
 Netbox:
   - device_type (determined) = "Lenovo IPMI"
   - device.location.name = "ICT11"
-  - device.custom_fields.Contacts = "IT Department"
+  - device.custom_fields.Sahiplik = "TEAM VIRTUALIZATION"
 ↓
-Host Groups String: "Lenovo IPMI,ICT11,IT Department"
+Host Groups String: "Lenovo IPMI,ICT11,TEAM VIRTUALIZATION"
 ↓
 Resolve to IDs:
   - "Lenovo IPMI" → groupid: 45
   - "ICT11" → groupid: 17
-  - "IT Department" → groupid: 102 (created if not exists)
+  - "TEAM VIRTUALIZATION" → groupid: 102 (created if not exists)
 ↓
 Zabbix: groups = [{"groupid": "45"}, {"groupid": "17"}, {"groupid": "102"}]
 ```
@@ -372,10 +372,10 @@ def extract_tags(device):
     if tenant.get('name'):
         tags['Tenant'] = tenant['name']
     
-    # Contact (Ownership from custom_fields) - IMPORTANT: Also added as host group
+    # Contact (Ownership from custom_fields.Sahiplik) - IMPORTANT: Also added as host group
     custom_fields = device.get('custom_fields', {})
-    if custom_fields.get('Contacts'):
-        tags['Contact'] = custom_fields['Contacts']
+    if custom_fields.get('Sahiplik'):
+        tags['Contact'] = custom_fields['Sahiplik']
     
     # Responsible Team
     if custom_fields.get('Sorumlu_Ekip'):
@@ -425,7 +425,7 @@ Netbox:
   - device.location.description = "DATA HALL 1"
   - device.site.name = "ALMANYA"
   - device.tenant.name = "Company ABC"
-  - device.custom_fields.Contacts = "IT Department"
+  - device.custom_fields.Sahiplik = "TEAM VIRTUALIZATION"
   - device.cluster.name = "vCluster01"
   - device.rack.name = "R101"
   - device.custom_fields.Sorumlu_Ekip = "NOC Team"
@@ -438,7 +438,7 @@ Tags Object:
   "Location_Detail": "ICT11",
   "City": "ALMANYA",
   "Tenant": "Company ABC",
-  "Contact": "IT Department",
+  "Contact": "TEAM VIRTUALIZATION",
   "Sorumlu_Ekip": "NOC Team",
   "Loki_ID": "12365",
   "Rack_Name": "R101",
@@ -454,7 +454,7 @@ tags = [
   {"tag": "Location_Detail", "value": "ICT11"},
   {"tag": "City", "value": "ALMANYA"},
   {"tag": "Tenant", "value": "Company ABC"},
-  {"tag": "Contact", "value": "IT Department"},
+  {"tag": "Contact", "value": "TEAM VIRTUALIZATION"},
   {"tag": "Sorumlu_Ekip", "value": "NOC Team"},
   {"tag": "Loki_ID", "value": "12365"},
   {"tag": "Rack_Name", "value": "R101"},
@@ -634,7 +634,7 @@ Zabbix (appended to tags):
     "tags": [                                // always update (continuous field)
       {"tag": "Manufacturer", "value": "LENOVO"},
       {"tag": "Tenant", "value": "Company ABC"},
-      {"tag": "Contact", "value": "IT Department"},
+      {"tag": "Contact", "value": "TEAM VIRTUALIZATION"},
       {"tag": "Loki_ID", "value": "12365"},
       // ... all Loki-sourced tags
       // ... + any manual tags (preserved from existing host)
@@ -716,7 +716,7 @@ zbx_continuous_tags: "{{ zbx_continuous_tags + zbx_manual_tags }}"
   "cluster": {"name": "vCluster01"},
   "rack": {"name": "R101"},
   "custom_fields": {
-    "Contacts": "IT Department",
+    "Sahiplik": "TEAM VIRTUALIZATION",
     "Sorumlu_Ekip": "NOC Team",
     "Kurulum_Tarihi": "2024-01-15"
   },
@@ -736,7 +736,7 @@ location: "ICT11"
 ### Step 2: Extract Host Groups
 
 ```yaml
-host_groups: "Lenovo IPMI,ICT11,IT Department"
+host_groups: "Lenovo IPMI,ICT11,TEAM VIRTUALIZATION"  # from device_type + location + Sahiplik
 ```
 
 ### Step 3: Extract Tags
@@ -748,7 +748,7 @@ tags:
   - {tag: "Location_Detail", value: "ICT11"}
   - {tag: "City", value: "ALMANYA"}
   - {tag: "Tenant", value: "Company ABC"}
-  - {tag: "Contact", value: "IT Department"}
+  - {tag: "Contact", value: "TEAM VIRTUALIZATION"}
   - {tag: "Sorumlu_Ekip", value: "NOC Team"}
   - {tag: "Loki_ID", value: "12365"}
   - {tag: "Rack_Name", value: "R101"}
@@ -799,7 +799,7 @@ _needs_update: True (if tags differ) or False (if same)
     "interfaces": [{...}],
     "tags": [
       {"tag": "Tenant", "value": "Company ABC"},
-      {"tag": "Contact", "value": "IT Department"},
+      {"tag": "Contact", "value": "TEAM VIRTUALIZATION"},
       // ... all Loki tags
     ],
     "monitored_by": 1,
@@ -819,7 +819,7 @@ _needs_update: True (if tags differ) or False (if same)
     "interfaces": [{...}],        // continuous field
     "tags": [
       {"tag": "Tenant", "value": "Company ABC"},
-      {"tag": "Contact", "value": "IT Department"},
+      {"tag": "Contact", "value": "TEAM VIRTUALIZATION"},
       // ... all Loki tags + manual tags preserved
     ],
     "monitored_by": 1,
@@ -888,10 +888,10 @@ device_result:
 ### 9.3 Contact and Tenant Fields
 
 **Contact (Ownership):**
-- **Netbox:** `device.custom_fields.Contacts`
+- **Netbox:** `device.custom_fields.Sahiplik` (Turkish: "ownership")
 - **Zabbix:**
-  - ✅ Added to **Host Groups** (as "IT Department")
-  - ✅ Added to **Tags** (as `{"tag": "Contact", "value": "IT Department"}`)
+  - ✅ Added to **Host Groups** (as "TEAM VIRTUALIZATION")
+  - ✅ Added to **Tags** (as `{"tag": "Contact", "value": "TEAM VIRTUALIZATION"}`)
 
 **Tenant (Organization):**
 - **Netbox:** `device.tenant.name`
