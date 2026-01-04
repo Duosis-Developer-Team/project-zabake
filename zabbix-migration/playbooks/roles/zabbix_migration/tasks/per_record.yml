@@ -283,34 +283,10 @@
     loop_var: group_name
   when: group_name is defined and group_name in zbx_group_map
 
-- name: Extract continuous tags (all tags from Loki)
+- name: Set tags for host creation (only used during create, NOT update)
   set_fact:
     zbx_continuous_tags: "{{ zbx_tags | default([]) }}"
   when: zbx_tags is defined
-
-- name: Get Loki tag names for comparison
-  set_fact:
-    _loki_tag_names: "{{ zbx_tags | default([]) | map(attribute='tag') | list }}"
-  when:
-    - zbx_scenario == 'update'
-    - zbx_existing_host is defined
-    - zbx_existing_host.tags is defined
-
-- name: Preserve manual tags if updating existing host
-  set_fact:
-    zbx_manual_tags: "{{ zbx_existing_host.tags | default([]) | rejectattr('tag', 'in', _loki_tag_names | default([])) | list }}"
-  when:
-    - zbx_scenario == 'update'
-    - zbx_existing_host is defined
-    - zbx_existing_host.tags is defined
-    - _loki_tag_names is defined
-
-- name: Merge Loki tags with manual tags for update
-  set_fact:
-    zbx_continuous_tags: "{{ (zbx_continuous_tags | default([])) + (zbx_manual_tags | default([])) }}"
-  when:
-    - zbx_scenario == 'update'
-    - zbx_manual_tags is defined
 
 - name: Validate required parameters before create
   set_fact:
@@ -476,21 +452,6 @@
     - _interface_id != ''
     - _missing_params | default([]) | length == 0
 
-- name: Sort existing tags for comparison
-  set_fact:
-    _existing_tags_sorted: "{{ zbx_existing_host.tags | default([]) | sort(attribute='tag') | list }}"
-  when:
-    - zbx_scenario == 'update'
-    - zbx_existing_host is defined
-    - zbx_existing_host.tags is defined
-
-- name: Sort continuous tags for comparison
-  set_fact:
-    _continuous_tags_sorted: "{{ zbx_continuous_tags | default([]) | sort(attribute='tag') | list }}"
-  when:
-    - zbx_scenario == 'update'
-    - zbx_continuous_tags is defined
-
 - name: Check if update is needed (compare with existing values)
   set_fact:
     _needs_update: >-
@@ -500,8 +461,7 @@
           (zbx_existing_host.host | default('') != zbx_record.HOSTNAME) or
           (zbx_existing_host.name | default('') != zbx_record.HOSTNAME) or
           (zbx_existing_host.monitored_by | default('') | string != zbx_monitored_by | string) or
-          (zbx_existing_host.proxy_groupid | default('') | string != zbx_proxy_group_id | string) or
-          (_existing_tags_sorted | default([]) | to_json != _continuous_tags_sorted | default([]) | to_json)
+          (zbx_existing_host.proxy_groupid | default('') | string != zbx_proxy_group_id | string)
         ) | bool
       }}
   when:
@@ -520,13 +480,11 @@
       Current IP: {{ _existing_interface.ip | default('N/A') }} -> New IP: {{ zbx_record.HOST_IP }}
       Current monitored_by: {{ zbx_existing_host.monitored_by | default('N/A') }} -> New: {{ zbx_monitored_by }}
       Current proxy_groupid: {{ zbx_existing_host.proxy_groupid | default('N/A') }} -> New: {{ zbx_proxy_group_id }}
-      Current tags count: {{ zbx_existing_host.tags | default([]) | length }} -> New tags count: {{ zbx_continuous_tags | default([]) | length }}
-      Tags match: {{ (_existing_tags_sorted | default([]) | to_json) == (_continuous_tags_sorted | default([]) | to_json) }}
   when:
     - zbx_scenario == 'update'
     - zbx_existing_host.hostid is defined
 
-- name: Update existing host (scenario update - only continuous fields)
+- name: Update existing host (scenario update - only continuous fields, NO TAGS)
   uri:
     url: "{{ zabbix_url }}"
     method: POST
@@ -540,7 +498,6 @@
         host: "{{ zbx_record.HOSTNAME }}"
         name: "{{ zbx_record.HOSTNAME }}"
         interfaces: "{{ _zbx_interface_update }}"
-        tags: "{{ zbx_continuous_tags | default([]) }}"
         monitored_by: "{{ zbx_monitored_by | int }}"
         proxy_groupid: "{{ zbx_proxy_group_id | default('0') | int }}"
       auth: "{{ zabbix_auth }}"
@@ -584,9 +541,6 @@
       {%- endif -%}
       {%- if zbx_existing_host.proxy_groupid | default('') | string != zbx_proxy_group_id | string -%}
         {%- set _ = fields.append('Proxy Group: ' ~ zbx_existing_host.proxy_groupid | default('N/A') ~ ' → ' ~ zbx_proxy_group_id) -%}
-      {%- endif -%}
-      {%- if (_existing_tags_sorted | default([]) | to_json) != (_continuous_tags_sorted | default([]) | to_json) -%}
-        {%- set _ = fields.append('Tags güncellendi') -%}
       {%- endif -%}
       {{ fields | join(', ') }}
   when:

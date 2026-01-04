@@ -631,14 +631,6 @@ Zabbix (appended to tags):
         "ip": "10.70.1.22"                  // new IP
       }
     ],
-    "tags": [                                // always update (continuous field)
-      {"tag": "Manufacturer", "value": "LENOVO"},
-      {"tag": "Tenant", "value": "Company ABC"},
-      {"tag": "Contact", "value": "TEAM VIRTUALIZATION"},
-      {"tag": "Loki_ID", "value": "12365"},
-      // ... all Loki-sourced tags
-      // ... + any manual tags (preserved from existing host)
-    ],
     "monitored_by": 1,                       // always update (continuous field)
     "proxy_groupid": 1                       // always update (continuous field)
   },
@@ -648,18 +640,17 @@ Zabbix (appended to tags):
 ```
 
 **Note:** 
-- `groups`, `templates`, and `interface details` (SNMP settings) are **metadata fields** and are **NOT updated** to avoid disrupting existing Zabbix configuration.
-- **Manual tags** (tags not sourced from Loki) are **preserved** during updates.
+- `groups`, `templates`, `tags`, and `interface details` (SNMP settings) are **metadata fields** and are **NOT updated** to avoid disrupting existing Zabbix configuration.
+- **Tags are set ONLY during host creation**, never updated after initial creation.
 
 ### 6.3 Update Detection Logic
 
 **Comparison Fields:**
-1. **Hostname:** `zbx_existing_host.host` vs `zbx_record.HOSTNAME` (NEW)
-2. **Display Name:** `zbx_existing_host.name` vs `zbx_record.HOSTNAME` (NEW)
+1. **Hostname:** `zbx_existing_host.host` vs `zbx_record.HOSTNAME`
+2. **Display Name:** `zbx_existing_host.name` vs `zbx_record.HOSTNAME`
 3. **IP Address:** `_existing_interface.ip` vs `zbx_record.HOST_IP`
 4. **Monitored By:** `zbx_existing_host.monitored_by` vs `zbx_monitored_by`
 5. **Proxy Group:** `zbx_existing_host.proxy_groupid` vs `zbx_proxy_group_id`
-6. **Tags:** `zbx_existing_host.tags | to_json` vs `zbx_continuous_tags | to_json`
 
 **Logic:**
 ```yaml
@@ -672,23 +663,15 @@ Zabbix (appended to tags):
           (zbx_existing_host.host | default('') != zbx_record.HOSTNAME) or
           (zbx_existing_host.name | default('') != zbx_record.HOSTNAME) or
           (zbx_existing_host.monitored_by | default('') | string != zbx_monitored_by | string) or
-          (zbx_existing_host.proxy_groupid | default('') | string != zbx_proxy_group_id | string) or
-          (zbx_existing_host.tags | default([]) | to_json != zbx_continuous_tags | to_json)
+          (zbx_existing_host.proxy_groupid | default('') | string != zbx_proxy_group_id | string)
         ) | bool
       }}
 ```
 
-**Tag Merge Logic (Preserves Manual Tags):**
-```yaml
-# Extract all tags from Loki
-zbx_continuous_tags: "{{ zbx_tags }}"
-
-# Find manual tags (tags in Zabbix but not from Loki)
-zbx_manual_tags: "{{ zbx_existing_host.tags | rejectattr('tag', 'in', zbx_tags | map(attribute='tag') | list) | list }}"
-
-# Merge Loki tags + manual tags
-zbx_continuous_tags: "{{ zbx_continuous_tags + zbx_manual_tags }}"
-```
+**IMPORTANT: Tags are NOT compared or updated!**
+- Tags are set ONLY during host creation
+- Existing tags are never modified during updates
+- This allows manual tag management in Zabbix without interference
 
 **Update Outcomes:**
 - `_needs_update = True`: API call made → Status = "güncellendi"
@@ -856,15 +839,13 @@ device_result:
 | `interfaces[].details` | SNMP settings | From template | **Metadata** (no update) ❌ |
 | `groups[]` | device_type + location + contact | `extract_host_groups()` | **Metadata** (no update) ❌ |
 | `templates[]` | device_type mapping | `determine_device_type()` | **Metadata** (no update) ❌ |
-| `tags[]` (Loki-sourced) | Multiple Netbox fields | `extract_tags()` | **Continuous** ✅ |
-| `tags[]` (Manual) | User-added in Zabbix | N/A | **Preserved** (not overwritten) 🔒 |
+| `tags[]` | Multiple Netbox fields | `extract_tags()` | **Metadata** (set once, never updated) ❌ |
 | `monitored_by` | Always 1 (Proxy) | Hardcoded | **Continuous** ✅ |
 | `proxy_groupid` | location → DC_ID | Proxy group matching | **Continuous** ✅ |
 
 **Field Types:**
 - **Continuous (✅):** Updated on every run if changed
 - **Metadata (❌):** Set once during creation, never updated
-- **Preserved (🔒):** Existing values are kept, not overwritten
 
 ---
 
@@ -908,19 +889,22 @@ device_result:
 ### 9.5 Update Behavior
 
 **What gets updated (Continuous Fields):**
-- ✅ **Hostname** (`host` and `name` fields) - **NEW!**
+- ✅ **Hostname** (`host` and `name` fields)
 - ✅ IP address (if changed)
-- ✅ Tags from Loki (if changed, manual tags preserved)
 - ✅ Proxy group (if changed)
 - ✅ Monitored by (if changed)
 
 **What does NOT get updated (Metadata Fields):**
 - ❌ Host groups
 - ❌ Templates
+- ❌ **Tags** (set once during creation, never updated)
 - ❌ Interface details (SNMP settings, port, community string)
 
-**What gets preserved:**
-- 🔒 Manual tags (tags added directly in Zabbix, not from Loki)
+**Why Tags are NOT Updated:**
+- Tags may be manually managed in Zabbix after initial creation
+- Prevents overwriting custom operational tags
+- Ensures Zabbix users can add their own tags without interference
+- Only set during initial host creation from Netbox data
 
 ---
 
