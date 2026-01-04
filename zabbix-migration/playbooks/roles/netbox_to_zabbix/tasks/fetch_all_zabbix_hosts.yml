@@ -70,24 +70,16 @@
     - zbx_hosts_resp.json.result is defined
     - zbx_hosts_resp.json.result | length > 0
 
-- name: Build Loki_ID to host mapping
+- name: Build Loki_ID to host mapping (using Python-style iteration)
   set_fact:
-    zabbix_hosts_by_loki_id: >-
+    zabbix_hosts_by_loki_id: |
       {%- set mapping = {} -%}
       {%- for host in zbx_hosts_resp.json.result | default([]) -%}
-      {%- set loki_id = None -%}
-      {%- for tag in host.tags | default([]) -%}
-        {%- if tag.tag is defined and tag.value is defined -%}
-          {%- if tag.tag == 'Loki_ID' or tag.tag == 'LOKI_ID' or tag.tag == 'loki_id' -%}
-            {%- set loki_id = tag.value | string -%}
-          {%- endif -%}
-        {%- elif tag is mapping and 'Loki_ID' in tag -%}
-          {%- set loki_id = tag['Loki_ID'] | string -%}
+        {%- set loki_tags = host.tags | default([]) | selectattr('tag', 'defined') | selectattr('tag', 'equalto', 'Loki_ID') | list -%}
+        {%- if loki_tags | length > 0 -%}
+          {%- set loki_id = loki_tags[0].value | string -%}
+          {%- set _ = mapping.update({loki_id: host}) -%}
         {%- endif -%}
-      {%- endfor -%}
-      {%- if loki_id -%}
-      {%- set _ = mapping.update({loki_id: host}) -%}
-      {%- endif -%}
       {%- endfor -%}
       {{ mapping }}
   run_once: true
