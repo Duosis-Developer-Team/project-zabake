@@ -305,10 +305,10 @@ def extract_host_groups(device, device_type):
     if location_name:
         groups.append(location_name)  # e.g., "ICT11"
     
-    # 3. Contact (Tenant)
-    tenant = device.get('tenant', {})
-    if tenant.get('name'):
-        groups.append(tenant['name'])  # e.g., "Customer A"
+    # 3. Contact (Ownership from custom_fields.Contacts)
+    custom_fields = device.get('custom_fields', {})
+    if custom_fields.get('Contacts'):
+        groups.append(custom_fields['Contacts'])  # e.g., "IT Department"
     
     return ','.join(groups)
 ```
@@ -320,14 +320,14 @@ def extract_host_groups(device, device_type):
 Netbox:
   - device_type (determined) = "Lenovo IPMI"
   - device.location.name = "ICT11"
-  - device.tenant.name = "Customer A"
+  - device.custom_fields.Contacts = "IT Department"
 ↓
-Host Groups String: "Lenovo IPMI,ICT11,Customer A"
+Host Groups String: "Lenovo IPMI,ICT11,IT Department"
 ↓
 Resolve to IDs:
   - "Lenovo IPMI" → groupid: 45
   - "ICT11" → groupid: 17
-  - "Customer A" → groupid: 102 (created if not exists)
+  - "IT Department" → groupid: 102 (created if not exists)
 ↓
 Zabbix: groups = [{"groupid": "45"}, {"groupid": "17"}, {"groupid": "102"}]
 ```
@@ -367,13 +367,17 @@ def extract_tags(device):
     if site.get('name'):
         tags['City'] = site['name']
     
-    # Contact (Tenant) - IMPORTANT: Also added as host group
+    # Tenant (Organization/Company)
     tenant = device.get('tenant', {})
     if tenant.get('name'):
-        tags['Contact'] = tenant['name']
+        tags['Tenant'] = tenant['name']
+    
+    # Contact (Ownership from custom_fields) - IMPORTANT: Also added as host group
+    custom_fields = device.get('custom_fields', {})
+    if custom_fields.get('Contacts'):
+        tags['Contact'] = custom_fields['Contacts']
     
     # Responsible Team
-    custom_fields = device.get('custom_fields', {})
     if custom_fields.get('Sorumlu_Ekip'):
         tags['Sorumlu_Ekip'] = custom_fields['Sorumlu_Ekip']
     
@@ -420,7 +424,8 @@ Netbox:
   - device.location.name = "ICT11"
   - device.location.description = "DATA HALL 1"
   - device.site.name = "ALMANYA"
-  - device.tenant.name = "Customer A"
+  - device.tenant.name = "Company ABC"
+  - device.custom_fields.Contacts = "IT Department"
   - device.cluster.name = "vCluster01"
   - device.rack.name = "R101"
   - device.custom_fields.Sorumlu_Ekip = "NOC Team"
@@ -432,7 +437,8 @@ Tags Object:
   "Device_Type": "ThinkAgile HX7531",
   "Location_Detail": "ICT11",
   "City": "ALMANYA",
-  "Contact": "Customer A",
+  "Tenant": "Company ABC",
+  "Contact": "IT Department",
   "Sorumlu_Ekip": "NOC Team",
   "Loki_ID": "12365",
   "Rack_Name": "R101",
@@ -447,7 +453,8 @@ tags = [
   {"tag": "Device_Type", "value": "ThinkAgile HX7531"},
   {"tag": "Location_Detail", "value": "ICT11"},
   {"tag": "City", "value": "ALMANYA"},
-  {"tag": "Contact", "value": "Customer A"},
+  {"tag": "Tenant", "value": "Company ABC"},
+  {"tag": "Contact", "value": "IT Department"},
   {"tag": "Sorumlu_Ekip", "value": "NOC Team"},
   {"tag": "Loki_ID", "value": "12365"},
   {"tag": "Rack_Name", "value": "R101"},
@@ -616,6 +623,8 @@ Zabbix (appended to tags):
   "method": "host.update",
   "params": {
     "hostid": "10084",                       // from zbx_existing_host.hostid
+    "host": "c1h2ict11",                     // always update (continuous field)
+    "name": "c1h2ict11",                     // always update (continuous field)
     "interfaces": [                          // only if IP changed
       {
         "interfaceid": "30",                 // from zbx_existing_host.interfaces[0].interfaceid
@@ -624,8 +633,11 @@ Zabbix (appended to tags):
     ],
     "tags": [                                // always update (continuous field)
       {"tag": "Manufacturer", "value": "LENOVO"},
+      {"tag": "Tenant", "value": "Company ABC"},
+      {"tag": "Contact", "value": "IT Department"},
       {"tag": "Loki_ID", "value": "12365"},
-      // ... all current tags
+      // ... all Loki-sourced tags
+      // ... + any manual tags (preserved from existing host)
     ],
     "monitored_by": 1,                       // always update (continuous field)
     "proxy_groupid": 1                       // always update (continuous field)
@@ -635,15 +647,19 @@ Zabbix (appended to tags):
 }
 ```
 
-**Note:** `groups` and `templates` are **metadata fields** and are **NOT updated** to avoid disrupting existing Zabbix configuration.
+**Note:** 
+- `groups`, `templates`, and `interface details` (SNMP settings) are **metadata fields** and are **NOT updated** to avoid disrupting existing Zabbix configuration.
+- **Manual tags** (tags not sourced from Loki) are **preserved** during updates.
 
 ### 6.3 Update Detection Logic
 
 **Comparison Fields:**
-1. **IP Address:** `_existing_interface.ip` vs `zbx_record.HOST_IP`
-2. **Monitored By:** `zbx_existing_host.monitored_by` vs `zbx_monitored_by`
-3. **Proxy Group:** `zbx_existing_host.proxy_groupid` vs `zbx_proxy_group_id`
-4. **Tags:** `zbx_existing_host.tags | to_json` vs `zbx_continuous_tags | to_json`
+1. **Hostname:** `zbx_existing_host.host` vs `zbx_record.HOSTNAME` (NEW)
+2. **Display Name:** `zbx_existing_host.name` vs `zbx_record.HOSTNAME` (NEW)
+3. **IP Address:** `_existing_interface.ip` vs `zbx_record.HOST_IP`
+4. **Monitored By:** `zbx_existing_host.monitored_by` vs `zbx_monitored_by`
+5. **Proxy Group:** `zbx_existing_host.proxy_groupid` vs `zbx_proxy_group_id`
+6. **Tags:** `zbx_existing_host.tags | to_json` vs `zbx_continuous_tags | to_json`
 
 **Logic:**
 ```yaml
@@ -653,11 +669,25 @@ Zabbix (appended to tags):
       {{
         (
           (_existing_interface.ip | default('') != zbx_record.HOST_IP) or
+          (zbx_existing_host.host | default('') != zbx_record.HOSTNAME) or
+          (zbx_existing_host.name | default('') != zbx_record.HOSTNAME) or
           (zbx_existing_host.monitored_by | default('') | string != zbx_monitored_by | string) or
           (zbx_existing_host.proxy_groupid | default('') | string != zbx_proxy_group_id | string) or
           (zbx_existing_host.tags | default([]) | to_json != zbx_continuous_tags | to_json)
         ) | bool
       }}
+```
+
+**Tag Merge Logic (Preserves Manual Tags):**
+```yaml
+# Extract all tags from Loki
+zbx_continuous_tags: "{{ zbx_tags }}"
+
+# Find manual tags (tags in Zabbix but not from Loki)
+zbx_manual_tags: "{{ zbx_existing_host.tags | rejectattr('tag', 'in', zbx_tags | map(attribute='tag') | list) | list }}"
+
+# Merge Loki tags + manual tags
+zbx_continuous_tags: "{{ zbx_continuous_tags + zbx_manual_tags }}"
 ```
 
 **Update Outcomes:**
@@ -681,11 +711,12 @@ Zabbix (appended to tags):
   "role": {"name": "HOST"},
   "site": {"name": "ALMANYA"},
   "location": {"id": 17, "name": "ICT11", "description": "DATA HALL 1"},
-  "tenant": {"name": "Customer A"},
+  "tenant": {"name": "Company ABC"},
   "primary_ip4": {"address": "10.70.1.22/24"},
   "cluster": {"name": "vCluster01"},
   "rack": {"name": "R101"},
   "custom_fields": {
+    "Contacts": "IT Department",
     "Sorumlu_Ekip": "NOC Team",
     "Kurulum_Tarihi": "2024-01-15"
   },
@@ -705,7 +736,7 @@ location: "ICT11"
 ### Step 2: Extract Host Groups
 
 ```yaml
-host_groups: "Lenovo IPMI,ICT11,Customer A"
+host_groups: "Lenovo IPMI,ICT11,IT Department"
 ```
 
 ### Step 3: Extract Tags
@@ -716,7 +747,8 @@ tags:
   - {tag: "Device_Type", value: "ThinkAgile HX7531"}
   - {tag: "Location_Detail", value: "ICT11"}
   - {tag: "City", value: "ALMANYA"}
-  - {tag: "Contact", value: "Customer A"}
+  - {tag: "Tenant", value: "Company ABC"}
+  - {tag: "Contact", value: "IT Department"}
   - {tag: "Sorumlu_Ekip", value: "NOC Team"}
   - {tag: "Loki_ID", value: "12365"}
   - {tag: "Rack_Name", value: "R101"}
@@ -761,10 +793,15 @@ _needs_update: True (if tags differ) or False (if same)
   "method": "host.create",
   "params": {
     "host": "c1h2ict11",
+    "name": "c1h2ict11",
     "groups": [{"groupid": "45"}, {"groupid": "17"}, {"groupid": "102"}],
     "templates": [{"templateid": "10682"}],
     "interfaces": [{...}],
-    "tags": [{...}],
+    "tags": [
+      {"tag": "Tenant", "value": "Company ABC"},
+      {"tag": "Contact", "value": "IT Department"},
+      // ... all Loki tags
+    ],
     "monitored_by": 1,
     "proxy_groupid": 1
   }
@@ -777,8 +814,14 @@ _needs_update: True (if tags differ) or False (if same)
   "method": "host.update",
   "params": {
     "hostid": "10084",
-    "interfaces": [{...}],  // only if IP changed
-    "tags": [{...}],
+    "host": "c1h2ict11",          // continuous field
+    "name": "c1h2ict11",          // continuous field
+    "interfaces": [{...}],        // continuous field
+    "tags": [
+      {"tag": "Tenant", "value": "Company ABC"},
+      {"tag": "Contact", "value": "IT Department"},
+      // ... all Loki tags + manual tags preserved
+    ],
     "monitored_by": 1,
     "proxy_groupid": 1
   }
@@ -807,18 +850,21 @@ device_result:
 
 | Zabbix Field | Netbox Source | Parser Function | Update Type |
 |-------------|---------------|-----------------|-------------|
-| `host` | `device.name` | Direct | Metadata (no update) |
-| `name` | `device.name` | Direct | Metadata (no update) |
-| `interfaces[].ip` | `device.primary_ip4.address` | `get_primary_ip()` | Continuous |
-| `groups[]` | device_type + location + tenant | `extract_host_groups()` | Metadata (no update) |
-| `templates[]` | device_type mapping | `determine_device_type()` | Metadata (no update) |
-| `tags[]` | Multiple fields | `extract_tags()` | Continuous |
-| `monitored_by` | Always 1 (Proxy) | Hardcoded | Continuous |
-| `proxy_groupid` | location → DC_ID | Proxy group matching | Continuous |
+| `host` | `device.name` | Direct | **Continuous** ✅ |
+| `name` | `device.name` | Direct | **Continuous** ✅ |
+| `interfaces[].ip` | `device.primary_ip4.address` | `get_primary_ip()` | **Continuous** ✅ |
+| `interfaces[].details` | SNMP settings | From template | **Metadata** (no update) ❌ |
+| `groups[]` | device_type + location + contact | `extract_host_groups()` | **Metadata** (no update) ❌ |
+| `templates[]` | device_type mapping | `determine_device_type()` | **Metadata** (no update) ❌ |
+| `tags[]` (Loki-sourced) | Multiple Netbox fields | `extract_tags()` | **Continuous** ✅ |
+| `tags[]` (Manual) | User-added in Zabbix | N/A | **Preserved** (not overwritten) 🔒 |
+| `monitored_by` | Always 1 (Proxy) | Hardcoded | **Continuous** ✅ |
+| `proxy_groupid` | location → DC_ID | Proxy group matching | **Continuous** ✅ |
 
 **Field Types:**
-- **Metadata:** Set once during creation, not updated (groups, templates, hostname)
-- **Continuous:** Updated on every run if changed (IP, tags, proxy_groupid, monitored_by)
+- **Continuous (✅):** Updated on every run if changed
+- **Metadata (❌):** Set once during creation, never updated
+- **Preserved (🔒):** Existing values are kept, not overwritten
 
 ---
 
@@ -839,12 +885,19 @@ device_result:
 - Can fail if hostname changes in Netbox
 - Less reliable than Loki_ID matching
 
-### 9.3 Contact Field
+### 9.3 Contact and Tenant Fields
 
+**Contact (Ownership):**
+- **Netbox:** `device.custom_fields.Contacts`
+- **Zabbix:**
+  - ✅ Added to **Host Groups** (as "IT Department")
+  - ✅ Added to **Tags** (as `{"tag": "Contact", "value": "IT Department"}`)
+
+**Tenant (Organization):**
 - **Netbox:** `device.tenant.name`
 - **Zabbix:**
-  - ✅ Added to **Host Groups** (as "Customer A")
-  - ✅ Added to **Tags** (as `{"tag": "Contact", "value": "Customer A"}`)
+  - ✅ Added to **Tags ONLY** (as `{"tag": "Tenant", "value": "Company ABC"}`)
+  - ❌ NOT added to Host Groups
 
 ### 9.4 Location Hierarchy
 
@@ -854,16 +907,20 @@ device_result:
 
 ### 9.5 Update Behavior
 
-**What gets updated:**
+**What gets updated (Continuous Fields):**
+- ✅ **Hostname** (`host` and `name` fields) - **NEW!**
 - ✅ IP address (if changed)
-- ✅ Tags (if changed)
+- ✅ Tags from Loki (if changed, manual tags preserved)
 - ✅ Proxy group (if changed)
 - ✅ Monitored by (if changed)
 
-**What does NOT get updated:**
-- ❌ Hostname
+**What does NOT get updated (Metadata Fields):**
 - ❌ Host groups
 - ❌ Templates
+- ❌ Interface details (SNMP settings, port, community string)
+
+**What gets preserved:**
+- 🔒 Manual tags (tags added directly in Zabbix, not from Loki)
 
 ---
 

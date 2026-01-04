@@ -204,3 +204,5 @@ display_skipped_hosts = no  # Don't show skipped tasks
 **Note:** Performance optimization is critical for large-scale migrations (100+ devices).
 Current approach would take **~8 minutes for 100 devices**. Optimized approach: **~1-2 minutes**.
 
+
+

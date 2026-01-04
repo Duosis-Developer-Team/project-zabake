@@ -283,13 +283,25 @@
     loop_var: group_name
   when: group_name is defined and group_name in zbx_group_map
 
-- name: Extract continuous tags
+- name: Extract continuous tags (all tags from Loki)
   set_fact:
-    zbx_continuous_tags: "{{ zbx_tags | default([]) | selectattr('tag', 'in', ['Loki_ID', 'Location_Detail', 'City', 'Contact']) | list }}"
+    zbx_continuous_tags: "{{ zbx_tags | default([]) }}"
+  when: zbx_tags is defined
 
-- name: Extract metadata tags
+- name: Preserve manual tags if updating existing host
   set_fact:
-    zbx_metadata_tags: "{{ zbx_tags | default([]) | rejectattr('tag', 'in', ['Loki_ID', 'Location_Detail', 'City', 'Contact']) | list }}"
+    zbx_manual_tags: "{{ zbx_existing_host.tags | default([]) | rejectattr('tag', 'equalto', 'Loki_ID') | selectattr('tag', 'not in', zbx_tags | default([]) | map(attribute='tag') | list) | list }}"
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host is defined
+    - zbx_existing_host.tags is defined
+
+- name: Merge Loki tags with manual tags for update
+  set_fact:
+    zbx_continuous_tags: "{{ (zbx_continuous_tags | default([])) + (zbx_manual_tags | default([])) }}"
+  when:
+    - zbx_scenario == 'update'
+    - zbx_manual_tags is defined
 
 - name: Validate required parameters before create
   set_fact:
@@ -461,6 +473,8 @@
       {{
         (
           (_existing_interface.ip | default('') != zbx_record.HOST_IP) or
+          (zbx_existing_host.host | default('') != zbx_record.HOSTNAME) or
+          (zbx_existing_host.name | default('') != zbx_record.HOSTNAME) or
           (zbx_existing_host.monitored_by | default('') | string != zbx_monitored_by | string) or
           (zbx_existing_host.proxy_groupid | default('') | string != zbx_proxy_group_id | string) or
           (zbx_existing_host.tags | default([]) | to_json != zbx_continuous_tags | to_json)
@@ -497,6 +511,8 @@
       method: "host.update"
       params:
         hostid: "{{ zbx_existing_host.hostid }}"
+        host: "{{ zbx_record.HOSTNAME }}"
+        name: "{{ zbx_record.HOSTNAME }}"
         interfaces: "{{ _zbx_interface_update }}"
         tags: "{{ zbx_continuous_tags | default([]) }}"
         monitored_by: "{{ zbx_monitored_by | int }}"
@@ -531,6 +547,9 @@
   set_fact:
     _updated_fields: >-
       {%- set fields = [] -%}
+      {%- if zbx_existing_host.host | default('') != zbx_record.HOSTNAME -%}
+        {%- set _ = fields.append('Hostname: ' ~ zbx_existing_host.host | default('N/A') ~ ' → ' ~ zbx_record.HOSTNAME) -%}
+      {%- endif -%}
       {%- if _existing_interface.ip | default('') != zbx_record.HOST_IP -%}
         {%- set _ = fields.append('IP: ' ~ _existing_interface.ip | default('N/A') ~ ' → ' ~ zbx_record.HOST_IP) -%}
       {%- endif -%}
