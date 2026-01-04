@@ -94,7 +94,7 @@
       Total hosts checked: {{ zbx_hosts_resp.json.result | default([]) | length }}
       Hosts with Loki_ID: {{ zabbix_hosts_by_loki_id | default({}) | length }}
       {% if zabbix_hosts_by_loki_id | default({}) | length > 0 %}
-      Sample Loki_IDs found: {{ zabbix_hosts_by_loki_id.keys() | list | first(5) }}
+      Sample Loki_IDs found: {{ (zabbix_hosts_by_loki_id.keys() | list | sort)[:5] }}
       {% else %}
       WARNING: No Loki_ID tags found in any host!
       {% endif %}
