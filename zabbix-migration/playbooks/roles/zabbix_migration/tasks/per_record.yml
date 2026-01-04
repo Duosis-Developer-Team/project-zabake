@@ -288,13 +288,22 @@
     zbx_continuous_tags: "{{ zbx_tags | default([]) }}"
   when: zbx_tags is defined
 
-- name: Preserve manual tags if updating existing host
+- name: Get Loki tag names for comparison
   set_fact:
-    zbx_manual_tags: "{{ zbx_existing_host.tags | default([]) | rejectattr('tag', 'equalto', 'Loki_ID') | selectattr('tag', 'not in', zbx_tags | default([]) | map(attribute='tag') | list) | list }}"
+    _loki_tag_names: "{{ zbx_tags | default([]) | map(attribute='tag') | list }}"
   when:
     - zbx_scenario == 'update'
     - zbx_existing_host is defined
     - zbx_existing_host.tags is defined
+
+- name: Preserve manual tags if updating existing host
+  set_fact:
+    zbx_manual_tags: "{{ zbx_existing_host.tags | default([]) | rejectattr('tag', 'in', _loki_tag_names | default([])) | list }}"
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host is defined
+    - zbx_existing_host.tags is defined
+    - _loki_tag_names is defined
 
 - name: Merge Loki tags with manual tags for update
   set_fact:
