@@ -476,6 +476,21 @@
     - _interface_id != ''
     - _missing_params | default([]) | length == 0
 
+- name: Sort existing tags for comparison
+  set_fact:
+    _existing_tags_sorted: "{{ zbx_existing_host.tags | default([]) | sort(attribute='tag') | list }}"
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host is defined
+    - zbx_existing_host.tags is defined
+
+- name: Sort continuous tags for comparison
+  set_fact:
+    _continuous_tags_sorted: "{{ zbx_continuous_tags | default([]) | sort(attribute='tag') | list }}"
+  when:
+    - zbx_scenario == 'update'
+    - zbx_continuous_tags is defined
+
 - name: Check if update is needed (compare with existing values)
   set_fact:
     _needs_update: >-
@@ -486,7 +501,7 @@
           (zbx_existing_host.name | default('') != zbx_record.HOSTNAME) or
           (zbx_existing_host.monitored_by | default('') | string != zbx_monitored_by | string) or
           (zbx_existing_host.proxy_groupid | default('') | string != zbx_proxy_group_id | string) or
-          (zbx_existing_host.tags | default([]) | to_json != zbx_continuous_tags | to_json)
+          (_existing_tags_sorted | default([]) | to_json != _continuous_tags_sorted | default([]) | to_json)
         ) | bool
       }}
   when:
@@ -505,6 +520,8 @@
       Current IP: {{ _existing_interface.ip | default('N/A') }} -> New IP: {{ zbx_record.HOST_IP }}
       Current monitored_by: {{ zbx_existing_host.monitored_by | default('N/A') }} -> New: {{ zbx_monitored_by }}
       Current proxy_groupid: {{ zbx_existing_host.proxy_groupid | default('N/A') }} -> New: {{ zbx_proxy_group_id }}
+      Current tags count: {{ zbx_existing_host.tags | default([]) | length }} -> New tags count: {{ zbx_continuous_tags | default([]) | length }}
+      Tags match: {{ (_existing_tags_sorted | default([]) | to_json) == (_continuous_tags_sorted | default([]) | to_json) }}
   when:
     - zbx_scenario == 'update'
     - zbx_existing_host.hostid is defined
@@ -568,7 +585,7 @@
       {%- if zbx_existing_host.proxy_groupid | default('') | string != zbx_proxy_group_id | string -%}
         {%- set _ = fields.append('Proxy Group: ' ~ zbx_existing_host.proxy_groupid | default('N/A') ~ ' → ' ~ zbx_proxy_group_id) -%}
       {%- endif -%}
-      {%- if (zbx_existing_host.tags | default([]) | to_json) != (zbx_continuous_tags | to_json) -%}
+      {%- if (_existing_tags_sorted | default([]) | to_json) != (_continuous_tags_sorted | default([]) | to_json) -%}
         {%- set _ = fields.append('Tags güncellendi') -%}
       {%- endif -%}
       {{ fields | join(', ') }}
