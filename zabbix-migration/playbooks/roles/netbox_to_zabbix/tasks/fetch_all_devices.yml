@@ -291,11 +291,15 @@
                               device_location = site_obj.get('name', 'N/A')
                       print(f"  Device {i+1}: name={name}, location={device_location}, role={role_name}, manufacturer={manufacturer_name}, model={model}", file=sys.stderr)
               
-              # Apply mapping-based filters (location filter already applied at API level)
+              # Apply mapping-based filters.
+              # Not: location filter tek bir ID ise API seviyesinde uygulanır.
+              # Birden fazla location ID varsa, lokasyon filtresi Python tarafında uygulanır.
               filtered_devices = []
               unmatched_count = 0
               host_device_count = 0
               total_device_count = 0
+              location_filtered_count = 0
+
               for device in devices:
                   total_device_count += 1
                   # Debug: Count HOST devices before mapping check
@@ -313,8 +317,30 @@
                           manufacturer_obj = device_type.get('manufacturer') or {}
                           manufacturer_name = manufacturer_obj.get('name', 'N/A')
                           print(f"DEBUG: Processing HOST device #{host_device_count}: name={device.get('name', 'N/A')}, role={role_name}, manufacturer={manufacturer_name}", file=sys.stderr)
+
+                  # -----------------------------
+                  # Lokasyon filtresi (çoklu ID için)
+                  # -----------------------------
+                  include_by_location = True
+                  if location_ids_to_filter:
+                      if len(location_ids_to_filter) > 1:
+                          # Birden fazla location ID varsa, cihazın location ID'si bu listede mi kontrol et
+                          device_location = device.get('location')
+                          device_location_id = None
+                          if isinstance(device_location, dict):
+                              device_location_id = device_location.get('id')
+                          elif isinstance(device_location, int):
+                              device_location_id = device_location
+
+                          if device_location_id not in location_ids_to_filter:
+                              include_by_location = False
+                              location_filtered_count += 1
+
+                  if not include_by_location:
+                      # Bu cihaz sadece lokasyon filtresinden dolayı hariç tutuldu
+                      continue
                   
-                  # Check mapping-based filters
+                  # Mapping-based filters
                   if device_matches_any_mapping(device):
                       filtered_devices.append(device)
                   else:
