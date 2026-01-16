@@ -225,6 +225,10 @@
       Zabbix Migration Raporu - Tüm İşlemler Başarılı ({{ added_devices_count }} Eklendi, {{ updated_devices_count }} Güncellendi)
       {%- endif -%}
 
+- name: Prepare email recipients as JSON
+  set_fact:
+    mail_recipients_json: "{{ mail_recipients | to_json }}"
+
 - name: Send notification email using Python SMTP
   shell: |
     python3 << 'PYTHON_SCRIPT'
@@ -232,6 +236,7 @@
     from email.mime.text import MIMEText
     from email.mime.multipart import MIMEMultipart
     import sys
+    import json
     
     # Email configuration
     smtp_host = "{{ mail_smtp_host }}"
@@ -239,14 +244,26 @@
     smtp_user = "{{ mail_smtp_username | default('') }}"
     smtp_pass = "{{ mail_smtp_password | default('') }}"
     from_addr = "{{ mail_from }}"
-    to_addrs = "{{ mail_recipients | join(',') }}"
+    recipients_json = r"""{{ mail_recipients_json }}"""
     subject = "{{ email_subject }}"
+    
+    # Parse recipients from JSON
+    try:
+        to_addrs_list = json.loads(recipients_json)
+        if not isinstance(to_addrs_list, list):
+            to_addrs_list = [to_addrs_list]
+    except (json.JSONDecodeError, TypeError):
+        # Fallback: try to parse as comma-separated string
+        to_addrs_list = [addr.strip() for addr in recipients_json.strip('[]"\'').split(',') if addr.strip()]
+    
+    # Create comma-separated string for To header
+    to_addrs_str = ', '.join(to_addrs_list)
     
     # Create message
     msg = MIMEMultipart('alternative')
     msg['Subject'] = subject
     msg['From'] = from_addr
-    msg['To'] = to_addrs
+    msg['To'] = to_addrs_str
     
     # Plain text version
     text_content = r"""{{ email_text_content }}"""
@@ -265,7 +282,7 @@
         server = smtplib.SMTP(smtp_host, smtp_port, timeout=30)
         if smtp_user and smtp_pass:
             server.login(smtp_user, smtp_pass)
-        server.sendmail(from_addr, [addr.strip() for addr in to_addrs.split(',')], msg.as_string())
+        server.sendmail(from_addr, to_addrs_list, msg.as_string())
         server.quit()
         print("✅ Email sent successfully")
         sys.exit(0)
