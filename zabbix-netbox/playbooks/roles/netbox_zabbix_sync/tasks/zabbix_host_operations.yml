@@ -10,9 +10,9 @@
 
 - name: Load mappings
   vars:
-    _tpl_map_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../../mappings/templates.yml"
-    _type_map_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../../mappings/template_types.yml"
-    _dc_map_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../../mappings/datacenters.yml"
+    _tpl_map_path: "{{ templates_map_path | default((playbook_dir | default(ansible_playbook_directory)) + '/../mappings/templates.yml') }}"
+    _type_map_path: "{{ (playbook_dir | default(ansible_playbook_directory)) + '/../mappings/template_types.yml' }}"
+    _dc_map_path: "{{ datacenters_map_path | default((playbook_dir | default(ansible_playbook_directory)) + '/../mappings/datacenters.yml') }}"
   set_fact:
     zbx_tpl_map: "{{ lookup('file', _tpl_map_path) | from_yaml }}"
     zbx_type_map: "{{ lookup('file', _type_map_path) | from_yaml }}"
