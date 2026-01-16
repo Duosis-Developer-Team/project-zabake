@@ -225,9 +225,9 @@
       Zabbix Migration Raporu - Tüm İşlemler Başarılı ({{ added_devices_count }} Eklendi, {{ updated_devices_count }} Güncellendi)
       {%- endif -%}
 
-- name: Prepare email recipients as JSON
+- name: Prepare email recipients as comma-separated string
   set_fact:
-    mail_recipients_json: "{{ mail_recipients | to_json }}"
+    mail_recipients_str: "{{ mail_recipients | join(',') }}"
 
 - name: Send notification email using Python SMTP
   shell: |
@@ -236,7 +236,6 @@
     from email.mime.text import MIMEText
     from email.mime.multipart import MIMEMultipart
     import sys
-    import json
     
     # Email configuration
     smtp_host = "{{ mail_smtp_host }}"
@@ -244,17 +243,11 @@
     smtp_user = "{{ mail_smtp_username | default('') }}"
     smtp_pass = "{{ mail_smtp_password | default('') }}"
     from_addr = "{{ mail_from }}"
-    recipients_json = r"""{{ mail_recipients_json }}"""
+    recipients_str = "{{ mail_recipients_str }}"
     subject = "{{ email_subject }}"
     
-    # Parse recipients from JSON
-    try:
-        to_addrs_list = json.loads(recipients_json)
-        if not isinstance(to_addrs_list, list):
-            to_addrs_list = [to_addrs_list]
-    except (json.JSONDecodeError, TypeError):
-        # Fallback: try to parse as comma-separated string
-        to_addrs_list = [addr.strip() for addr in recipients_json.strip('[]"\'').split(',') if addr.strip()]
+    # Parse recipients from comma-separated string
+    to_addrs_list = [addr.strip() for addr in recipients_str.split(',') if addr.strip()]
     
     # Create comma-separated string for To header
     to_addrs_str = ', '.join(to_addrs_list)
