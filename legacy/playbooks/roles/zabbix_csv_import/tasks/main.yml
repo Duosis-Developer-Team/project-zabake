@@ -37,7 +37,7 @@
 - name: Create temporary CSV file for parsing
   copy:
     content: "{{ zbx_csv_lines | join('\n') }}"
-    dest: "/tmp/zabbix_migration.csv"
+    dest: "/tmp/zabbix_csv_import.csv"
   register: zbx_csv_temp_file
   delegate_to: localhost
   run_once: true
@@ -69,7 +69,7 @@
           sys.exit(1)
       
       print(json.dumps(records))
-    dest: "/tmp/zabbix_migration_parser.py"
+    dest: "/tmp/zabbix_csv_import_parser.py"
     mode: '0755'
   register: zbx_python_script
   delegate_to: localhost
@@ -77,6 +77,8 @@
 
 - name: Parse CSV using Python script
   command: "python3 {{ zbx_python_script.dest }} {{ zbx_csv_temp_file.dest }}"
+  args:
+    creates: "{{ zbx_csv_temp_file.dest }}"
   register: zbx_csv_parse_result
   changed_when: false
   delegate_to: localhost

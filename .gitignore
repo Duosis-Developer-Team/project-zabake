@@ -1,0 +1,87 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+venv/
+env/
+ENV/
+.venv
+
+# Ansible
+*.retry
+.vault_pass
+ansible.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment variables
+.env
+.env.local
+*.env
+
+# Temporary files
+*.tmp
+*.temp
+/tmp/
+/temp/
+
+# Logs
+*.log
+logs/
+
+# Credentials and secrets
+*_secret*
+*_token*
+*_password*
+*_key*
+credentials.yml
+secrets.yml
+vault.yml
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Project specific
+*.json.bak
+*.yml.bak
+*.yaml.bak
+netbox_discovery_report.json
+configuration_file.json
+
+# Test files
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+

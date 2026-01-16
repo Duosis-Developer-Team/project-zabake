@@ -1,0 +1,12 @@
+---
+- name: Zabbix CSV Import
+  hosts: ansible_worker
+  gather_facts: no
+  vars:
+    csv_path: "/data/projects/project_zabake/legacy/examples/hosts.csv"
+  roles:
+    - role: zabbix_csv_import
+      vars:
+        zbx_migration_csv: "{{ csv_path }}"
+
+

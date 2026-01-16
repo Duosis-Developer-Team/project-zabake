@@ -1,5 +1,5 @@
 ---
-- name: Netbox to Zabbix Migration
+- name: Netbox Zabbix Sync
   hosts: localhost
   gather_facts: no
   vars:
@@ -50,7 +50,7 @@
       when: _zabbix_password | length == 0
   
   roles:
-    - role: netbox_to_zabbix
+    - role: netbox_zabbix_sync
       vars:
         netbox_url: "{{ _netbox_url }}"
         netbox_token: "{{ _netbox_token }}"
