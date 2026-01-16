@@ -542,10 +542,8 @@
     - zbx_record is defined
     - zabbix_auth is defined
 
-- name: Process device with Zabbix CSV import role
-  include_role:
-    name: zabbix_csv_import
-    tasks_from: per_record
+- name: Process device with Zabbix host operations
+  include_tasks: zabbix_host_operations.yml
   vars:
     zbx_record: "{{ _zbx_record_for_role }}"
     zabbix_url: "{{ zabbix_url }}"
@@ -563,7 +561,7 @@
     - _zbx_record_for_role is defined
     - _zabbix_auth_for_role is defined
 
-- name: Collect device result from zabbix_csv_import role (if processed)
+- name: Collect device result from zabbix host operations (if processed)
   set_fact:
     current_device_result: "{{ device_result }}"
   when: 
@@ -582,7 +580,7 @@
 - name: Save device result to temporary file
   copy:
     content: "{{ current_device_result | to_json }}"
-    dest: "/tmp/zabbix_csv_import_result_{{ netbox_device.id | default('unknown') }}.json"
+    dest: "/tmp/zabbix_host_operation_result_{{ netbox_device.id | default('unknown') }}.json"
   when: 
     - current_device_result is defined
     - current_device_result | length > 0

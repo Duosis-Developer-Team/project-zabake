@@ -23,6 +23,13 @@
   delegate_to: localhost
   when: zbx_login_resp.json.result is defined
 
+- name: Fail if Zabbix authentication failed
+  fail:
+    msg: "Zabbix authentication failed. Check credentials and API URL."
+  when: zbx_login_resp.json.result is not defined or zabbix_auth is not defined
+  run_once: true
+  delegate_to: localhost
+
 - name: Fetch all hosts from Zabbix
   uri:
     url: "{{ zabbix_url }}"
@@ -42,6 +49,7 @@
   register: zbx_hosts_resp
   run_once: true
   delegate_to: localhost
+  when: zabbix_auth is defined
 
 - name: Display Zabbix hosts fetch results
   debug:

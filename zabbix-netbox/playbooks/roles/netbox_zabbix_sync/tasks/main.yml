@@ -64,7 +64,7 @@
 - name: Collect all device results from temporary files
   find:
     paths: /tmp
-    patterns: "zabbix_csv_import_result_*.json"
+    patterns: "zabbix_host_operation_result_*.json"
   register: result_files
   delegate_to: localhost
   run_once: true
