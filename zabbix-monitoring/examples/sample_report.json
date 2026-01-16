@@ -1,0 +1,62 @@
+{
+  "report_metadata": {
+    "generated_at": "2024-01-15T10:30:00Z",
+    "generator_version": "1.0.0",
+    "data_source": "api",
+    "total_hosts": 100,
+    "total_items_analyzed": 500
+  },
+  "summary": {
+    "total_hosts": 100,
+    "hosts_with_connectivity": 95,
+    "hosts_without_connectivity": 5,
+    "average_connectivity_score": 0.92,
+    "total_connectivity_items": 500,
+    "active_items": 475,
+    "inactive_items": 25
+  },
+  "hosts": [
+    {
+      "hostid": "12345",
+      "hostname": "hostname.example.com",
+      "name": "Host Display Name",
+      "connectivity_score": 0.95,
+      "total_items": 10,
+      "active_items": 9,
+      "inactive_items": 1,
+      "connectivity_items": [
+        {
+          "itemid": "20001",
+          "key_": "icmpping",
+          "name": "ICMP ping",
+          "template": "Template OS Linux",
+          "status": "active",
+          "last_data_time": "2024-01-15T10:25:00Z",
+          "data_available": true,
+          "last_value": "1"
+        }
+      ],
+      "issues": [
+        {
+          "itemid": "20002",
+          "key_": "icmppingsec",
+          "issue": "No data for 2 hours",
+          "severity": "warning"
+        }
+      ]
+    }
+  ],
+  "statistics": {
+    "by_template": {
+      "Template OS Linux": {
+        "total_hosts": 50,
+        "connectivity_score": 0.94
+      }
+    },
+    "by_status": {
+      "active": 475,
+      "inactive": 25
+    }
+  }
+}
+

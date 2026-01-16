@@ -1,0 +1,89 @@
+# Sample Configuration for Zabbix Monitoring Integration
+
+# Zabbix API Configuration
+zabbix:
+  api:
+    url: "https://zabbix.example.com/api_jsonrpc.php"
+    user: "admin"
+    password: "password"
+    timeout: 30
+    verify_ssl: true
+
+# Database Configuration (for production)
+database:
+  host: "zabbix-db.example.com"
+  port: 5432
+  name: "zabbix"
+  user: "zabbix"
+  password: "password"
+  sslmode: "prefer"
+  pool_size: 5
+  max_overflow: 10
+
+# Monitoring Configuration
+monitoring:
+  # Data source: 'api' or 'database'
+  data_source: "api"
+  
+  # Connectivity item patterns
+  connectivity_patterns:
+    - "icmpping"
+    - "icmppingsec"
+    - "net.tcp.service"
+    - "net.tcp.service.perf"
+    - "net.udp.service"
+    - "agent.ping"
+  
+  # Analysis settings
+  analysis:
+    # Maximum age of last data (in seconds)
+    max_data_age: 3600  # 1 hour
+    
+    # Minimum connectivity score (0.0 - 1.0)
+    min_connectivity_score: 0.8
+    
+    # Consider item inactive if no data for this duration (in seconds)
+    inactive_threshold: 7200  # 2 hours
+
+# Report Configuration
+reporting:
+  # Output formats: json, html, csv
+  output_formats:
+    - "json"
+    - "html"
+  
+  # Output directory
+  output_dir: "./reports"
+  
+  # Report filename pattern
+  filename_pattern: "zabbix_monitoring_{timestamp}.{format}"
+  
+  # Include detailed item information
+  include_item_details: true
+  
+  # Include host information
+  include_host_details: true
+
+# Logging Configuration
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  file: "./logs/zabbix_monitoring.log"
+  max_size: "10MB"
+  backup_count: 5
+  format: "json"  # json or text
+
+# Performance Settings
+performance:
+  # Batch size for API requests
+  api_batch_size: 100
+  
+  # Batch size for database queries
+  db_batch_size: 1000
+  
+  # Maximum concurrent connections
+  max_workers: 5
+  
+  # Enable caching
+  enable_cache: true
+  cache_ttl: 300  # 5 minutes
+

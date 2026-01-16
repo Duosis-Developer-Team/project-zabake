@@ -52,6 +52,72 @@ project-zabake/
 │       ├── hosts.csv
 │       └── templates.csv
 │
+├── zabbix-monitoring/           # Zabbix Monitoring Integration modülü
+│   ├── README.md                # Ana dokümantasyon
+│   ├── requirements.yml         # Ansible collection gereksinimleri
+│   ├── CHANGES_SUMMARY.md       # Değişiklik özeti
+│   │
+│   ├── docs/                    # Dokümantasyon
+│   │   ├── guides/              # Kullanım kılavuzları
+│   │   │   ├── AWX_SETUP.md
+│   │   │   ├── DATABASE_CONNECTION.md
+│   │   │   └── USAGE.md
+│   │   ├── analysis/            # Analiz dokümanları
+│   │   │   ├── CONNECTIVITY_ITEMS.md
+│   │   │   └── TEMPLATE_ANALYSIS.md
+│   │   ├── design/              # Tasarım dokümanları
+│   │   │   ├── ARCHITECTURE.md
+│   │   │   ├── DATA_FLOW.md
+│   │   │   └── SCHEMA.md
+│   │   ├── development/         # Geliştirme dokümanları
+│   │   │   ├── DEVELOPMENT_PLAN.md
+│   │   │   └── TASK_BREAKDOWN.md
+│   │   └── scripts/             # Script dokümanları
+│   │       └── API_REFERENCE.md
+│   │
+│   ├── playbooks/               # Ansible playbook'ları
+│   │   ├── ansible.cfg          # Ansible konfigürasyonu
+│   │   ├── zabbix_monitoring_check.yaml
+│   │   └── roles/               # Ansible rolleri
+│   │       └── zabbix_monitoring/
+│   │           ├── defaults/
+│   │           ├── tasks/
+│   │           ├── library/
+│   │           └── templates/
+│   │
+│   ├── scripts/                 # Python scriptleri
+│   │   ├── requirements.txt     # Python gereksinimleri
+│   │   ├── config/              # Konfigürasyon modülleri
+│   │   ├── collectors/          # Veri toplayıcılar
+│   │   │   ├── api_collector.py
+│   │   │   └── db_collector.py
+│   │   ├── analyzers/          # Analiz modülleri
+│   │   │   ├── template_analyzer.py
+│   │   │   ├── connectivity_analyzer.py
+│   │   │   └── data_analyzer.py
+│   │   ├── utils/              # Yardımcı modüller
+│   │   │   ├── logger.py
+│   │   │   └── validators.py
+│   │   ├── reports/            # Rapor modülleri
+│   │   │   ├── report_generator.py
+│   │   │   └── formatters.py
+│   │   └── main.py             # Ana entry point
+│   │
+│   ├── config/                 # Konfigürasyon dosyaları
+│   │   ├── zabbix_api_config.yml
+│   │   ├── db_config.yml
+│   │   └── monitoring_config.yml
+│   │
+│   ├── tests/                  # Unit testler
+│   │   ├── test_collectors/
+│   │   ├── test_analyzers/
+│   │   ├── test_utils/
+│   │   └── fixtures/
+│   │
+│   └── examples/                # Örnek dosyalar
+│       ├── sample_config.yml
+│       └── sample_report.json
+│
 ├── legacy/                      # Eski workflow
 │   ├── README.md                # Legacy dokümantasyonu
 │   ├── scripts/                 # Legacy Python scriptleri
@@ -107,6 +173,36 @@ Zabbix ve Netbox (Loki) sistemleri arasında otomatik senkronizasyon ve envanter
 
 - **examples/**: Örnek CSV dosyaları
 
+### zabbix-monitoring/ (Zabbix Monitoring Integration)
+
+Zabbix host'larındaki connectivity item'larının veri durumunu analiz ederek, host'lardan veri çekilip çekilemediğini tespit eden modül.
+
+- **docs/**: Kapsamlı dokümantasyon
+  - `guides/`: Kullanım kılavuzları (AWX, Database, Usage)
+  - `analysis/`: Connectivity item ve template analizleri
+  - `design/`: Mimari tasarım, veri akışı, şema
+  - `development/`: Geliştirme planı ve görev dağılımı
+  - `scripts/`: Script dokümanları
+
+- **playbooks/**: Ansible playbook'ları ve rolleri
+  - `zabbix_monitoring_check.yaml`: Ana monitoring playbook'u
+  - `roles/`: Ansible rolleri (zabbix_monitoring)
+  - Kubernetes üzerinde AWX ile çalıştırılmak üzere tasarlanmış
+
+- **scripts/**: Python scriptleri
+  - `collectors/`: Zabbix API ve DB veri toplayıcılar
+  - `analyzers/`: Template, connectivity ve veri analiz modülleri
+  - `reports/`: Rapor oluşturucu ve formatlayıcılar
+  - `utils/`: Logging ve validation yardımcı modülleri
+
+- **config/**: Konfigürasyon dosyaları
+  - Zabbix API, database ve monitoring ayarları
+
+- **tests/**: Unit testler
+  - Collector, analyzer ve utility testleri
+
+- **examples/**: Örnek konfigürasyon ve rapor dosyaları
+
 ### legacy/
 
 Eski platform synchronization ve datalake integration workflow'u.
@@ -133,7 +229,8 @@ Arşivlenmiş eski versiyonlar. Referans amaçlı saklanmaktadır.
 
 ## 📝 Notlar
 
-- Yeni geliştirmeler için `zabbix-netbox/` kullanılmalıdır
+- Yeni geliştirmeler için `zabbix-netbox/` ve `zabbix-monitoring/` kullanılmalıdır
+- `zabbix-monitoring/` modülü Zabbix connectivity monitoring için kullanılır
 - `legacy/` klasörü artık aktif olarak geliştirilmemektedir
 - `_old/` klasörü sadece referans amaçlıdır
 - Proje HMDL (Host Metadata-Driven Lifecycle) kapsamında geliştirilmektedir
