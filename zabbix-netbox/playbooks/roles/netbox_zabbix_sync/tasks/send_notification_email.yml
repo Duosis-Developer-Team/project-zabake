@@ -1,8 +1,12 @@
 ---
-- name: Check if there are failed devices
+- name: Calculate device statistics
   set_fact:
     has_failed_devices: "{{ processing_results | default([]) | selectattr('status', 'equalto', 'eklenemedi') | list | length > 0 }}"
     failed_devices_count: "{{ processing_results | default([]) | selectattr('status', 'equalto', 'eklenemedi') | list | length }}"
+    added_devices_count: "{{ processing_results | default([]) | selectattr('status', 'equalto', 'eklendi') | list | length }}"
+    updated_devices_count: "{{ processing_results | default([]) | selectattr('status', 'equalto', 'güncellendi') | list | length }}"
+    current_devices_count: "{{ processing_results | default([]) | selectattr('status', 'equalto', 'güncel') | list | length }}"
+    total_devices_count: "{{ processing_results | default([]) | length }}"
 
 - name: Generate email HTML content
   set_fact:
@@ -108,6 +112,31 @@
         </table>
         {%- endif -%}
         
+        {%- set current_devices = processing_results | default([]) | selectattr('status', 'equalto', 'güncel') | list -%}
+        {%- if current_devices | length > 0 -%}
+        <div class="section-header" style="background-color: #e3f2fd; border-left-color: #2196F3;"><h3>ℹ️ Güncel Cihazlar (Değişiklik Yok) ({{ current_devices | length }})</h3></div>
+        <table>
+          <thead>
+            <tr>
+              <th>Sunucu Adı</th>
+              <th>IP Adresi</th>
+              <th>İşlem Durumu</th>
+              <th>Açıklama</th>
+            </tr>
+          </thead>
+          <tbody>
+            {%- for result in current_devices -%}
+            <tr>
+              <td>{{ result.hostname | default('N/A') }}</td>
+              <td>{{ result.ip | default('N/A') }}</td>
+              <td style="color: #2196F3; font-weight: bold;">GÜNCEL</td>
+              <td>{{ result.reason | default('Değişiklik yok, güncelleme yapılmadı') }}</td>
+            </tr>
+            {%- endfor -%}
+          </tbody>
+        </table>
+        {%- endif -%}
+        
         <p style="margin-top: 30px; color: #666; font-size: 12px;">
           Bu e-posta otomatik olarak Zabbix Migration playbook'u tarafından oluşturulmuştur.
         </p>
@@ -170,8 +199,31 @@
       {%- endfor -%}
       {%- endif %}
       
+      {%- set current_devices = processing_results | default([]) | selectattr('status', 'equalto', 'güncel') | list -%}
+      {%- if current_devices | length > 0 %}
+      
+      ℹ️ GÜNCEL CİHAZLAR (DEĞİŞİKLİK YOK) ({{ current_devices | length }}):
+      -----------------------------------------
+      {%- for result in current_devices %}
+      
+      Sunucu: {{ result.hostname | default('N/A') }}
+      IP: {{ result.ip | default('N/A') }}
+      Durum: GÜNCEL
+      Açıklama: {{ result.reason | default('Değişiklik yok, güncelleme yapılmadı') }}
+      {%- endfor -%}
+      {%- endif %}
+      
       ---
       Bu e-posta otomatik olarak Zabbix Migration playbook'u tarafından oluşturulmuştur.
+
+- name: Generate email subject
+  set_fact:
+    email_subject: >-
+      {%- if has_failed_devices -%}
+      Zabbix Migration Raporu - {{ failed_devices_count }} Sunucu Eklenemedi
+      {%- else -%}
+      Zabbix Migration Raporu - Tüm İşlemler Başarılı ({{ added_devices_count }} Eklendi, {{ updated_devices_count }} Güncellendi)
+      {%- endif -%}
 
 - name: Send notification email using Python SMTP
   shell: |
@@ -188,7 +240,7 @@
     smtp_pass = "{{ mail_smtp_password | default('') }}"
     from_addr = "{{ mail_from }}"
     to_addrs = "{{ mail_recipients | join(',') }}"
-    subject = "Zabbix Migration Raporu - {{ failed_devices_count }} Sunucu Eklenemedi"
+    subject = "{{ email_subject }}"
     
     # Create message
     msg = MIMEMultipart('alternative')
@@ -224,7 +276,8 @@
   args:
     executable: /bin/bash
   when: 
-    - has_failed_devices | default(false)
+    - processing_results is defined
+    - processing_results | length > 0
     - mail_recipients is defined
     - mail_recipients | length > 0
   delegate_to: localhost
@@ -238,8 +291,18 @@
       ============================================
       EMAIL NOTIFICATION STATUS
       ============================================
+      {% if processing_results is defined and processing_results | length > 0 %}
+      📊 İşlem Özeti:
+      - Toplam: {{ total_devices_count }}
+      - Eklendi: {{ added_devices_count }}
+      - Güncellendi: {{ updated_devices_count }}
+      - Güncel: {{ current_devices_count }}
+      - Başarısız: {{ failed_devices_count }}
       {% if has_failed_devices %}
       ⚠️  Başarısız işlem var: {{ failed_devices_count }} sunucu eklenemedi
+      {% else %}
+      ✅ Tüm işlemler başarılı
+      {% endif %}
       {% if mail_recipients is defined and mail_recipients | length > 0 %}
       {% if mail_send_result is defined and mail_send_result.rc is defined %}
       {% if mail_send_result.rc == 0 %}
@@ -258,7 +321,7 @@
       ℹ️  E-posta gönderilmedi: mail_recipients tanımlı değil
       {% endif %}
       {% else %}
-      ✅ Tüm işlemler başarılı, e-posta gönderilmedi
+      ℹ️  İşlem sonucu bulunamadı
       {% endif %}
       ============================================
   run_once: true
