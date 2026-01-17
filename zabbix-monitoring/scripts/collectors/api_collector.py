@@ -62,13 +62,34 @@ class ZabbixAPICollector:
     
     def _authenticate(self):
         """Authenticate with Zabbix API"""
+        # Try newer Zabbix API format (5.4+) with "username" first
         try:
             response = self._api_request("user.login", {
-                "user": self.user,
+                "username": self.user,
                 "password": self.password
             })
             self.auth_token = response.get("result")
-            logger.info("Successfully authenticated with Zabbix API")
+            logger.info("Successfully authenticated with Zabbix API (using 'username' parameter)")
+            return
+        except ZabbixAPIError as e:
+            # If we get "Invalid params" error, try older format with "user"
+            if "Invalid params" in str(e) or "-32602" in str(e):
+                logger.debug("Trying authentication with older 'user' parameter format")
+                try:
+                    response = self._api_request("user.login", {
+                        "user": self.user,
+                        "password": self.password
+                    })
+                    self.auth_token = response.get("result")
+                    logger.info("Successfully authenticated with Zabbix API (using 'user' parameter)")
+                    return
+                except Exception as e2:
+                    logger.error(f"Authentication failed with both formats: {str(e2)}")
+                    raise ZabbixAPIError(f"Failed to authenticate: {str(e2)}")
+            else:
+                # Different error, re-raise
+                logger.error(f"Authentication failed: {str(e)}")
+                raise ZabbixAPIError(f"Failed to authenticate: {str(e)}")
         except Exception as e:
             logger.error(f"Authentication failed: {str(e)}")
             raise ZabbixAPIError(f"Failed to authenticate: {str(e)}")
