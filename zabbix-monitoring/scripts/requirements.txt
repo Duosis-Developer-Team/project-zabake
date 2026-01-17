@@ -1,8 +1,8 @@
 # Python Requirements for Zabbix Monitoring Integration
 # Install with: pip install -r requirements.txt
 
-# Zabbix API
-py-zabbix>=1.1.7
+# Zabbix API (using requests directly, py-zabbix optional)
+# py-zabbix>=1.1.7
 
 # Database
 psycopg2-binary>=2.9.0
