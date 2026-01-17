@@ -46,6 +46,7 @@
       {{ master_items_check_data.content | from_json | to_nice_json }}
   when: 
     - master_items_check_file.stat.exists
+    - master_items_check_data is defined
     - debug_enabled | default(false) | bool
 
 - name: "Save master items check summary for debugging"

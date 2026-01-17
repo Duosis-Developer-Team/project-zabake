@@ -48,6 +48,7 @@
       {{ analysis_results_data.content | from_json | to_nice_json }}
   when: 
     - analysis_results_file.stat.exists
+    - analysis_results_data is defined
     - debug_enabled | default(false) | bool
 
 - name: "Save analysis summary for debugging"
