@@ -43,7 +43,7 @@
       debug:
         msg: "{{ collect_result.stdout_lines }}"
       when: 
-        - debug_enabled | bool(false)
+        - debug_enabled | default(false) | bool
         - collect_result.stdout_lines is defined
 
     - name: "Check collected data files"
@@ -61,7 +61,7 @@
       debug:
         msg: "{{ item.item }}: {{ 'exists' if item.stat.exists else 'missing' }}"
       loop: "{{ data_files.results }}"
-      when: debug_enabled | bool(false)
+      when: debug_enabled | default(false) | bool
 
     - name: "Save collection summary for debugging"
       copy:
@@ -74,7 +74,7 @@
           {% endfor %}
         dest: "{{ debug_output_dir }}/collection_summary.txt"
         mode: '0644'
-      when: debug_save_intermediate_files | bool(true)
+      when: debug_save_intermediate_files | default(true) | bool
 
   rescue:
     - name: "Collection failed"

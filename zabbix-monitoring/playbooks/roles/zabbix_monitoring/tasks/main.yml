@@ -6,48 +6,48 @@
   block:
     - name: "Validate configuration"
       include_tasks: validate_config.yml
-      when: step_collect_data | bool(true)
+      when: step_collect_data | default(true) | bool
 
     - name: "Collect data from Zabbix"
       include_tasks: collect_data.yml
-      when: step_collect_data | bool(true)
+      when: step_collect_data | default(true) | bool
       vars:
         debug_step: "collect_data"
 
     - name: "Analyze templates and detect connectivity items"
       include_tasks: analyze_templates.yml
-      when: step_analyze_templates | bool(true)
+      when: step_analyze_templates | default(true) | bool
       vars:
         debug_step: "analyze_templates"
 
     - name: "Detect connectivity items"
       include_tasks: detect_connectivity.yml
-      when: step_detect_connectivity | bool(true)
+      when: step_detect_connectivity | default(true) | bool
       vars:
         debug_step: "detect_connectivity"
 
     - name: "Analyze connectivity data"
       include_tasks: analyze_data.yml
-      when: step_analyze_data | bool(true)
+      when: step_analyze_data | default(true) | bool
       vars:
         debug_step: "analyze_data"
 
     - name: "Check master items"
       include_tasks: check_master_items.yml
-      when: step_check_master_items | bool(true)
+      when: step_check_master_items | default(true) | bool
       vars:
         debug_step: "check_master_items"
 
     - name: "Generate report"
       include_tasks: generate_report.yml
-      when: step_generate_report | bool(true)
+      when: step_generate_report | default(true) | bool
       vars:
         debug_step: "generate_report"
 
     - name: "Send email notification"
       include_tasks: send_notification_email.yml
       when: 
-        - step_send_notifications | bool(true)
+        - step_send_notifications | default(true) | bool
         - mail_recipients is defined
         - mail_recipients | length > 0
       vars:
@@ -66,7 +66,7 @@
           Error: {{ ansible_failed_result.msg | default('Unknown error') }}
         dest: "{{ debug_output_dir }}/error_{{ ansible_date_time.epoch }}.txt"
         mode: '0644'
-      when: debug_save_intermediate_files | bool(true)
+      when: debug_save_intermediate_files | default(true) | bool
       
     - name: "Fail the playbook"
       fail:

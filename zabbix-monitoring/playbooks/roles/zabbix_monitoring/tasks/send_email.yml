@@ -138,7 +138,7 @@
     patterns: "zabbix_monitoring_*.{{ item }}"
   register: report_files_to_attach
   loop: "{{ report_storage.email.formats_to_attach }}"
-  when: report_storage.email.attach_reports | bool(true)
+  when: report_storage.email.attach_reports | default(true) | bool
 
 - name: "Send email notification using Python SMTP"
   shell: |
@@ -183,7 +183,7 @@
     msg.attach(part2)
     
     # Attach report files
-    {% if report_storage.email.attach_reports | bool(true) %}
+    {% if report_storage.email.attach_reports | default(true) | bool %}
     for fmt in formats_to_attach:
         pattern = os.path.join(output_dir, f"zabbix_monitoring_*.{fmt}")
         for filepath in glob.glob(pattern):
@@ -214,7 +214,7 @@
   args:
     executable: /bin/bash
   when:
-    - report_storage.email.enabled | bool(false)
+    - report_storage.email.enabled | default(false) | bool
     - report_storage.email.recipients is defined
     - report_storage.email.recipients | length > 0
   delegate_to: localhost
@@ -240,4 +240,4 @@
       ℹ️  Email notification skipped or not configured
       {% endif %}
       ============================================
-  when: report_storage.email.enabled | bool(false)
+  when: report_storage.email.enabled | default(false) | bool

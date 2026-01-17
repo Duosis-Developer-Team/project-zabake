@@ -20,7 +20,7 @@
   debug:
     msg: "{{ check_master_items_result.stdout_lines }}"
   when: 
-    - debug_enabled | bool(false)
+    - debug_enabled | default(false) | bool
     - check_master_items_result.stdout_lines is defined
 
 - name: "Check master items output"
@@ -31,7 +31,7 @@
 - name: "Display master items check file status"
   debug:
     msg: "Master items check file: {{ 'exists' if master_items_check_file.stat.exists else 'missing' }}"
-  when: debug_enabled | bool(false)
+  when: debug_enabled | default(false) | bool
 
 - name: "Load and display master items check summary"
   slurp:
@@ -46,7 +46,7 @@
       {{ master_items_check_data.content | from_json | to_nice_json }}
   when: 
     - master_items_check_file.stat.exists
-    - debug_enabled | bool(false)
+    - debug_enabled | default(false) | bool
 
 - name: "Save master items check summary for debugging"
   copy:
@@ -55,4 +55,4 @@
       Check file: {{ 'exists' if master_items_check_file.stat.exists else 'missing' }}
     dest: "{{ debug_output_dir }}/master_items_check_summary.txt"
     mode: '0644'
-  when: debug_save_intermediate_files | bool(true)
+  when: debug_save_intermediate_files | default(true) | bool

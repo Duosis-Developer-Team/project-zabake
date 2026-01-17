@@ -45,4 +45,4 @@
       - Output Directory: {{ output_dir }}
       - Debug Enabled: {{ debug_enabled }}
       - Log Level: {{ log_level }}
-  when: monitoring_verbose | bool(false)
+  when: monitoring_verbose | default(false) | bool

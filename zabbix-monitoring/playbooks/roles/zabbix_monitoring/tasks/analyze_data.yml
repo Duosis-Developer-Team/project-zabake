@@ -22,7 +22,7 @@
   debug:
     msg: "{{ analyze_data_result.stdout_lines }}"
   when: 
-    - debug_enabled | bool(false)
+    - debug_enabled | default(false) | bool
     - analyze_data_result.stdout_lines is defined
 
 - name: "Check analysis output"
@@ -33,7 +33,7 @@
 - name: "Display analysis results file status"
   debug:
     msg: "Analysis results file: {{ 'exists' if analysis_results_file.stat.exists else 'missing' }}"
-  when: debug_enabled | bool(false)
+  when: debug_enabled | default(false) | bool
 
 - name: "Load and display analysis summary"
   slurp:
@@ -48,7 +48,7 @@
       {{ analysis_results_data.content | from_json | to_nice_json }}
   when: 
     - analysis_results_file.stat.exists
-    - debug_enabled | bool(false)
+    - debug_enabled | default(false) | bool
 
 - name: "Save analysis summary for debugging"
   copy:
@@ -57,4 +57,4 @@
       Results file: {{ 'exists' if analysis_results_file.stat.exists else 'missing' }}
     dest: "{{ debug_output_dir }}/data_analysis_summary.txt"
     mode: '0644'
-  when: debug_save_intermediate_files | bool(true)
+  when: debug_save_intermediate_files | default(true) | bool

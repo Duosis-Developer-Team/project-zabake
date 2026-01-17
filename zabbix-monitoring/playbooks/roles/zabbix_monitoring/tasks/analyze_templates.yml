@@ -19,7 +19,7 @@
   debug:
     msg: "{{ analyze_templates_result.stdout_lines }}"
   when: 
-    - debug_enabled | bool(false)
+    - debug_enabled | default(false) | bool
     - analyze_templates_result.stdout_lines is defined
 
 - name: "Check template analysis output"
@@ -30,7 +30,7 @@
 - name: "Display template analysis file status"
   debug:
     msg: "Template analysis file: {{ 'exists' if template_analysis_file.stat.exists else 'missing' }}"
-  when: debug_enabled | bool(false)
+  when: debug_enabled | default(false) | bool
 
 - name: "Save template analysis summary for debugging"
   copy:
@@ -40,4 +40,4 @@
       Analysis output: {{ 'exists' if template_analysis_file.stat.exists else 'missing' }}
     dest: "{{ debug_output_dir }}/template_analysis_summary.txt"
     mode: '0644'
-  when: debug_save_intermediate_files | bool(true)
+  when: debug_save_intermediate_files | default(true) | bool
