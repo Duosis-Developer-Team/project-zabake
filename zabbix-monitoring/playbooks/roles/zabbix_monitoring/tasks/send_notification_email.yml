@@ -97,7 +97,7 @@
         {% endif %}
         
         {% if report_data.hosts is defined and report_data.hosts | length > 0 %}
-        {% set hosts_with_issues = report_data.hosts | selectattr('issues', 'defined') | selectattr('issues', 'length') | list %}
+        {% set hosts_with_issues = report_data.hosts | selectattr('issues', 'defined') | selectattr('issues') | list %}
         {% if hosts_with_issues | length > 0 %}
         <div class="summary error">
           <h3>❌ Sorunlu Host'lar ({{ hosts_with_issues | length }})</h3>
