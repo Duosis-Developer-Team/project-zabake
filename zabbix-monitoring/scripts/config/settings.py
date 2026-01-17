@@ -6,7 +6,6 @@ import os
 import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional
-from dotenv import load_dotenv
 
 
 class ConfigError(Exception):
@@ -24,9 +23,13 @@ class Settings:
         Args:
             config_dir: Configuration directory path (default: ./config)
         """
-        # Load environment variables
-        load_dotenv()
-        
+        # Load environment variables from .env if python-dotenv is available
+        try:
+            from dotenv import load_dotenv
+            load_dotenv()
+        except ImportError:
+            pass  # python-dotenv not installed; use env vars and config files
+
         # Set config directory
         if config_dir is None:
             self.config_dir = Path(__file__).parent.parent.parent / "config"
