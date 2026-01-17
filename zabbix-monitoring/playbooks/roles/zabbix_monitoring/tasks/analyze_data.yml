@@ -45,7 +45,7 @@
   debug:
     msg: |
       Analysis Summary:
-      {{ analysis_results_data.content | from_json | to_nice_json }}
+      {{ analysis_results_data.content | default('e30=') | b64decode | from_json | to_nice_json }}
   when: 
     - analysis_results_file.stat.exists
     - analysis_results_data is defined

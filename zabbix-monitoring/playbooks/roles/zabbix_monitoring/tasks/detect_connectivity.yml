@@ -40,7 +40,7 @@
 
 - name: "Display connectivity items summary"
   debug:
-    msg: "Connectivity items detected: Total items: {{ (connectivity_items_data.content | from_json | length) if (connectivity_items_data is defined and connectivity_items_data.content is defined) else 0 }}"
+    msg: "Connectivity items detected: Total items: {{ connectivity_items_data.content | default('W10=') | b64decode | from_json | length | default(0) }}"
   when: 
     - connectivity_items_file.stat.exists
     - connectivity_items_data is defined
@@ -50,7 +50,7 @@
   copy:
     content: |
       Connectivity detection completed at: {{ ansible_date_time.iso8601 }}
-      Items detected: {{ (connectivity_items_data.content | from_json | length) if (connectivity_items_data is defined and connectivity_items_data.content is defined and connectivity_items_file.stat.exists) else 'N/A' }}
+      Items detected: {{ connectivity_items_data.content | default('W10=') | b64decode | from_json | length | default(0) if (connectivity_items_data is defined and connectivity_items_file.stat.exists) else 'N/A' }}
     dest: "{{ debug_output_dir }}/connectivity_detection_summary.txt"
     mode: '0644'
   when: debug_save_intermediate_files | default(true) | bool
