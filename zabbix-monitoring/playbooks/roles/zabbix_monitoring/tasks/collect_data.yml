@@ -77,8 +77,10 @@
       when: debug_save_intermediate_files | default(true) | bool
 
   rescue:
-    - name: "Collection failed"
+    - name: "Collection failed - display message"
       debug:
         msg: "Data collection failed. Check logs at {{ log_file }}"
+
+    - name: "Fail the playbook after collection error"
       fail:
         msg: "Failed to collect data from Zabbix"
