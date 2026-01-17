@@ -58,6 +58,13 @@
       debug:
         msg: "Error in step: {{ debug_step | default('unknown') }}"
       
+    - name: "Create debug output directory if it doesn't exist"
+      file:
+        path: "{{ debug_output_dir }}"
+        state: directory
+        mode: '0755'
+      when: debug_save_intermediate_files | default(true) | bool
+    
     - name: "Save error information"
       copy:
         content: |
