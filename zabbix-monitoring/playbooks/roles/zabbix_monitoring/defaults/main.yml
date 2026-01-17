@@ -29,6 +29,49 @@ output_dir: "./reports"
 output_formats: ["json"]
 output_filename_pattern: "zabbix_monitoring_{timestamp}.{format}"
 
+# Report Storage Configuration
+report_storage:
+  # Local file system storage
+  local:
+    enabled: true
+    path: "./reports"
+    keep_last_n: 10  # Keep last N reports, 0 = keep all
+  
+  # AWX Artifact Storage
+  awx_artifacts:
+    enabled: true  # Automatically enabled in AWX
+    path: "{{ output_dir }}"  # Will be stored as AWX artifacts
+  
+  # Email Notification
+  email:
+    enabled: false
+    smtp_host: ""
+    smtp_port: 25
+    smtp_username: ""
+    smtp_password: ""
+    from_address: ""
+    recipients: []  # List of email addresses
+    send_on_success: true
+    send_on_failure: true
+    attach_reports: true  # Attach report files to email
+    formats_to_attach: ["html", "json"]  # Which formats to attach
+  
+  # Remote Storage (S3, NFS, etc.)
+  remote:
+    enabled: false
+    type: "s3"  # s3, nfs, sftp
+    # S3 Configuration
+    s3_bucket: ""
+    s3_prefix: "zabbix-monitoring/"
+    s3_access_key: ""
+    s3_secret_key: ""
+    s3_region: "us-east-1"
+    # NFS/SFTP Configuration
+    remote_host: ""
+    remote_path: ""
+    remote_user: ""
+    remote_key: ""
+
 # Filtering Configuration
 filter_host_groups: []
 filter_templates: []
@@ -67,3 +110,4 @@ step_detect_connectivity: true
 step_analyze_data: true
 step_check_master_items: true
 step_generate_report: true
+step_send_notifications: true  # Send email/notifications after report generation

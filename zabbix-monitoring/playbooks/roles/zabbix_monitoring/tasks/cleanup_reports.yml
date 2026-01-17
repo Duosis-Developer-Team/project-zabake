@@ -1,0 +1,32 @@
+---
+# Cleanup old reports (keep last N)
+
+- name: "Get all report files sorted by modification time"
+  find:
+    paths: "{{ output_dir }}"
+    patterns: "zabbix_monitoring_*"
+    file_type: file
+  register: all_reports
+
+- name: "Sort reports by modification time (newest first)"
+  set_fact:
+    sorted_reports: "{{ all_reports.files | sort(attribute='mtime', reverse=true) }}"
+
+- name: "Calculate reports to delete"
+  set_fact:
+    reports_to_delete: "{{ sorted_reports[report_storage.local.keep_last_n | int(10):] }}"
+  when: sorted_reports | length > (report_storage.local.keep_last_n | int(10))
+
+- name: "Delete old reports"
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ reports_to_delete | default([]) }}"
+  when: reports_to_delete | default([]) | length > 0
+
+- name: "Display cleanup summary"
+  debug:
+    msg: |
+      Cleaned up {{ reports_to_delete | default([]) | length }} old report(s)
+      Keeping {{ report_storage.local.keep_last_n }} most recent reports
+  when: reports_to_delete | default([]) | length > 0

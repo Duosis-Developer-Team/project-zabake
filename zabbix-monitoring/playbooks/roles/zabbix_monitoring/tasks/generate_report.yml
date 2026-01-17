@@ -61,4 +61,5 @@
       Reports generated in: {{ output_dir }}
       Debug output in: {{ debug_output_dir }}
       Log file: {{ log_file }}
+      Report files: {{ all_report_files.files | length | default(0) }}
       ============================================
