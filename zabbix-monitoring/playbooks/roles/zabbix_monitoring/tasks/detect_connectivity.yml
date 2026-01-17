@@ -1,0 +1,57 @@
+---
+# Detect connectivity items based on template configuration
+
+- name: "Detect connectivity items from templates"
+  command: >
+    python3 {{ playbook_dir }}/../scripts/main.py
+    --mode detect-connectivity
+    --template-mapping {{ template_mapping_file }}
+    --input-dir {{ debug_output_dir }}
+    --output-dir {{ debug_output_dir }}
+    --log-level {{ log_level }}
+    --log-file {{ log_file }}
+    --verbose
+  register: detect_connectivity_result
+  changed_when: false
+  failed_when: detect_connectivity_result.rc != 0
+
+- name: "Display connectivity detection result"
+  debug:
+    msg: "{{ detect_connectivity_result.stdout_lines }}"
+  when: 
+    - debug_enabled | bool(false)
+    - detect_connectivity_result.stdout_lines is defined
+
+- name: "Check connectivity items output"
+  stat:
+    path: "{{ debug_output_dir }}/connectivity_items.json"
+  register: connectivity_items_file
+
+- name: "Display connectivity items file status"
+  debug:
+    msg: "Connectivity items file: {{ 'exists' if connectivity_items_file.stat.exists else 'missing' }}"
+  when: debug_enabled | bool(false)
+
+- name: "Load and display connectivity items count"
+  slurp:
+    src: "{{ debug_output_dir }}/connectivity_items.json"
+  register: connectivity_items_data
+  when: connectivity_items_file.stat.exists
+
+- name: "Display connectivity items summary"
+  debug:
+    msg: |
+      Connectivity items detected:
+      Total items: {{ connectivity_items_data.content | from_json | length | default(0) }}
+  when: 
+    - connectivity_items_file.stat.exists
+    - debug_enabled | bool(false)
+
+- name: "Save connectivity detection summary for debugging"
+  copy:
+    content: |
+      Connectivity detection completed at: {{ ansible_date_time.iso8601 }}
+      Items detected: {{ connectivity_items_data.content | from_json | length | default(0) if connectivity_items_file.stat.exists else 'N/A' }}
+    dest: "{{ debug_output_dir }}/connectivity_detection_summary.txt"
+    mode: '0644'
+  when: debug_save_intermediate_files | bool(true)

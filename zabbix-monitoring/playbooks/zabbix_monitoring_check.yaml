@@ -1,0 +1,42 @@
+---
+# Zabbix Monitoring Check Playbook
+# This playbook checks connectivity items and master items for Zabbix hosts
+# Each step is debuggable in AWX
+
+- name: "Zabbix Monitoring Integration - Connectivity Check"
+  hosts: localhost
+  gather_facts: true
+  become: false
+  
+  vars:
+    # Override defaults if needed
+    # All variables can be passed via AWX extra_vars or command line
+    
+  roles:
+    - role: zabbix_monitoring
+      vars:
+        # Configuration will be loaded from defaults/main.yml
+        # Can be overridden via extra_vars in AWX
+
+  post_tasks:
+    - name: "Display final summary"
+      debug:
+        msg: |
+          ============================================
+          Zabbix Monitoring Check Completed
+          ============================================
+          Check the output directory for reports: {{ output_dir }}
+          Check debug output directory: {{ debug_output_dir }}
+          Log file: {{ log_file }}
+          ============================================
+      
+    - name: "List generated report files"
+      find:
+        paths: "{{ output_dir }}"
+        patterns: "zabbix_monitoring_*"
+      register: final_report_files
+      
+    - name: "Display report file list"
+      debug:
+        msg: "Report files: {{ final_report_files.files | map(attribute='path') | list }}"
+      when: final_report_files.files | length > 0

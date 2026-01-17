@@ -1,0 +1,58 @@
+---
+# Check master items for connectivity
+
+- name: "Check master items"
+  command: >
+    python3 {{ playbook_dir }}/../scripts/main.py
+    --mode check-master-items
+    --template-mapping {{ template_mapping_file }}
+    --input-dir {{ debug_output_dir }}
+    --output-dir {{ debug_output_dir }}
+    --master-item-threshold {{ analysis_master_item_threshold }}
+    --log-level {{ log_level }}
+    --log-file {{ log_file }}
+    --verbose
+  register: check_master_items_result
+  changed_when: false
+  failed_when: check_master_items_result.rc != 0
+
+- name: "Display master items check result"
+  debug:
+    msg: "{{ check_master_items_result.stdout_lines }}"
+  when: 
+    - debug_enabled | bool(false)
+    - check_master_items_result.stdout_lines is defined
+
+- name: "Check master items output"
+  stat:
+    path: "{{ debug_output_dir }}/master_items_check.json"
+  register: master_items_check_file
+
+- name: "Display master items check file status"
+  debug:
+    msg: "Master items check file: {{ 'exists' if master_items_check_file.stat.exists else 'missing' }}"
+  when: debug_enabled | bool(false)
+
+- name: "Load and display master items check summary"
+  slurp:
+    src: "{{ debug_output_dir }}/master_items_check.json"
+  register: master_items_check_data
+  when: master_items_check_file.stat.exists
+
+- name: "Display master items check summary"
+  debug:
+    msg: |
+      Master Items Check Summary:
+      {{ master_items_check_data.content | from_json | to_nice_json }}
+  when: 
+    - master_items_check_file.stat.exists
+    - debug_enabled | bool(false)
+
+- name: "Save master items check summary for debugging"
+  copy:
+    content: |
+      Master items check completed at: {{ ansible_date_time.iso8601 }}
+      Check file: {{ 'exists' if master_items_check_file.stat.exists else 'missing' }}
+    dest: "{{ debug_output_dir }}/master_items_check_summary.txt"
+    mode: '0644'
+  when: debug_save_intermediate_files | bool(true)

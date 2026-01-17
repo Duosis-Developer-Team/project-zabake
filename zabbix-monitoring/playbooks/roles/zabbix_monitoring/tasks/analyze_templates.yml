@@ -1,0 +1,43 @@
+---
+# Analyze templates and load template configuration
+
+- name: "Load template mapping configuration"
+  command: >
+    python3 {{ playbook_dir }}/../scripts/main.py
+    --mode analyze-templates
+    --template-mapping {{ template_mapping_file }}
+    --input-dir {{ debug_output_dir }}
+    --output-dir {{ debug_output_dir }}
+    --log-level {{ log_level }}
+    --log-file {{ log_file }}
+    --verbose
+  register: analyze_templates_result
+  changed_when: false
+  failed_when: analyze_templates_result.rc != 0
+
+- name: "Display template analysis result"
+  debug:
+    msg: "{{ analyze_templates_result.stdout_lines }}"
+  when: 
+    - debug_enabled | bool(false)
+    - analyze_templates_result.stdout_lines is defined
+
+- name: "Check template analysis output"
+  stat:
+    path: "{{ debug_output_dir }}/template_analysis.json"
+  register: template_analysis_file
+
+- name: "Display template analysis file status"
+  debug:
+    msg: "Template analysis file: {{ 'exists' if template_analysis_file.stat.exists else 'missing' }}"
+  when: debug_enabled | bool(false)
+
+- name: "Save template analysis summary for debugging"
+  copy:
+    content: |
+      Template analysis completed at: {{ ansible_date_time.iso8601 }}
+      Template mapping file: {{ template_mapping_file }}
+      Analysis output: {{ 'exists' if template_analysis_file.stat.exists else 'missing' }}
+    dest: "{{ debug_output_dir }}/template_analysis_summary.txt"
+    mode: '0644'
+  when: debug_save_intermediate_files | bool(true)

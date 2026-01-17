@@ -1,0 +1,60 @@
+---
+# Analyze connectivity data
+
+- name: "Analyze connectivity data"
+  command: >
+    python3 {{ playbook_dir }}/../scripts/main.py
+    --mode analyze-data
+    --template-mapping {{ template_mapping_file }}
+    --input-dir {{ debug_output_dir }}
+    --output-dir {{ debug_output_dir }}
+    --max-data-age {{ analysis_max_data_age }}
+    --inactive-threshold {{ analysis_inactive_threshold }}
+    --min-connectivity-score {{ analysis_min_connectivity_score }}
+    --log-level {{ log_level }}
+    --log-file {{ log_file }}
+    --verbose
+  register: analyze_data_result
+  changed_when: false
+  failed_when: analyze_data_result.rc != 0
+
+- name: "Display data analysis result"
+  debug:
+    msg: "{{ analyze_data_result.stdout_lines }}"
+  when: 
+    - debug_enabled | bool(false)
+    - analyze_data_result.stdout_lines is defined
+
+- name: "Check analysis output"
+  stat:
+    path: "{{ debug_output_dir }}/analysis_results.json"
+  register: analysis_results_file
+
+- name: "Display analysis results file status"
+  debug:
+    msg: "Analysis results file: {{ 'exists' if analysis_results_file.stat.exists else 'missing' }}"
+  when: debug_enabled | bool(false)
+
+- name: "Load and display analysis summary"
+  slurp:
+    src: "{{ debug_output_dir }}/analysis_results.json"
+  register: analysis_results_data
+  when: analysis_results_file.stat.exists
+
+- name: "Display analysis summary"
+  debug:
+    msg: |
+      Analysis Summary:
+      {{ analysis_results_data.content | from_json | to_nice_json }}
+  when: 
+    - analysis_results_file.stat.exists
+    - debug_enabled | bool(false)
+
+- name: "Save analysis summary for debugging"
+  copy:
+    content: |
+      Data analysis completed at: {{ ansible_date_time.iso8601 }}
+      Results file: {{ 'exists' if analysis_results_file.stat.exists else 'missing' }}
+    dest: "{{ debug_output_dir }}/data_analysis_summary.txt"
+    mode: '0644'
+  when: debug_save_intermediate_files | bool(true)

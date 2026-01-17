@@ -1,0 +1,84 @@
+---
+# Collect data from Zabbix API or Database
+
+- name: "Collect data from Zabbix"
+  block:
+    - name: "Collect hosts from Zabbix API"
+      command: >
+        python3 {{ playbook_dir }}/../scripts/main.py
+        --mode collect
+        --data-source {{ monitoring_data_source }}
+        --zabbix-url {{ zabbix_url }}
+        --zabbix-user {{ zabbix_user }}
+        --zabbix-password {{ zabbix_password }}
+        --output-dir {{ debug_output_dir }}
+        --log-level {{ log_level }}
+        --log-file {{ log_file }}
+        --verbose
+      when: monitoring_data_source == "api"
+      register: collect_result
+      changed_when: false
+      failed_when: collect_result.rc != 0
+
+    - name: "Collect hosts from Zabbix Database"
+      command: >
+        python3 {{ playbook_dir }}/../scripts/main.py
+        --mode collect
+        --data-source database
+        --db-host {{ db_host }}
+        --db-port {{ db_port }}
+        --db-name {{ db_name }}
+        --db-user {{ db_user }}
+        --db-password {{ db_password }}
+        --output-dir {{ debug_output_dir }}
+        --log-level {{ log_level }}
+        --log-file {{ log_file }}
+        --verbose
+      when: monitoring_data_source == "database"
+      register: collect_result
+      changed_when: false
+      failed_when: collect_result.rc != 0
+
+    - name: "Display collection result"
+      debug:
+        msg: "{{ collect_result.stdout_lines }}"
+      when: 
+        - debug_enabled | bool(false)
+        - collect_result.stdout_lines is defined
+
+    - name: "Check collected data files"
+      stat:
+        path: "{{ debug_output_dir }}/{{ item }}"
+      register: data_files
+      loop:
+        - "hosts.json"
+        - "templates.json"
+        - "items.json"
+        - "history.json"
+      failed_when: false
+
+    - name: "Display collected data file status"
+      debug:
+        msg: "{{ item.item }}: {{ 'exists' if item.stat.exists else 'missing' }}"
+      loop: "{{ data_files.results }}"
+      when: debug_enabled | bool(false)
+
+    - name: "Save collection summary for debugging"
+      copy:
+        content: |
+          Collection completed at: {{ ansible_date_time.iso8601 }}
+          Data source: {{ monitoring_data_source }}
+          Files collected:
+          {% for file in data_files.results %}
+          - {{ file.item }}: {{ 'exists' if file.stat.exists else 'missing' }}
+          {% endfor %}
+        dest: "{{ debug_output_dir }}/collection_summary.txt"
+        mode: '0644'
+      when: debug_save_intermediate_files | bool(true)
+
+  rescue:
+    - name: "Collection failed"
+      debug:
+        msg: "Data collection failed. Check logs at {{ log_file }}"
+      fail:
+        msg: "Failed to collect data from Zabbix"

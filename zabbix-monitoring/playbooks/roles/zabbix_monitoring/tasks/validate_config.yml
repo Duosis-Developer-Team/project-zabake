@@ -1,0 +1,48 @@
+---
+# Validate configuration
+
+- name: "Check if template mapping file exists"
+  stat:
+    path: "{{ template_mapping_file }}"
+  register: template_mapping_stat
+  failed_when: false
+
+- name: "Fail if template mapping file not found"
+  fail:
+    msg: "Template mapping file not found: {{ template_mapping_file }}"
+  when: not template_mapping_stat.stat.exists
+
+- name: "Validate Zabbix API configuration"
+  fail:
+    msg: "Zabbix API configuration is incomplete. Required: url, user, password"
+  when: 
+    - monitoring_data_source == "api"
+    - zabbix_url == "" or zabbix_user == "" or zabbix_password == ""
+
+- name: "Validate database configuration"
+  fail:
+    msg: "Database configuration is incomplete. Required: host, name, user, password"
+  when:
+    - monitoring_data_source == "database"
+    - db_host == "" or db_name == "" or db_user == "" or db_password == ""
+
+- name: "Create output directories"
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ output_dir }}"
+    - "{{ debug_output_dir }}"
+    - "{{ log_file | dirname }}"
+
+- name: "Display configuration summary"
+  debug:
+    msg: |
+      Configuration Summary:
+      - Data Source: {{ monitoring_data_source }}
+      - Template Mapping: {{ template_mapping_file }}
+      - Output Directory: {{ output_dir }}
+      - Debug Enabled: {{ debug_enabled }}
+      - Log Level: {{ log_level }}
+  when: monitoring_verbose | bool(false)

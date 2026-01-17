@@ -1,0 +1,69 @@
+---
+# Default variables for zabbix_monitoring role
+
+# Zabbix API Configuration
+zabbix_url: ""
+zabbix_user: ""
+zabbix_password: ""
+zabbix_timeout: 30
+zabbix_verify_ssl: true
+
+# Database Configuration (for production)
+db_host: ""
+db_port: 5432
+db_name: ""
+db_user: ""
+db_password: ""
+db_sslmode: "prefer"
+
+# Monitoring Configuration
+monitoring_data_source: "api"  # api or database
+monitoring_debug: false
+monitoring_verbose: false
+
+# Template Mapping Configuration
+template_mapping_file: "{{ playbook_dir }}/../mappings/templates.yml"
+
+# Output Configuration
+output_dir: "./reports"
+output_formats: ["json"]
+output_filename_pattern: "zabbix_monitoring_{timestamp}.{format}"
+
+# Filtering Configuration
+filter_host_groups: []
+filter_templates: []
+filter_vendors: []
+filter_status: "enabled"  # enabled, disabled, all
+
+# Analysis Configuration
+analysis_max_data_age: 3600  # seconds
+analysis_min_connectivity_score: 0.8
+analysis_inactive_threshold: 7200  # seconds
+analysis_master_item_threshold: 1800  # seconds
+
+# Performance Configuration
+api_batch_size: 100
+db_batch_size: 1000
+max_workers: 5
+enable_cache: true
+cache_ttl: 300  # seconds
+
+# Logging Configuration
+log_level: "INFO"
+log_file: "./logs/zabbix_monitoring.log"
+log_format: "json"
+log_max_size: "10MB"
+log_backup_count: 5
+
+# Debug Configuration (for AWX debugging)
+debug_enabled: false
+debug_save_intermediate_files: true
+debug_output_dir: "./debug_output"
+
+# Step-by-step execution flags (for AWX debugging)
+step_collect_data: true
+step_analyze_templates: true
+step_detect_connectivity: true
+step_analyze_data: true
+step_check_master_items: true
+step_generate_report: true
