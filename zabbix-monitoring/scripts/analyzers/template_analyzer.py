@@ -7,8 +7,8 @@ import json
 from typing import Dict, List, Any, Optional
 from pathlib import Path
 
-from ..utils.logger import get_logger
-from ..config.template_loader import TemplateConfigLoader, TemplateConfig
+from utils.logger import get_logger
+from config.template_loader import TemplateConfigLoader, TemplateConfig
 
 logger = get_logger(__name__)
 

@@ -8,8 +8,8 @@ from typing import Dict, List, Any, Optional
 from pathlib import Path
 import fnmatch
 
-from ..utils.logger import get_logger
-from ..config.template_loader import TemplateConfigLoader, ConnectionCheckItem, MasterItem
+from utils.logger import get_logger
+from config.template_loader import TemplateConfigLoader, ConnectionCheckItem, MasterItem
 
 logger = get_logger(__name__)
 

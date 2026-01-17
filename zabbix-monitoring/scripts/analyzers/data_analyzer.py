@@ -8,8 +8,8 @@ from typing import Dict, List, Any, Optional
 from pathlib import Path
 from datetime import datetime
 
-from ..utils.logger import get_logger
-from ..config.template_loader import TemplateConfigLoader
+from utils.logger import get_logger
+from config.template_loader import TemplateConfigLoader
 
 logger = get_logger(__name__)
 
