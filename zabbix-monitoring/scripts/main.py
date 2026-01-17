@@ -5,6 +5,7 @@ Entry point for data collection, analysis, and report generation
 """
 
 import argparse
+import os
 import sys
 import json
 from pathlib import Path
@@ -28,10 +29,18 @@ logger = get_logger(__name__)
 def collect_data(args):
     """Collect data from Zabbix"""
     logger.info("Starting data collection")
-    
+
+    # Let CLI args override: set env so get_settings() picks them up (AWX/playbook passes --zabbix-url etc)
+    if getattr(args, "zabbix_url", None):
+        os.environ["ZABBIX_URL"] = str(args.zabbix_url)
+    if getattr(args, "zabbix_user", None):
+        os.environ["ZABBIX_USER"] = str(args.zabbix_user)
+    if getattr(args, "zabbix_password", None):
+        os.environ["ZABBIX_PASSWORD"] = str(args.zabbix_password)
+
     try:
         settings = get_settings()
-        
+
         if args.data_source == "api":
             collector = ZabbixAPICollector(
                 url=settings.get_zabbix_url(),
