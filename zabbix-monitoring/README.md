@@ -22,7 +22,8 @@ Bu modül, Zabbix'te bulunan host'ların template'lerine göre belirlenen connec
 - ✅ **Zabbix API/DB Entegrasyonu**: API veya passive database'den veri çekme
 - ✅ **Performans Optimizasyonu**: Zabbix'te ekstra yük oluşturmadan çalışma
 - ✅ **AWX Orkestrasyonu**: Kubernetes üzerinde Ansible AWX ile otomasyon
-- ✅ **Raporlama**: JSON, HTML, CSV formatlarında rapor üretme
+- ✅ **Email Bildirimi**: HTML formatında detaylı email raporları
+- ✅ **YAML Tabanlı Yapılandırma**: Template ve item tanımları YAML'dan yönetilir
 
 ### Teknik Detaylar
 
@@ -85,22 +86,24 @@ ansible-playbook playbooks/zabbix_monitoring_check.yaml \
   -e "output_format=json"
 ```
 
-#### Python Script ile Çalıştırma
+#### Email Bildirimi ile Çalıştırma
 
 ```bash
-python scripts/main.py \
-  --zabbix-url https://zabbix.example.com/api_jsonrpc.php \
-  --zabbix-user admin \
-  --zabbix-password password \
-  --output-format json
+ansible-playbook playbooks/zabbix_monitoring_check.yaml \
+  -e "zabbix_url=https://zabbix.example.com/api_jsonrpc.php" \
+  -e "zabbix_user=admin" \
+  -e "zabbix_password=password" \
+  -e "mail_recipients=['admin@example.com']"
 ```
 
 ## 📚 Dokümantasyon
 
 ### Kılavuzlar
+- [Email Bildirim Kılavuzu](docs/guides/EMAIL_NOTIFICATION_GUIDE.md)
 - [AWX Kurulum Kılavuzu](docs/guides/AWX_SETUP.md)
 - [Database Bağlantı Kılavuzu](docs/guides/DATABASE_CONNECTION.md)
 - [Kullanım Kılavuzu](docs/guides/USAGE.md)
+- [Template Yapılandırma Kılavuzu](docs/guides/TEMPLATE_CONFIGURATION.md)
 
 ### Tasarım
 - [Mimari Tasarım](docs/design/ARCHITECTURE.md)
@@ -153,11 +156,15 @@ Zabbix API/DB → Data Collection → Template Analysis →
 Connectivity Item Detection → Data Analysis → Report Generation
 ```
 
-## 📊 Rapor Formatları
+## 📧 Email Bildirimi
 
-- **JSON**: Programatik kullanım için
-- **HTML**: İnsan okunabilir raporlar
-- **CSV**: Excel/Spreadsheet analizi için
+Raporlar sadece email olarak gönderilir. Email içeriği:
+- HTML formatında detaylı rapor
+- Özet istatistikler
+- Sorunlu host'ların listesi
+- Connectivity skorları
+
+Detaylı kullanım için: [Email Notification Guide](docs/guides/EMAIL_NOTIFICATION_GUIDE.md)
 
 ## 🐛 Sorun Giderme
 
