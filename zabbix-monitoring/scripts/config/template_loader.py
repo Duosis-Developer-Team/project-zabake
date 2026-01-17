@@ -33,20 +33,8 @@ class MasterItem:
 class TemplateConfig:
     """Template configuration"""
     name: str
-    vendor: str
-    type: str
-    conditions: Dict[str, Any]
     connection_check_items: List[ConnectionCheckItem]
     master_items: List[MasterItem]
-    notes: str
-
-
-@dataclass
-class GlobalPattern:
-    """Global connection check pattern"""
-    pattern: str
-    name_pattern: str
-    priority: str
 
 
 class TemplateConfigLoader:
@@ -65,7 +53,6 @@ class TemplateConfigLoader:
         
         self.mapping_file = Path(mapping_file)
         self.templates: List[TemplateConfig] = []
-        self.global_patterns: List[GlobalPattern] = []
         self.thresholds: Dict[str, Any] = {}
         self.priority_levels: Dict[str, int] = {}
         
@@ -84,9 +71,6 @@ class TemplateConfigLoader:
         for template_data in config.get("templates", []):
             template = TemplateConfig(
                 name=template_data["name"],
-                vendor=template_data["vendor"],
-                type=template_data["type"],
-                conditions=template_data.get("conditions", {}),
                 connection_check_items=[
                     ConnectionCheckItem(
                         key=item.get("key", ""),
@@ -106,30 +90,28 @@ class TemplateConfigLoader:
                         priority=item.get("priority", "medium")
                     )
                     for item in template_data.get("master_items", [])
-                ],
-                notes=template_data.get("notes", "")
+                    if item.get("key")  # Skip empty keys
+                ]
             )
             self.templates.append(template)
         
-        # Load global patterns
-        self.global_patterns = [
-            GlobalPattern(
-                pattern=pattern.get("pattern", ""),
-                name_pattern=pattern.get("name_pattern", ""),
-                priority=pattern.get("priority", "medium")
-            )
-            for pattern in config.get("global_connection_patterns", [])
-        ]
-        
-        # Load thresholds
-        self.thresholds = config.get("thresholds", {})
-        
-        # Load priority levels
-        self.priority_levels = config.get("priority_levels", {
+        # Default priority levels (hardcoded, no longer from YAML)
+        self.priority_levels = {
             "high": 1,
             "medium": 2,
             "low": 3
-        })
+        }
+        
+        # Default thresholds (hardcoded, no longer from YAML)
+        self.thresholds = {
+            "max_data_age": 3600,
+            "min_connectivity_score": 0.8,
+            "inactive_threshold": 7200,
+            "master_item_threshold": 1800
+        }
+        
+        # Global patterns removed - not needed for monitoring
+        self.global_patterns = []
     
     def get_template_by_name(self, template_name: str) -> Optional[TemplateConfig]:
         """
@@ -146,17 +128,6 @@ class TemplateConfigLoader:
                 return template
         return None
     
-    def get_templates_by_vendor(self, vendor: str) -> List[TemplateConfig]:
-        """
-        Get templates by vendor
-        
-        Args:
-            vendor: Vendor name
-            
-        Returns:
-            List of TemplateConfig
-        """
-        return [t for t in self.templates if t.vendor == vendor]
     
     def get_connection_check_items(self, template_name: str) -> List[ConnectionCheckItem]:
         """
@@ -212,38 +183,6 @@ class TemplateConfigLoader:
             items.extend(template.master_items)
         return items
     
-    def match_template_conditions(self, template: TemplateConfig, host_data: Dict[str, Any]) -> bool:
-        """
-        Check if template conditions match host data
-        
-        Args:
-            template: Template configuration
-            host_data: Host data dictionary
-            
-        Returns:
-            True if conditions match
-        """
-        conditions = template.conditions
-        
-        # Check device_role
-        if "device_role" in conditions:
-            if host_data.get("device_role") != conditions["device_role"]:
-                return False
-        
-        # Check manufacturer
-        if "manufacturer" in conditions:
-            manufacturer = conditions["manufacturer"]
-            if manufacturer != "-":  # Skip if manufacturer is "-"
-                if host_data.get("manufacturer", "").upper() != manufacturer.upper():
-                    return False
-        
-        # Check type_suffix (for Inspur M5/M6)
-        if "type_suffix" in conditions:
-            host_type = host_data.get("type", "")
-            if conditions["type_suffix"] not in host_type:
-                return False
-        
-        return True
     
     def get_threshold(self, key: str, default: Any = None) -> Any:
         """

@@ -54,8 +54,6 @@ class TemplateAnalyzer:
                     "template": template_data,
                     "config": {
                         "name": config.name,
-                        "vendor": config.vendor,
-                        "type": config.type,
                         "connection_check_items_count": len(config.connection_check_items),
                         "master_items_count": len(config.master_items)
                     }
@@ -99,9 +97,7 @@ class TemplateAnalyzer:
         for template_name in template_names:
             config = self.template_loader.get_template_by_name(template_name)
             if config:
-                # Check if conditions match
-                if self.template_loader.match_template_conditions(config, host_data):
-                    matching_configs.append(config)
+                matching_configs.append(config)
         
         return matching_configs
     

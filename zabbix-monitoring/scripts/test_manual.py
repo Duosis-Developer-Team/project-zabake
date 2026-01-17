@@ -65,7 +65,7 @@ def test_template_loader(args):
         logger.info(f"✅ Template loader successful! Loaded {len(templates)} templates")
         
         for template in templates[:3]:  # Show first 3
-            logger.info(f"  - {template.name} ({template.vendor})")
+            logger.info(f"  - {template.name}")
             logger.info(f"    Connection items: {len(template.connection_check_items)}")
             logger.info(f"    Master items: {len(template.master_items)}")
         

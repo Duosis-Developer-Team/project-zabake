@@ -1,14 +1,10 @@
 # Template and Item Mapping Configuration
 # This file defines which templates and items should be checked for connectivity monitoring
+# Only template name, connection check items, and master items are required
 
 templates:
   # Lenovo IPMI Template
   - name: "BLT - Lenovo ICT XCC Monitoring"
-    vendor: "Lenovo"
-    type: "SNMP"
-    conditions:
-      device_role: "HOST"
-      manufacturer: "Lenovo"
     connection_check_items:
       - key: "snmp.availability"
         name: "Snmp agent availability"
@@ -18,20 +14,10 @@ templates:
         name: "ICMP ping"
         required: true
         priority: "high"
-    master_items:
-      - key: ""
-        name: ""
-        required: false
-    notes: "Api'dan psu watt değerleri eklenecek"
+    master_items: []
 
   # Inspur M6 Template
   - name: "BLT - Inspur M6 Template"
-    vendor: "Inspur"
-    type: "SNMP"
-    conditions:
-      device_role: "HOST"
-      manufacturer: "Inspur"
-      type_suffix: "M6"
     connection_check_items:
       - key: "snmp.availability"
         name: "Snmp agent availability"
@@ -42,46 +28,27 @@ templates:
         required: true
         priority: "high"
     master_items: []
-    notes: ""
 
   # Inspur M5 Template
   - name: "BLT - Server Inspur BMC All Items 4 Zabbix SNMP"
-    vendor: "Inspur"
-    type: "SNMP"
-    conditions:
-      device_role: "HOST"
-      manufacturer: "Inspur"
-      type_suffix: "M5"
     connection_check_items:
       - key: "snmp.availability"
         name: "Snmp agent availability"
         required: true
         priority: "high"
     master_items: []
-    notes: ""
 
   # HPE IPMI Template
   - name: "BLT - HPE ProLiant DL380 SNMP"
-    vendor: "HPE"
-    type: "SNMP"
-    conditions:
-      device_role: "HOST"
-      manufacturer: "HPE"
     connection_check_items:
       - key: "snmp.availability"
         name: "Snmp agent availability"
         required: true
         priority: "high"
     master_items: []
-    notes: "Api'dan psu watt değerleri eklenecek. HBA'dan network kartı eklenecek"
 
   # Dell IPMI Template
   - name: "BLT - Dell iDRAC SNMP"
-    vendor: "Dell"
-    type: "SNMP"
-    conditions:
-      device_role: "HOST"
-      manufacturer: "DELL"
     connection_check_items:
       - key: "snmp.availability"
         name: "Snmp agent availability"
@@ -102,54 +69,12 @@ templates:
         is_discovery: true
         discovery_rule_note: "Discovery rule Endpoint kontrolü için"
     master_items: []
-    notes: ""
 
   # Supermicro Template
   - name: "BLT- Supermicro ILO by Redfish API"
-    vendor: "Supermicro"
-    type: "API"
-    conditions:
-      device_role: "HOST"
-      manufacturer: "-"  # Lokide görünmüyor
     connection_check_items: []
     master_items:
       - key: "redfish.get.metrics"
         name: "Redfish: Get metrics"
         required: true
         priority: "high"
-    notes: ""
-
-# Global connection check item patterns (fallback)
-global_connection_patterns:
-  - pattern: "snmp.availability"
-    name_pattern: "*agent availability*"
-    priority: "high"
-  - pattern: "icmpping"
-    name_pattern: "*ping*"
-    priority: "high"
-  - pattern: "agent.ping"
-    name_pattern: "*ping*"
-    priority: "medium"
-  - pattern: "net.tcp.service"
-    name_pattern: "*service*"
-    priority: "medium"
-
-# Item priority levels
-priority_levels:
-  high: 1
-  medium: 2
-  low: 3
-
-# Analysis thresholds
-thresholds:
-  # Maximum age of last data in seconds
-  max_data_age: 3600  # 1 hour
-  
-  # Minimum connectivity score (0.0 - 1.0)
-  min_connectivity_score: 0.8
-  
-  # Consider item inactive if no data for this duration (seconds)
-  inactive_threshold: 7200  # 2 hours
-  
-  # Master item check threshold (seconds)
-  master_item_threshold: 1800  # 30 minutes
