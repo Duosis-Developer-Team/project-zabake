@@ -1,0 +1,44 @@
+---
+# Full Test AWX Variables - Tüm özelliklerle test
+# Bu dosyayı AWX Job Template'in Variables alanına kopyalayın
+
+# Zabbix API Connection (ZORUNLU)
+zabbix_url: "https://zabbix.example.com/api_jsonrpc.php"
+zabbix_user: "admin"
+zabbix_password: "your_password_here"
+
+# Email Notification (OPSIYONEL)
+mail_recipients:
+  - "test@example.com"
+  - "admin@example.com"
+
+# Email SMTP Settings (Varsayılanlar genelde yeterli)
+mail_smtp_host: "10.34.8.191"
+mail_smtp_port: 587
+mail_from: "infrareport@alert.bulutistan.com"
+
+# Debug Mode (Test için önerilir)
+debug_enabled: true
+debug_save_intermediate_files: true
+debug_output_dir: "./debug_output"
+
+# Logging
+log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+log_file: "./logs/zabbix_monitoring.log"
+
+# Step-by-step execution (Tüm adımları çalıştır)
+step_collect_data: true
+step_analyze_templates: true
+step_detect_connectivity: true
+step_analyze_data: true
+step_check_master_items: true
+step_generate_report: true
+step_send_notifications: true
+
+# Filtreleme (OPSIYONEL - Test için sınırlı veri)
+# filter_host_groups:
+#   - "Linux Servers"
+#   - "Windows Servers"
+
+# filter_templates:
+#   - "BLT - Lenovo ICT XCC Monitoring"

@@ -1,0 +1,95 @@
+---
+# Step-by-Step Test AWX Variables
+# Her adımı ayrı test etmek için kullanın
+# Bu dosyayı AWX Job Template'in Variables alanına kopyalayın
+
+# Zabbix API Connection (ZORUNLU)
+zabbix_url: "https://zabbix.example.com/api_jsonrpc.php"
+zabbix_user: "admin"
+zabbix_password: "your_password_here"
+
+# Debug Mode
+debug_enabled: true
+debug_save_intermediate_files: true
+log_level: "INFO"
+
+# ============================================
+# ADIM 1: Sadece Veri Toplama
+# ============================================
+# step_collect_data: true
+# step_analyze_templates: false
+# step_detect_connectivity: false
+# step_analyze_data: false
+# step_check_master_items: false
+# step_generate_report: false
+# step_send_notifications: false
+
+# ============================================
+# ADIM 2: Veri Toplama + Template Analizi
+# ============================================
+# step_collect_data: true
+# step_analyze_templates: true
+# step_detect_connectivity: false
+# step_analyze_data: false
+# step_check_master_items: false
+# step_generate_report: false
+# step_send_notifications: false
+
+# ============================================
+# ADIM 3: Connectivity Tespiti
+# ============================================
+# step_collect_data: true
+# step_analyze_templates: true
+# step_detect_connectivity: true
+# step_analyze_data: false
+# step_check_master_items: false
+# step_generate_report: false
+# step_send_notifications: false
+
+# ============================================
+# ADIM 4: Veri Analizi
+# ============================================
+# step_collect_data: true
+# step_analyze_templates: true
+# step_detect_connectivity: true
+# step_analyze_data: true
+# step_check_master_items: false
+# step_generate_report: false
+# step_send_notifications: false
+
+# ============================================
+# ADIM 5: Master Items Kontrolü
+# ============================================
+# step_collect_data: true
+# step_analyze_templates: true
+# step_detect_connectivity: true
+# step_analyze_data: true
+# step_check_master_items: true
+# step_generate_report: false
+# step_send_notifications: false
+
+# ============================================
+# ADIM 6: Rapor Oluşturma
+# ============================================
+# step_collect_data: true
+# step_analyze_templates: true
+# step_detect_connectivity: true
+# step_analyze_data: true
+# step_check_master_items: true
+# step_generate_report: true
+# step_send_notifications: false
+
+# ============================================
+# ADIM 7: Email Gönderimi (TAM TEST)
+# ============================================
+step_collect_data: true
+step_analyze_templates: true
+step_detect_connectivity: true
+step_analyze_data: true
+step_check_master_items: true
+step_generate_report: true
+step_send_notifications: true
+
+# Email Notification
+mail_recipients:
+  - "test@example.com"
