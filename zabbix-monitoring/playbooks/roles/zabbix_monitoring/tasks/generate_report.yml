@@ -1,65 +1,26 @@
 ---
-# Generate final report
+# Generate final report (analysis results are already saved in analyze_data step)
 
-- name: "Generate monitoring report"
-  command: >
-    python3 {{ playbook_dir }}/../scripts/main.py
-    --mode generate-report
-    --input-dir {{ debug_output_dir }}
-    --output-dir {{ output_dir }}
-    --output-formats {{ output_formats | join(',') }}
-    --filename-pattern {{ output_filename_pattern }}
-    --log-level {{ log_level }}
-    --log-file {{ log_file }}
-    --verbose
-  register: generate_report_result
-  changed_when: false
-  failed_when: generate_report_result.rc != 0
-
-- name: "Display report generation result"
-  debug:
-    msg: "{{ generate_report_result.stdout_lines }}"
-  when: 
-    - debug_enabled | bool(false)
-    - generate_report_result.stdout_lines is defined
-
-- name: "Check generated report files"
+- name: "Check if analysis results exist"
   stat:
-    path: "{{ output_dir }}/{{ item }}"
-  register: report_files
-  loop: "{{ output_formats | map('regex_replace', '^(.*)$', 'zabbix_monitoring_*.\\1') | list }}"
-  failed_when: false
+    path: "{{ debug_output_dir }}/analysis_results.json"
+  register: analysis_results_file
 
-- name: "Find all report files"
-  find:
-    paths: "{{ output_dir }}"
-    patterns: "zabbix_monitoring_*"
-  register: all_report_files
+- name: "Verify analysis results file exists"
+  fail:
+    msg: "Analysis results file not found. Please run analyze_data step first."
+  when: not analysis_results_file.stat.exists
 
-- name: "Display generated report files"
-  debug:
-    msg: "Generated report files: {{ all_report_files.files | map(attribute='path') | list }}"
-  when: debug_enabled | bool(false)
-
-- name: "Save report generation summary for debugging"
-  copy:
-    content: |
-      Report generation completed at: {{ ansible_date_time.iso8601 }}
-      Output directory: {{ output_dir }}
-      Formats: {{ output_formats | join(', ') }}
-      Files generated: {{ all_report_files.files | length | default(0) }}
-    dest: "{{ debug_output_dir }}/report_generation_summary.txt"
-    mode: '0644'
-  when: debug_save_intermediate_files | bool(true)
-
-- name: "Final summary"
+- name: "Display report generation summary"
   debug:
     msg: |
       ============================================
-      Zabbix Monitoring Check Completed
+      Report Generation Summary
       ============================================
-      Reports generated in: {{ output_dir }}
-      Debug output in: {{ debug_output_dir }}
+      Analysis results available in: {{ debug_output_dir }}/analysis_results.json
+      Master items check available in: {{ debug_output_dir }}/master_items_check.json
+      Debug output directory: {{ debug_output_dir }}
       Log file: {{ log_file }}
-      Report files: {{ all_report_files.files | length | default(0) }}
+      ============================================
+      Note: Reports are sent via email only. No local file storage.
       ============================================

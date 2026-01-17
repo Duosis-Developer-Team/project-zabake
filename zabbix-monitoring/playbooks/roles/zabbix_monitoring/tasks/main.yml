@@ -44,11 +44,14 @@
       vars:
         debug_step: "generate_report"
 
-    - name: "Send notifications and store reports"
-      include_tasks: send_notifications.yml
-      when: step_send_notifications | bool(true)
+    - name: "Send email notification"
+      include_tasks: send_notification_email.yml
+      when: 
+        - step_send_notifications | bool(true)
+        - mail_recipients is defined
+        - mail_recipients | length > 0
       vars:
-        debug_step: "send_notifications"
+        debug_step: "send_notification"
 
   rescue:
     - name: "Error occurred during monitoring check"

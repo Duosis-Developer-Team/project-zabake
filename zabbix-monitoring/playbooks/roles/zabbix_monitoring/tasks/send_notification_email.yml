@@ -1,0 +1,283 @@
+---
+# Send email notification with monitoring report
+
+- name: "Load analysis results for email content"
+  slurp:
+    src: "{{ debug_output_dir }}/analysis_results.json"
+  register: report_json_data
+  failed_when: false
+
+- name: "Parse report data"
+  set_fact:
+    report_data: "{{ report_json_data.content | b64decode | from_json }}"
+  when:
+    - report_json_data is defined
+    - report_json_data.content is defined
+
+- name: "Calculate statistics for email"
+  set_fact:
+    email_stats:
+      total_hosts: "{{ report_data.summary.total_hosts | default(0) }}"
+      hosts_with_connectivity: "{{ report_data.summary.hosts_with_connectivity | default(0) }}"
+      hosts_without_connectivity: "{{ report_data.summary.hosts_without_connectivity | default(0) }}"
+      average_score: "{{ report_data.summary.average_connectivity_score | default(0.0) }}"
+      total_items: "{{ report_data.summary.total_connectivity_items | default(0) }}"
+      active_items: "{{ report_data.summary.active_items | default(0) }}"
+      inactive_items: "{{ report_data.summary.inactive_items | default(0) }}"
+  when: report_data is defined
+
+- name: "Determine if there are connectivity issues"
+  set_fact:
+    has_connectivity_issues: "{{ email_stats.hosts_without_connectivity | int(0) > 0 }}"
+  when: email_stats is defined
+
+- name: "Generate email subject"
+  set_fact:
+    email_subject: >-
+      {%- if has_connectivity_issues | default(false) -%}
+      Zabbix Monitoring Raporu - {{ email_stats.hosts_without_connectivity | default(0) }} Host Connectivity Sorunu Tespit Edildi
+      {%- else -%}
+      Zabbix Monitoring Raporu - Tüm Host'lar Sağlıklı ({{ email_stats.total_hosts | default(0) }} host kontrol edildi)
+      {%- endif -%}
+  when: email_stats is defined
+
+- name: "Generate email HTML content"
+  set_fact:
+    email_html_content: >-
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; }
+          .header { background-color: #4CAF50; color: white; padding: 20px; border-radius: 5px; }
+          .summary { margin: 20px 0; padding: 15px; background-color: #f9f9f9; border-left: 4px solid #4CAF50; }
+          .warning { border-left-color: #ff9800; background-color: #fff3e0; }
+          .error { border-left-color: #f44336; background-color: #ffebee; }
+          table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+          th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+          th { background-color: #4CAF50; color: white; }
+          tr:nth-child(even) { background-color: #f2f2f2; }
+          .score-good { color: #4CAF50; font-weight: bold; }
+          .score-warning { color: #ff9800; font-weight: bold; }
+          .score-error { color: #f44336; font-weight: bold; }
+          .status-healthy { color: #4CAF50; font-weight: bold; }
+          .status-issue { color: #f44336; font-weight: bold; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>Zabbix Monitoring Connectivity Report</h1>
+          <p>Oluşturulma: {{ ansible_date_time.iso8601 }}</p>
+        </div>
+        
+        <div class="summary {% if has_connectivity_issues | default(false) %}error{% else %}warning{% endif %}">
+          <h2>Özet</h2>
+          <p><strong>Toplam Host:</strong> {{ email_stats.total_hosts | default(0) }}</p>
+          <p><strong>Connectivity'ye Sahip Host:</strong> {{ email_stats.hosts_with_connectivity | default(0) }}</p>
+          <p><strong>Connectivity Sorunu Olan Host:</strong> {{ email_stats.hosts_without_connectivity | default(0) }}</p>
+          <p><strong>Ortalama Connectivity Skoru:</strong> 
+            <span class="{% if email_stats.average_score | float(0) >= 0.8 %}score-good{% elif email_stats.average_score | float(0) >= 0.5 %}score-warning{% else %}score-error{% endif %}">
+              {{ "%.2f" | format(email_stats.average_score | float(0)) }}
+            </span>
+          </p>
+          <p><strong>Toplam Item:</strong> {{ email_stats.total_items | default(0) }}</p>
+          <p><strong>Aktif Item:</strong> {{ email_stats.active_items | default(0) }}</p>
+          <p><strong>İnaktif Item:</strong> {{ email_stats.inactive_items | default(0) }}</p>
+        </div>
+        
+        {% if has_connectivity_issues | default(false) %}
+        <div class="summary error">
+          <h3>⚠️ Connectivity Sorunları Tespit Edildi</h3>
+          <p>Bazı host'larda connectivity sorunları tespit edildi. Detaylar için aşağıdaki tabloya bakınız.</p>
+        </div>
+        {% else %}
+        <div class="summary">
+          <h3>✅ Tüm Host'lar Sağlıklı</h3>
+          <p>Tüm izlenen host'lar iyi connectivity raporluyor.</p>
+        </div>
+        {% endif %}
+        
+        {% if report_data.hosts is defined and report_data.hosts | length > 0 %}
+        {% set hosts_with_issues = report_data.hosts | selectattr('issues', 'defined') | selectattr('issues', 'length') | list %}
+        {% if hosts_with_issues | length > 0 %}
+        <div class="summary error">
+          <h3>❌ Sorunlu Host'lar ({{ hosts_with_issues | length }})</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Hostname</th>
+                <th>Connectivity Skoru</th>
+                <th>Toplam Item</th>
+                <th>Aktif Item</th>
+                <th>İnaktif Item</th>
+                <th>Durum</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for host in hosts_with_issues %}
+              <tr>
+                <td>{{ host.hostname | default('N/A') }}</td>
+                <td>
+                  <span class="{% if host.connectivity_score | float(0) >= 0.8 %}score-good{% elif host.connectivity_score | float(0) >= 0.5 %}score-warning{% else %}score-error{% endif %}">
+                    {{ "%.2f" | format(host.connectivity_score | float(0)) }}
+                  </span>
+                </td>
+                <td>{{ host.total_items | default(0) }}</td>
+                <td>{{ host.active_items | default(0) }}</td>
+                <td>{{ host.inactive_items | default(0) }}</td>
+                <td class="status-issue">SORUN VAR</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+        {% endif %}
+        
+        <p style="margin-top: 30px; color: #666; font-size: 12px;">
+          Bu e-posta otomatik olarak Zabbix Monitoring Integration playbook'u tarafından oluşturulmuştur.
+        </p>
+      </body>
+      </html>
+  when: email_stats is defined
+
+- name: "Generate email plain text content"
+  set_fact:
+    email_text_content: >-
+      ZABBIX MONITORING CONNECTIVITY REPORT
+      =====================================
+      
+      Oluşturulma: {{ ansible_date_time.iso8601 }}
+      
+      ÖZET:
+      -----
+      Toplam Host: {{ email_stats.total_hosts | default(0) }}
+      Connectivity'ye Sahip Host: {{ email_stats.hosts_with_connectivity | default(0) }}
+      Connectivity Sorunu Olan Host: {{ email_stats.hosts_without_connectivity | default(0) }}
+      Ortalama Connectivity Skoru: {{ "%.2f" | format(email_stats.average_score | float(0)) }}
+      Toplam Item: {{ email_stats.total_items | default(0) }}
+      Aktif Item: {{ email_stats.active_items | default(0) }}
+      İnaktif Item: {{ email_stats.inactive_items | default(0) }}
+      
+      {% if has_connectivity_issues | default(false) %}
+      ⚠️  CONNECTIVITY SORUNLARI TESPİT EDİLDİ
+      Bazı host'larda connectivity sorunları tespit edildi.
+      {% else %}
+      ✅ TÜM HOST'LAR SAĞLIKLI
+      Tüm izlenen host'lar iyi connectivity raporluyor.
+      {% endif %}
+      
+      ---
+      Bu e-posta otomatik olarak Zabbix Monitoring Integration playbook'u tarafından oluşturulmuştur.
+  when: email_stats is defined
+
+- name: "Prepare email recipients as comma-separated string"
+  set_fact:
+    mail_recipients_str: "{{ mail_recipients | join(',') }}"
+  when:
+    - mail_recipients is defined
+    - mail_recipients | length > 0
+
+- name: "Send notification email using Python SMTP"
+  shell: |
+    python3 << 'PYTHON_SCRIPT'
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    import sys
+    
+    # Email configuration
+    smtp_host = "{{ mail_smtp_host }}"
+    smtp_port = {{ mail_smtp_port }}
+    smtp_user = "{{ mail_smtp_username | default('') }}"
+    smtp_pass = "{{ mail_smtp_password | default('') }}"
+    from_addr = "{{ mail_from }}"
+    recipients_str = "{{ mail_recipients_str }}"
+    subject = "{{ email_subject }}"
+    
+    # Parse recipients from comma-separated string
+    to_addrs_list = [addr.strip() for addr in recipients_str.split(',') if addr.strip()]
+    
+    # Create comma-separated string for To header
+    to_addrs_str = ', '.join(to_addrs_list)
+    
+    # Create message
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = subject
+    msg['From'] = from_addr
+    msg['To'] = to_addrs_str
+    
+    # Plain text version
+    text_content = r"""{{ email_text_content }}"""
+    
+    # HTML version  
+    html_content = r"""{{ email_html_content }}"""
+    
+    # Attach both versions
+    part1 = MIMEText(text_content, 'plain', 'utf-8')
+    part2 = MIMEText(html_content, 'html', 'utf-8')
+    msg.attach(part1)
+    msg.attach(part2)
+    
+    # Send email
+    try:
+        server = smtplib.SMTP(smtp_host, smtp_port, timeout=30)
+        if smtp_user and smtp_pass:
+            server.login(smtp_user, smtp_pass)
+        server.sendmail(from_addr, to_addrs_list, msg.as_string())
+        server.quit()
+        print("✅ Email sent successfully")
+        sys.exit(0)
+    except Exception as e:
+        print(f"⚠️  Failed to send email: {e}")
+        sys.exit(1)
+    PYTHON_SCRIPT
+  args:
+    executable: /bin/bash
+  when: 
+    - report_data is defined
+    - mail_recipients is defined
+    - mail_recipients | length > 0
+  delegate_to: localhost
+  run_once: true
+  ignore_errors: true
+  register: mail_send_result
+
+- name: "Display email notification status"
+  debug:
+    msg: |
+      ============================================
+      EMAIL NOTIFICATION STATUS
+      ============================================
+      {% if report_data is defined %}
+      📊 Monitoring Özeti:
+      - Toplam Host: {{ email_stats.total_hosts | default(0) }}
+      - Connectivity'ye Sahip: {{ email_stats.hosts_with_connectivity | default(0) }}
+      - Connectivity Sorunu: {{ email_stats.hosts_without_connectivity | default(0) }}
+      - Ortalama Skor: {{ "%.2f" | format(email_stats.average_score | float(0)) }}
+      {% if has_connectivity_issues | default(false) %}
+      ⚠️  Connectivity sorunları tespit edildi: {{ email_stats.hosts_without_connectivity | default(0) }} host
+      {% else %}
+      ✅ Tüm host'lar sağlıklı
+      {% endif %}
+      {% if mail_recipients is defined and mail_recipients | length > 0 %}
+      {% if mail_send_result is defined and mail_send_result.rc is defined %}
+      {% if mail_send_result.rc == 0 %}
+      ✅ E-posta başarıyla gönderildi: {{ mail_recipients | join(', ') }}
+      Yöntem: Python SMTP
+      {% else %}
+      ⚠️  E-posta gönderilemedi
+      Hata: {{ mail_send_result.stdout | default('Bilinmeyen hata') }}
+      {% endif %}
+      {% elif mail_send_result is skipped %}
+      ℹ️  E-posta gönderimi atlandı
+      {% else %}
+      ℹ️  E-posta durumu: Belirsiz
+      {% endif %}
+      {% else %}
+      ℹ️  E-posta gönderilmedi: mail_recipients tanımlı değil
+      {% endif %}
+      {% else %}
+      ℹ️  Rapor verisi bulunamadı
+      {% endif %}
+      ============================================
+  run_once: true
