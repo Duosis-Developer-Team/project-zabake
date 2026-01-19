@@ -18,6 +18,10 @@ Bu modül, Netbox (Loki) ile Zabbix arasında otomatik senkronizasyon sağlar:
 - Netbox cihazlarını Zabbix'e otomatik senkronizasyon
 - Lokasyon, IP ve hostname'in sürekli güncellenmesi
 - Metadata tag'lerinin (rack, cluster, hall, vb.) yönetimi
+- **API-tabanlı template'ler için otomatik makro yönetimi** (yeni!)
+  - Otomatik IP enjeksiyonu (`{HOST.IP}` değişkeni)
+  - Birden fazla interface tipini destekleme (SNMP + API)
+  - Template bazlı makro tanımlaması
 - Email bildirimleri (başarısız işlemler için)
 - Lokasyon bazlı filtreleme
 
@@ -61,6 +65,7 @@ ansible-playbook playbooks/netbox_zabbix_sync.yaml \
 
 ### Kılavuzlar (`docs/guides/`)
 - **[Netbox to Zabbix Kılavuzu](docs/guides/NETBOX_TO_ZABBIX_README.md)**: Netbox entegrasyonu detaylı kullanım kılavuzu
+- **[Template Macros Kılavuzu](docs/guides/TEMPLATE_MACROS_GUIDE.md)**: API-tabanlı template'ler için makro konfigürasyonu (yeni!)
 - **[Email Bildirimleri](docs/guides/EMAIL_NOTIFICATION_GUIDE.md)**: Email bildirim sistemi konfigürasyonu
 - **[AWX Kılavuzu](docs/guides/AWX_GUIDE.md)**: AWX/AAP ile kullanım
 
@@ -94,7 +99,7 @@ ansible-playbook playbooks/netbox_zabbix_sync.yaml \
 **Not:** CSV import özelliği legacy olarak `legacy/playbooks/zabbix_csv_import.yaml` dosyasında bulunmaktadır.
 
 ### Mapping Files
-- `mappings/templates.yml`: Template mapping'leri
+- `mappings/templates.yml`: Template mapping'leri (makro desteği ile!)
 - `mappings/template_types.yml`: Template type tanımları
 - `mappings/datacenters.yml`: Datacenter/proxy mapping'leri
 - `mappings/netbox_device_type_mapping.yml`: Netbox device type filtreleme

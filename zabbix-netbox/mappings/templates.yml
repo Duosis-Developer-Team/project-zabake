@@ -1,4 +1,5 @@
 # DEVICE_TYPE -> Zabbix template names or IDs
+# macros field supports {HOST.IP} variable which will be replaced with device's IP address
 Lenovo IPMI:
   - name: BLT - Lenovo ICT XCC Monitoring
     type: snmpv3
@@ -11,9 +12,21 @@ Inspur M5:
 HPE IPMI:
   - name: BLT - HPE ProLiant DL380 by SNMP
     type: snmpv2
+  - name: HPE iLO by HTTP
+    type: api
+    macros:
+      "{$REDFISH.API.URL}": "https://{HOST.IP}/"
+      "{$REDFISH.PASSWORD}": "change_me"
+      "{$REDFISH.USER}": "zabbix"
 Dell IPMI:
   - name: BLT - Dell iDRAC SNMP
     type: snmpv2
+  - name: Dell iDRAC by Redfish
+    type: api
+    macros:
+      "{$IDRAC.API.URL}": "https://{HOST.IP}/"
+      "{$IDRAC.PASSWORD}": "change_me"
+      "{$IDRAC.USER}": "root"
 Arista Switch:
   - name: Arista SNMP
     type: snmpv2
@@ -35,6 +48,9 @@ Dell Management Switch:
 Fortigate Firewall:
   - name: FortiGate by HTTP
     type: api
+    macros:
+      "{$FORTIGATE.API.URL}": "https://{HOST.IP}/"
+      "{$FORTIGATE.API.KEY}": "change_me"
 HP Management Switch:
   - name: HP Comware HH3C SNMP
     type: snmpv2
