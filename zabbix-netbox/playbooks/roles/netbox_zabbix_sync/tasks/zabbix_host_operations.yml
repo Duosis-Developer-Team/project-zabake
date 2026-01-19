@@ -190,10 +190,30 @@
   set_fact:
     zbx_required_groups_for_record: "{{ _all_target_groups }}"
 
-- name: Ensure zbx_group_map exists (create if missing)
+- name: Initialize zbx_group_map if not defined
+  set_fact:
+    zbx_group_map: {}
   when: zbx_group_map is not defined
+
+- name: Identify groups not yet in map
+  vars:
+    _groups_in_map: "{{ zbx_group_map.keys() | list }}"
+  set_fact:
+    zbx_groups_not_in_map: "{{ zbx_required_groups_for_record | difference(_groups_in_map) }}"
+
+- name: Debug - Show group mapping status
+  debug:
+    msg: |
+      Host: {{ zbx_record.HOSTNAME }}
+      Required groups: {{ zbx_required_groups_for_record }}
+      Groups already in map: {{ zbx_group_map.keys() | list }}
+      Groups to process: {{ zbx_groups_not_in_map }}
+  when: zbx_groups_not_in_map | length > 0
+
+- name: Process missing groups (query and create if needed)
+  when: zbx_groups_not_in_map | length > 0
   block:
-    - name: Get existing host groups from Zabbix
+    - name: Get existing host groups from Zabbix for missing groups
       uri:
         url: "{{ zabbix_url }}"
         method: POST
@@ -205,22 +225,20 @@
           params:
             output: ["groupid", "name"]
             filter:
-              name: "{{ zbx_required_groups_for_record }}"
+              name: "{{ zbx_groups_not_in_map }}"
           auth: "{{ zabbix_auth }}"
           id: 101
       register: zbx_existing_groups_resp
-      run_once: true
       delegate_to: localhost
 
-    - name: Identify missing groups
+    - name: Identify groups that need to be created
       vars:
         _existing_names: "{{ zbx_existing_groups_resp.json.result | map(attribute='name') | list }}"
       set_fact:
-        zbx_missing_groups: "{{ zbx_required_groups_for_record | difference(_existing_names) }}"
-      run_once: true
+        zbx_groups_to_create: "{{ zbx_groups_not_in_map | difference(_existing_names) }}"
       delegate_to: localhost
 
-    - name: Create missing host groups
+    - name: Create missing host groups in Zabbix
       uri:
         url: "{{ zabbix_url }}"
         method: POST
@@ -233,15 +251,14 @@
             name: "{{ missing_group_item }}"
           auth: "{{ zabbix_auth }}"
           id: 102
-      loop: "{{ zbx_missing_groups }}"
+      loop: "{{ zbx_groups_to_create }}"
       loop_control:
         loop_var: missing_group_item
       register: zbx_created_groups_resp
-      run_once: true
       delegate_to: localhost
-      when: zbx_missing_groups | length > 0
+      when: zbx_groups_to_create | length > 0
 
-    - name: Refresh host groups map (Fetch all required groups again to get IDs)
+    - name: Fetch all processed groups to get their IDs
       uri:
         url: "{{ zabbix_url }}"
         method: POST
@@ -253,17 +270,17 @@
           params:
             output: ["groupid", "name"]
             filter:
-              name: "{{ zbx_required_groups_for_record }}"
+              name: "{{ zbx_groups_not_in_map }}"
           auth: "{{ zabbix_auth }}"
           id: 103
-      register: zbx_final_groups_resp
-      run_once: true
+      register: zbx_fetched_groups_resp
       delegate_to: localhost
 
-    - name: Build Group Name-to-ID Map
+    - name: Update zbx_group_map with newly processed groups
+      vars:
+        _new_groups_map: "{{ zbx_fetched_groups_resp.json.result | items2dict(key_name='name', value_name='groupid') }}"
       set_fact:
-        zbx_group_map: "{{ zbx_final_groups_resp.json.result | items2dict(key_name='name', value_name='groupid') }}"
-      run_once: true
+        zbx_group_map: "{{ zbx_group_map | combine(_new_groups_map) }}"
       delegate_to: localhost
 
 - name: Initialize group ID list

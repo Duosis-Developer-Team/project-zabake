@@ -1,5 +1,43 @@
 # Changes Summary - Mail Fix & Performance Analysis
 
+## Date: 2026-01-19 - Host Groups Fix
+
+### 3. Host Groups Not Added for Device Type and Contact ✅
+
+**Problem:**
+- Location filter "ICT11" olan cihazlar haricinde, sadece location (DC13 gibi) host group olarak ekleniyor
+- Device type (örn: "Inspur M6") ve contact/sahiplik (örn: "SABANCI DX") grupları skip ediliyor
+- Log'larda `false_condition: "group_name is defined and group_name in zbx_group_map"` hatası görülüyor
+
+**Root Cause:**
+- `zbx_group_map` sadece ilk cihaz işlenirken oluşturuluyor (`when: zbx_group_map is not defined`)
+- İlk cihazın grupları (örn: sadece "DC13") map'e ekleniyor
+- Sonraki cihazlarda yeni gruplar (device type, contact) `zbx_group_map`'de olmadığı için `when: group_name in zbx_group_map` koşulu false dönüyor ve skip ediliyor
+- Sadece ilk cihazdan gelen gruplar map'de olduğu için sadece o gruplar ekleniyor
+
+**Solution:**
+- `zbx_group_map` başlangıçta boş dict olarak initialize ediliyor
+- **Her cihaz için** gerekli gruplardan map'de olmayanlar tespit ediliyor
+- Eksik gruplar Zabbix'den sorgulanıyor
+- Zabbix'de yoksa oluşturuluyor
+- Map güncelleniyor (`combine` ile mevcut map'e yeni gruplar ekleniyor)
+- Debug mesajı eklendi (hangi grupların işlendiğini göstermek için)
+
+**Files Modified:**
+- `playbooks/roles/netbox_zabbix_sync/tasks/zabbix_host_operations.yml`
+  - `when: zbx_group_map is not defined` koşulunu kaldırıldı
+  - Her cihaz için eksik grup kontrolü eklendi
+  - Map güncelleme mekanizması eklendi
+  - Debug mesajı eklendi
+
+**Result:**
+- ✅ Her cihaz için tüm gruplar (device type, location, contact) doğru şekilde ekleniyor
+- ✅ İlk cihazın grupları sonraki cihazları etkilemiyor
+- ✅ Her cihazın kendine özgü grupları map'e ekleniyor
+- ✅ Zabbix'de olmayan gruplar otomatik oluşturuluyor
+
+---
+
 ## Date: 2026-01-03
 
 ## 🔧 Applied Fixes
