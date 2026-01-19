@@ -1,74 +1,79 @@
 ---
 # Default variables for zabbix_monitoring role
 
-# Zabbix API Configuration
-zabbix_url: ""
-zabbix_user: ""
-zabbix_password: ""
-zabbix_timeout: 30
-zabbix_verify_ssl: true
+# ========================================
+# Zabbix Connection Settings
+# ========================================
+zabbix_url: "{{ lookup('env', 'ZABBIX_URL') | default('http://localhost/zabbix', true) }}"
+zabbix_user: "{{ lookup('env', 'ZABBIX_USER') | default('Admin', true) }}"
+zabbix_password: "{{ lookup('env', 'ZABBIX_PASSWORD') | default('zabbix', true) }}"
 
-# Database Configuration (for production)
-db_host: ""
-db_port: 5432
-db_name: ""
-db_user: ""
-db_password: ""
-db_sslmode: "prefer"
+# ========================================
+# Tag-Based Connectivity Settings
+# ========================================
+# Tag name to identify connection items
+connection_tag: "connection status"
 
-# Monitoring Configuration
-monitoring_data_source: "api"  # api or database
-monitoring_debug: false
-monitoring_verbose: false
+# Number of history values to analyze per item
+history_limit: 10
 
-# Template Mapping Configuration
+# Minimum acceptable connectivity percentage
+threshold_percentage: 70.0
+
+# Host groups filter (empty for all hosts)
+host_groups: ""
+
+# ========================================
+# Email Notification Settings
+# ========================================
+send_email: true
+
+# SMTP settings
+smtp_server: "{{ lookup('env', 'SMTP_SERVER') | default('localhost', true) }}"
+smtp_port: "{{ lookup('env', 'SMTP_PORT') | default(25, true) }}"
+smtp_username: "{{ lookup('env', 'SMTP_USERNAME') | default('', true) }}"
+smtp_password: "{{ lookup('env', 'SMTP_PASSWORD') | default('', true) }}"
+
+# Email addresses
+email_from: "{{ lookup('env', 'EMAIL_FROM') | default('zabbix-monitoring@example.com', true) }}"
+email_to: "{{ lookup('env', 'EMAIL_TO') | default('admin@example.com', true) }}"
+
+# ========================================
+# Debug and Logging Settings
+# ========================================
+debug_enabled: false
+debug_output_dir: "/tmp/zabbix_monitoring_output"
+debug_save_intermediate_files: true
+
+log_level: "INFO"
+log_file: "/tmp/zabbix_tag_based_monitoring.log"
+
+# ========================================
+# Legacy Mode Settings (DEPRECATED)
+# ========================================
+# Set to true ONLY if you need to use legacy template-based mode
+# WARNING: Legacy mode will be removed in June 2026
+use_legacy_mode: false
+
+# Legacy task flags (only used if use_legacy_mode is true)
+validate_config: false
+run_data_collection: false
+run_template_analysis: false
+run_connectivity_detection: false
+run_data_analysis: false
+run_master_items_check: false
+run_report_generation: false
+
+# Template mapping file (legacy only)
 template_mapping_file: "{{ playbook_dir }}/../mappings/templates.yml"
 
-# Email Notification Settings
-mail_smtp_host: "10.34.8.191"
-mail_smtp_port: 587
-mail_smtp_username: ""  # User authentication: False
-mail_smtp_password: ""  # User authentication: False
-mail_smtp_use_tls: false  # TLS: False
-mail_recipients: []  # Required: List of email addresses, e.g. ["user1@example.com", "user2@example.com"] - Must be provided as playbook input
-mail_from: "infrareport@alert.bulutistan.com"
+# ========================================
+# Advanced Settings
+# ========================================
+# Data age thresholds (seconds)
+max_data_age: 3600  # 1 hour
+inactive_threshold: 7200  # 2 hours
+master_item_threshold: 1800  # 30 minutes
 
-# Filtering Configuration
-filter_host_groups: []
-filter_templates: []
-filter_vendors: []
-filter_status: "enabled"  # enabled, disabled, all
-
-# Analysis Configuration
-analysis_max_data_age: 3600  # seconds
-analysis_min_connectivity_score: 0.8
-analysis_inactive_threshold: 7200  # seconds
-analysis_master_item_threshold: 1800  # seconds
-
-# Performance Configuration
-api_batch_size: 100
-db_batch_size: 1000
-max_workers: 5
-enable_cache: true
-cache_ttl: 300  # seconds
-
-# Logging Configuration
-log_level: "INFO"
-log_file: "./logs/zabbix_monitoring.log"
-log_format: "json"
-log_max_size: "10MB"
-log_backup_count: 5
-
-# Debug Configuration (for AWX debugging)
-debug_enabled: false
-debug_save_intermediate_files: true
-debug_output_dir: "./debug_output"
-
-# Step-by-step execution flags (for AWX debugging)
-step_collect_data: true
-step_analyze_templates: true
-step_detect_connectivity: true
-step_analyze_data: true
-step_check_master_items: true
-step_generate_report: true
-step_send_notifications: true  # Send email notification after report generation
+# Minimum connectivity score (0.0 to 1.0)
+min_connectivity_score: 0.8
