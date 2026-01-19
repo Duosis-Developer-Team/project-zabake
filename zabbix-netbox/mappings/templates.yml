@@ -16,7 +16,7 @@ HPE IPMI:
     type: api
     macros:
       "{$REDFISH.API.URL}": "https://{HOST.IP}/"
-      "{$REDFISH.PASSWORD}": "change_me"
+      "{$REDFISH.PASSWORD}": "A!UCZcCUSRwZ"
       "{$REDFISH.USER}": "zabbix"
 Dell IPMI:
   - name: BLT - Dell iDRAC SNMP
@@ -25,7 +25,7 @@ Dell IPMI:
     type: api
     macros:
       "{$IDRAC.API.URL}": "https://{HOST.IP}/"
-      "{$IDRAC.PASSWORD}": "change_me"
+      "{$IDRAC.PASSWORD}": "A!UCZcCUSRwZ"
       "{$IDRAC.USER}": "root"
 Arista Switch:
   - name: Arista SNMP

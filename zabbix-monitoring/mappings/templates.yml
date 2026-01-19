@@ -1,6 +1,5 @@
 # Template and Item Mapping Configuration
 # This file defines which templates and items should be checked for connectivity monitoring
-# Only template name, connection check items, and master items are required
 
 templates:
   # Lenovo IPMI Template
@@ -39,7 +38,7 @@ templates:
     master_items: []
 
   # HPE IPMI Template
-  - name: "BLT - HPE ProLiant DL380 SNMP"
+  - name: "BLT - HPE ProLiant DL380 by SNMP"
     connection_check_items:
       - key: "snmp.availability"
         name: "Snmp agent availability"
