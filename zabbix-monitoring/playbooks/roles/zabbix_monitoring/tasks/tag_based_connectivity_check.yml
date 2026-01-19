@@ -1,21 +1,46 @@
 ---
 # Tag-based connectivity check task
 
+- name: "Build command arguments"
+  set_fact:
+    base_args:
+      - "python3"
+      - "{{ playbook_dir }}/../scripts/main.py"
+      - "--mode"
+      - "tag-based-connectivity"
+      - "--zabbix-url"
+      - "{{ zabbix_url }}"
+      - "--zabbix-user"
+      - "{{ zabbix_user }}"
+      - "--zabbix-password"
+      - "{{ zabbix_password }}"
+      - "--output-dir"
+      - "{{ debug_output_dir }}"
+      - "--connection-tag"
+      - "{{ connection_tag | default('connection status') }}"
+      - "--history-limit"
+      - "{{ history_limit | default(10) }}"
+      - "--threshold-percentage"
+      - "{{ threshold_percentage | default(70.0) }}"
+      - "--log-level"
+      - "{{ log_level }}"
+      - "--log-file"
+      - "{{ log_file }}"
+      - "--verbose"
+
+- name: "Add host-groups argument if specified"
+  set_fact:
+    final_args: "{{ base_args + ['--host-groups', host_groups] }}"
+  when: host_groups is defined and host_groups | length > 0
+
+- name: "Use base arguments if no host-groups"
+  set_fact:
+    final_args: "{{ base_args }}"
+  when: host_groups is not defined or host_groups | length == 0
+
 - name: "Run tag-based connectivity check"
-  command: >
-    python3 {{ playbook_dir }}/../scripts/main.py
-    --mode tag-based-connectivity
-    --zabbix-url {{ zabbix_url }}
-    --zabbix-user {{ zabbix_user }}
-    --zabbix-password {{ zabbix_password }}
-    --output-dir {{ debug_output_dir }}
-    --host-groups {{ host_groups | default('') }}
-    --connection-tag "{{ connection_tag | default('connection status') }}"
-    --history-limit {{ history_limit | default(10) }}
-    --threshold-percentage {{ threshold_percentage | default(70.0) }}
-    --log-level {{ log_level }}
-    --log-file {{ log_file }}
-    --verbose
+  command:
+    argv: "{{ final_args }}"
   register: tag_based_check_result
   changed_when: false
   failed_when: tag_based_check_result.rc != 0
