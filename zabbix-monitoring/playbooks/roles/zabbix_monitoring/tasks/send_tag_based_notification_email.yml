@@ -44,8 +44,12 @@
               <span style="color: red; font-weight: bold;">CRITICAL</span>
               {% elif item.status == 'warning' %}
               <span style="color: orange; font-weight: bold;">WARNING</span>
+              {% elif item.status == 'healthy' %}
+              <span style="color: green;">HEALTHY</span>
+              {% elif item.status == 'no_data' %}
+              <span style="color: gray; font-weight: bold;">NO DATA</span>
               {% else %}
-              <span style="color: green;">OK</span>
+              <span style="color: gray;">{{ item.status | upper }}</span>
               {% endif %}
             </td>
             <td>{{ item.detail }}</td>
