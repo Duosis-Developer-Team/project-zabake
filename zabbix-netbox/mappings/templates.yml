@@ -9,7 +9,7 @@ Inspur M5:
   - name: BLT - Server Inspur BMC All Items 4 Zabbix5.0
     type: snmpv2
 HPE IPMI:
-  - name: BLT - HPE ProLiant DL380 SNMP
+  - name: BLT - HPE ProLiant DL380 by SNMP
     type: snmpv2
 Dell IPMI:
   - name: BLT - Dell iDRAC SNMP
