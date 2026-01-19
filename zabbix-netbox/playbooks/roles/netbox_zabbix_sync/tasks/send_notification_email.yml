@@ -27,7 +27,7 @@
         </style>
       </head>
       <body>
-        <h2>Zabbix Migration İşlem Raporu</h2>
+        <h2>Loki - Zabbix Entegrasyonu Raporu</h2>
         <div class="summary">
           <h3>Özet</h3>
           <p><strong>Toplam İşlem:</strong> {{ processing_results | default([]) | length }}</p>
@@ -39,7 +39,7 @@
         
         {%- set added_devices = processing_results | default([]) | selectattr('status', 'equalto', 'eklendi') | list -%}
         {%- if added_devices | length > 0 -%}
-        <div class="section-header"><h3>✅ Eklenen Cihazlar ({{ added_devices | length }})</h3></div>
+        <div class="section-header"><h3>BAŞARILI: Eklenen Cihazlar ({{ added_devices | length }})</h3></div>
         <table>
           <thead>
             <tr>
@@ -64,7 +64,7 @@
         
         {%- set updated_devices = processing_results | default([]) | selectattr('status', 'equalto', 'güncellendi') | list -%}
         {%- if updated_devices | length > 0 -%}
-        <div class="section-header"><h3>🔄 Güncellenen Cihazlar ({{ updated_devices | length }})</h3></div>
+        <div class="section-header"><h3>GÜNCELLEME: Güncellenen Cihazlar ({{ updated_devices | length }})</h3></div>
         <table>
           <thead>
             <tr>
@@ -89,7 +89,7 @@
         
         {%- set failed_devices = processing_results | default([]) | selectattr('status', 'equalto', 'eklenemedi') | list -%}
         {%- if failed_devices | length > 0 -%}
-        <div class="section-header" style="background-color: #ffebee; border-left-color: #f44336;"><h3>❌ Eklenemeyen Cihazlar ({{ failed_devices | length }})</h3></div>
+        <div class="section-header" style="background-color: #ffebee; border-left-color: #f44336;"><h3>HATA: Eklenemeyen Cihazlar ({{ failed_devices | length }})</h3></div>
         <table>
           <thead>
             <tr>
@@ -114,7 +114,7 @@
         
         {%- set current_devices = processing_results | default([]) | selectattr('status', 'equalto', 'güncel') | list -%}
         {%- if current_devices | length > 0 -%}
-        <div class="section-header" style="background-color: #e3f2fd; border-left-color: #2196F3;"><h3>ℹ️ Güncel Cihazlar (Değişiklik Yok) ({{ current_devices | length }})</h3></div>
+        <div class="section-header" style="background-color: #e3f2fd; border-left-color: #2196F3;"><h3>BİLGİ: Güncel Cihazlar (Değişiklik Yok) ({{ current_devices | length }})</h3></div>
         <table>
           <thead>
             <tr>
@@ -137,8 +137,8 @@
         </table>
         {%- endif -%}
         
-        <p style="margin-top: 30px; color: #666; font-size: 12px;">
-          Bu e-posta otomatik olarak Zabbix Migration playbook'u tarafından oluşturulmuştur.
+        <p style="margin-top: 30px; color: #999; font-size: 11px; opacity: 0.7;">
+          Bu rapor otomatik olarak HMDL Automation tarafından oluşturulmuştur.
         </p>
       </body>
       </html>
@@ -146,8 +146,8 @@
 - name: Generate email plain text content
   set_fact:
     email_text_content: >-
-      ZABBIX MIGRATION İŞLEM RAPORU
-      =============================
+      LOKI - ZABBIX ENTEGRASYONU RAPORU
+      ==================================
       
       ÖZET:
       -----
@@ -160,7 +160,7 @@
       {%- set added_devices = processing_results | default([]) | selectattr('status', 'equalto', 'eklendi') | list -%}
       {%- if added_devices | length > 0 %}
       
-      ✅ EKLENEN CİHAZLAR ({{ added_devices | length }}):
+      BAŞARILI: EKLENEN CİHAZLAR ({{ added_devices | length }}):
       ---------------------------------------
       {%- for result in added_devices %}
       
@@ -174,7 +174,7 @@
       {%- set updated_devices = processing_results | default([]) | selectattr('status', 'equalto', 'güncellendi') | list -%}
       {%- if updated_devices | length > 0 %}
       
-      🔄 GÜNCELLENEN CİHAZLAR ({{ updated_devices | length }}):
+      GÜNCELLEME: GÜNCELLENEN CİHAZLAR ({{ updated_devices | length }}):
       ------------------------------------------
       {%- for result in updated_devices %}
       
@@ -188,7 +188,7 @@
       {%- set failed_devices = processing_results | default([]) | selectattr('status', 'equalto', 'eklenemedi') | list -%}
       {%- if failed_devices | length > 0 %}
       
-      ❌ EKLENEMEYEN CİHAZLAR ({{ failed_devices | length }}):
+      HATA: EKLENEMEYEN CİHAZLAR ({{ failed_devices | length }}):
       ------------------------------------------
       {%- for result in failed_devices %}
       
@@ -202,7 +202,7 @@
       {%- set current_devices = processing_results | default([]) | selectattr('status', 'equalto', 'güncel') | list -%}
       {%- if current_devices | length > 0 %}
       
-      ℹ️ GÜNCEL CİHAZLAR (DEĞİŞİKLİK YOK) ({{ current_devices | length }}):
+      BİLGİ: GÜNCEL CİHAZLAR (DEĞİŞİKLİK YOK) ({{ current_devices | length }}):
       -----------------------------------------
       {%- for result in current_devices %}
       
@@ -214,15 +214,15 @@
       {%- endif %}
       
       ---
-      Bu e-posta otomatik olarak Zabbix Migration playbook'u tarafından oluşturulmuştur.
+      Bu rapor otomatik olarak HMDL Automation tarafından oluşturulmuştur.
 
 - name: Generate email subject
   set_fact:
     email_subject: >-
       {%- if has_failed_devices -%}
-      Zabbix Migration Raporu - {{ failed_devices_count }} Sunucu Eklenemedi
+      Loki - Zabbix Entegrasyonu Raporu - {{ failed_devices_count }} Sunucu Eklenemedi
       {%- else -%}
-      Zabbix Migration Raporu - Tüm İşlemler Başarılı ({{ added_devices_count }} Eklendi, {{ updated_devices_count }} Güncellendi)
+      Loki - Zabbix Entegrasyonu Raporu - Tüm İşlemler Başarılı ({{ added_devices_count }} Eklendi, {{ updated_devices_count }} Güncellendi)
       {%- endif -%}
 
 - name: Prepare email recipients as comma-separated string
@@ -277,10 +277,10 @@
             server.login(smtp_user, smtp_pass)
         server.sendmail(from_addr, to_addrs_list, msg.as_string())
         server.quit()
-        print("✅ Email sent successfully")
+        print("SUCCESS: Email sent successfully")
         sys.exit(0)
     except Exception as e:
-        print(f"⚠️  Failed to send email: {e}")
+        print(f"ERROR: Failed to send email: {e}")
         sys.exit(1)
     PYTHON_SCRIPT
   args:
@@ -302,36 +302,36 @@
       EMAIL NOTIFICATION STATUS
       ============================================
       {% if processing_results is defined and processing_results | length > 0 %}
-      📊 İşlem Özeti:
+      İŞLEM ÖZETİ:
       - Toplam: {{ total_devices_count }}
       - Eklendi: {{ added_devices_count }}
       - Güncellendi: {{ updated_devices_count }}
       - Güncel: {{ current_devices_count }}
       - Başarısız: {{ failed_devices_count }}
       {% if has_failed_devices %}
-      ⚠️  Başarısız işlem var: {{ failed_devices_count }} sunucu eklenemedi
+      UYARI: Başarısız işlem var - {{ failed_devices_count }} sunucu eklenemedi
       {% else %}
-      ✅ Tüm işlemler başarılı
+      BAŞARILI: Tüm işlemler başarılı
       {% endif %}
       {% if mail_recipients is defined and mail_recipients | length > 0 %}
       {% if mail_send_result is defined and mail_send_result.rc is defined %}
       {% if mail_send_result.rc == 0 %}
-      ✅ E-posta başarıyla gönderildi: {{ mail_recipients | join(', ') }}
+      BAŞARILI: E-posta başarıyla gönderildi: {{ mail_recipients | join(', ') }}
       Yöntem: Python SMTP
       {% else %}
-      ⚠️  E-posta gönderilemedi
+      HATA: E-posta gönderilemedi
       Hata: {{ mail_send_result.stdout | default('Bilinmeyen hata') }}
       {% endif %}
       {% elif mail_send_result is skipped %}
-      ℹ️  E-posta gönderimi atlandı
+      BİLGİ: E-posta gönderimi atlandı
       {% else %}
-      ℹ️  E-posta durumu: Belirsiz
+      BİLGİ: E-posta durumu belirsiz
       {% endif %}
       {% else %}
-      ℹ️  E-posta gönderilmedi: mail_recipients tanımlı değil
+      BİLGİ: E-posta gönderilmedi - mail_recipients tanımlı değil
       {% endif %}
       {% else %}
-      ℹ️  İşlem sonucu bulunamadı
+      BİLGİ: İşlem sonucu bulunamadı
       {% endif %}
       ============================================
   run_once: true
