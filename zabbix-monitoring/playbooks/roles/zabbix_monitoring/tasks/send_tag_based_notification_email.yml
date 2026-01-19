@@ -38,7 +38,13 @@
               {% endif %}
             </td>
             <td>{{ item.item_name }}</td>
-            <td style="text-align: center;">{{ item.percentage }}%</td>
+            <td style="text-align: center;">
+              {% if item.status == 'no_data' %}
+              <span style="color: gray;">N/A</span>
+              {% else %}
+              {{ item.percentage }}%
+              {% endif %}
+            </td>
             <td style="text-align: center;">
               {% if item.status == 'critical' %}
               <span style="color: red; font-weight: bold;">CRITICAL</span>
