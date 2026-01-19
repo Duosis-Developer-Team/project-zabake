@@ -25,12 +25,6 @@
   # No environment variable lookups - AWX manages variables
   
   tasks:
-    - name: "Create debug output directory"
-      file:
-        path: "{{ debug_output_dir }}"
-        state: directory
-        mode: '0755'
-    
     - name: "Validate required variables"
       assert:
         that:
@@ -56,5 +50,4 @@
           ========================================
           Tag-Based Connectivity Check Completed
           ========================================
-          Results saved to: {{ debug_output_dir }}
-          Log file: {{ log_file }}
+          Status: Success

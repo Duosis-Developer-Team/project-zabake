@@ -1,21 +1,10 @@
 ---
 # Send email notification for tag-based connectivity analysis
 
-- name: "Check if tag-based analysis results exist"
-  stat:
-    path: "{{ debug_output_dir }}/tag_based_connectivity_analysis.json"
-  register: analysis_file
-
-- name: "Load tag-based analysis results"
-  slurp:
-    src: "{{ debug_output_dir }}/tag_based_connectivity_analysis.json"
-  register: analysis_data
-  when: analysis_file.stat.exists
-
-- name: "Parse analysis results"
+- name: "Check if analysis data is available"
   set_fact:
-    analysis: "{{ analysis_data.content | b64decode | from_json }}"
-  when: analysis_file.stat.exists
+    analysis: "{{ connectivity_analysis }}"
+  when: connectivity_analysis is defined
 
 - name: "Build email content for problematic items"
   set_fact:
@@ -57,7 +46,7 @@
       {% else %}
       <p style="color: green;">✅ All connection items are healthy (above {{ analysis.summary.threshold_percentage }}% threshold).</p>
       {% endif %}
-  when: analysis_file.stat.exists
+  when: connectivity_analysis is defined
 
 - name: "Build email content for hosts without connection items"
   set_fact:
@@ -85,7 +74,7 @@
         </tbody>
       </table>
       {% endif %}
-  when: analysis_file.stat.exists
+  when: connectivity_analysis is defined
 
 - name: "Build email summary"
   set_fact:
@@ -101,7 +90,7 @@
         <li><strong>Threshold Percentage:</strong> {{ analysis.summary.threshold_percentage }}%</li>
         <li><strong>Analysis Timestamp:</strong> {{ analysis.summary.analysis_timestamp }}</li>
       </ul>
-  when: analysis_file.stat.exists
+  when: connectivity_analysis is defined
 
 - name: "Build complete email body"
   set_fact:
@@ -127,7 +116,7 @@
         </p>
       </body>
       </html>
-  when: analysis_file.stat.exists
+  when: connectivity_analysis is defined
 
 - name: "Generate email subject"
   set_fact:
@@ -137,12 +126,12 @@
       {%- else -%}
       Zabbix Connectivity Report - All Hosts Healthy
       {%- endif -%}
-  when: analysis_file.stat.exists
+  when: connectivity_analysis is defined
 
 - name: "Prepare email recipients"
   set_fact:
     mail_recipients_str: "{{ email_to if email_to is string else email_to | join(',') }}"
-  when: analysis_file.stat.exists
+  when: connectivity_analysis is defined
 
 - name: "Send notification email using Python SMTP"
   shell: |
@@ -211,7 +200,7 @@
   args:
     executable: /bin/bash
   when: 
-    - analysis_file.stat.exists
+    - connectivity_analysis is defined
     - send_email | default(true) | bool
     - email_to is defined
     - email_to | length > 0
@@ -226,7 +215,7 @@
       ============================================
       EMAIL NOTIFICATION STATUS
       ============================================
-      {% if analysis_file.stat.exists %}
+      {% if connectivity_analysis is defined %}
       📊 Analysis Summary:
       - Total Hosts: {{ analysis.summary.total_hosts_analyzed }}
       - Hosts with Issues: {{ analysis.summary.hosts_with_issues }}
