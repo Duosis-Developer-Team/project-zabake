@@ -307,3 +307,111 @@ class ConnectivityAnalyzer:
             json.dump(master_items, f, indent=2, ensure_ascii=False)
         
         logger.info(f"Saved {len(master_items)} master items to {file_path}")
+    
+    def detect_connectivity_items_by_tags(
+        self,
+        items_data: List[Dict[str, Any]],
+        connection_tag: str = "connection status"
+    ) -> Dict[str, Any]:
+        """
+        Detect connectivity items by tag
+        
+        Args:
+            items_data: List of item dictionaries with tags
+            connection_tag: Tag name to identify connection items (default: "connection status")
+            
+        Returns:
+            Dictionary with connectivity items grouped by host and list of hosts without connection items
+        """
+        logger.info(f"Detecting connectivity items by tag: {connection_tag}")
+        
+        # Group items by host
+        items_by_host = {}
+        all_hosts = set()
+        
+        for item in items_data:
+            # Get host info from item
+            hosts = item.get("hosts", [])
+            if not hosts:
+                continue
+            
+            host_info = hosts[0]  # Each item belongs to one host
+            host_id = host_info.get("hostid")
+            hostname = host_info.get("host", "")
+            host_name = host_info.get("name", hostname)
+            
+            all_hosts.add((host_id, hostname, host_name))
+            
+            # Check if item has connection status tag
+            tags = item.get("tags", [])
+            has_connection_tag = any(
+                tag.get("tag", "").lower() == connection_tag.lower()
+                for tag in tags
+            )
+            
+            if has_connection_tag:
+                if host_id not in items_by_host:
+                    items_by_host[host_id] = {
+                        "hostid": host_id,
+                        "hostname": hostname,
+                        "host_name": host_name,
+                        "items": []
+                    }
+                
+                items_by_host[host_id]["items"].append({
+                    "itemid": item.get("itemid"),
+                    "key": item.get("key_", ""),
+                    "name": item.get("name", ""),
+                    "type": item.get("type", ""),
+                    "value_type": item.get("value_type", ""),
+                    "status": item.get("status", ""),
+                    "lastvalue": item.get("lastvalue", ""),
+                    "lastclock": item.get("lastclock", ""),
+                    "tags": tags
+                })
+        
+        # Identify hosts without connection items
+        hosts_with_items = set(items_by_host.keys())
+        hosts_without_items = []
+        
+        for host_id, hostname, host_name in all_hosts:
+            if host_id not in hosts_with_items:
+                hosts_without_items.append({
+                    "hostid": host_id,
+                    "hostname": hostname,
+                    "host_name": host_name
+                })
+        
+        # Convert to list
+        connectivity_items = list(items_by_host.values())
+        
+        logger.info(f"Detected {len(connectivity_items)} hosts with connection items")
+        logger.info(f"Found {len(hosts_without_items)} hosts without connection items")
+        
+        return {
+            "hosts_with_items": connectivity_items,
+            "hosts_without_items": hosts_without_items,
+            "total_hosts": len(all_hosts),
+            "total_connection_items": sum(len(h["items"]) for h in connectivity_items)
+        }
+    
+    def save_tag_based_connectivity_items(
+        self,
+        detection_result: Dict[str, Any],
+        output_dir: str
+    ):
+        """
+        Save tag-based connectivity detection results to file
+        
+        Args:
+            detection_result: Detection results dictionary
+            output_dir: Output directory
+        """
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        
+        file_path = output_path / "connectivity_items_by_tag.json"
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(detection_result, f, indent=2, ensure_ascii=False)
+        
+        logger.info(f"Saved tag-based connectivity detection results to {file_path}")

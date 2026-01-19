@@ -256,6 +256,120 @@ def check_master_items(args):
         return 1
 
 
+def tag_based_connectivity_check(args):
+    """Tag-based connectivity check (new approach)"""
+    logger.info("Starting tag-based connectivity check")
+    
+    try:
+        # Let CLI args override
+        if getattr(args, "zabbix_url", None):
+            os.environ["ZABBIX_URL"] = str(args.zabbix_url)
+        if getattr(args, "zabbix_user", None):
+            os.environ["ZABBIX_USER"] = str(args.zabbix_user)
+        if getattr(args, "zabbix_password", None):
+            os.environ["ZABBIX_PASSWORD"] = str(args.zabbix_password)
+        
+        settings = get_settings()
+        
+        # Initialize collector
+        collector = ZabbixAPICollector(
+            url=settings.get_zabbix_url(),
+            user=settings.get_zabbix_credentials()[0],
+            password=settings.get_zabbix_credentials()[1],
+            timeout=settings.zabbix.get("timeout", 30),
+            verify_ssl=settings.zabbix.get("verify_ssl", True)
+        )
+        
+        # Step 1: Get hosts
+        logger.info("Step 1: Collecting hosts")
+        hosts = collector.get_hosts(
+            filter_status="enabled",
+            host_groups=args.host_groups.split(",") if args.host_groups else None
+        )
+        host_ids = [h["hostid"] for h in hosts]
+        logger.info(f"Collected {len(hosts)} hosts")
+        
+        # Step 2: Get items by connection status tag
+        logger.info("Step 2: Collecting items by 'connection status' tag")
+        connection_tag = args.connection_tag if hasattr(args, 'connection_tag') else "connection status"
+        items_with_tag = collector.get_items_by_tags(
+            tags=[{"tag": connection_tag, "operator": "like"}],
+            host_ids=host_ids,
+            monitored_only=True
+        )
+        logger.info(f"Collected {len(items_with_tag)} items with '{connection_tag}' tag")
+        
+        # Step 3: Detect connectivity items by tag
+        logger.info("Step 3: Detecting connectivity items by tag")
+        from analyzers.connectivity_analyzer import ConnectivityAnalyzer
+        from config.template_loader import TemplateConfigLoader
+        
+        template_loader = TemplateConfigLoader(args.template_mapping) if args.template_mapping else None
+        analyzer = ConnectivityAnalyzer(template_loader)
+        
+        detection_result = analyzer.detect_connectivity_items_by_tags(
+            items_data=items_with_tag,
+            connection_tag=connection_tag
+        )
+        
+        # Save detection result
+        analyzer.save_tag_based_connectivity_items(detection_result, args.output_dir)
+        
+        # Step 4: Collect history for connection items
+        logger.info("Step 4: Collecting history for connection items")
+        all_connection_items = []
+        for host_data in detection_result.get("hosts_with_items", []):
+            all_connection_items.extend(host_data.get("items", []))
+        
+        history_limit = args.history_limit if hasattr(args, 'history_limit') else 10
+        history_data = collector.get_item_history_by_value_types(
+            items_with_types=all_connection_items,
+            limit=history_limit
+        )
+        logger.info(f"Collected history for {len(history_data)} items")
+        
+        # Save history
+        collector.save_collected_data(
+            output_dir=args.output_dir,
+            history=history_data
+        )
+        
+        # Step 5: Analyze connectivity with per-item scoring
+        logger.info("Step 5: Analyzing connectivity with per-item scoring")
+        from analyzers.data_analyzer import DataAnalyzer
+        
+        data_analyzer = DataAnalyzer(template_loader) if template_loader else DataAnalyzer(None)
+        threshold = args.threshold_percentage if hasattr(args, 'threshold_percentage') else 70.0
+        
+        analysis_result = data_analyzer.analyze_tag_based_connectivity(
+            detection_result=detection_result,
+            history_data=history_data,
+            threshold_percentage=threshold
+        )
+        
+        # Save analysis
+        data_analyzer.save_tag_based_analysis(analysis_result, args.output_dir)
+        
+        # Step 6: Print summary
+        logger.info("=" * 60)
+        logger.info("CONNECTIVITY ANALYSIS SUMMARY")
+        logger.info("=" * 60)
+        summary = analysis_result.get("summary", {})
+        logger.info(f"Total hosts analyzed: {summary.get('total_hosts_analyzed', 0)}")
+        logger.info(f"Hosts with issues: {summary.get('hosts_with_issues', 0)}")
+        logger.info(f"Hosts without connection items: {summary.get('hosts_without_connection_items', 0)}")
+        logger.info(f"Total items analyzed: {summary.get('total_items_analyzed', 0)}")
+        logger.info(f"Items below {threshold}% threshold: {summary.get('items_below_threshold', 0)}")
+        logger.info("=" * 60)
+        
+        logger.info("Tag-based connectivity check completed successfully")
+        return 0
+    
+    except Exception as e:
+        logger.error(f"Tag-based connectivity check failed: {str(e)}", exc_info=True)
+        return 1
+
+
 def generate_report(args):
     """Generate final report"""
     logger.info("Starting report generation")
@@ -275,7 +389,8 @@ def main():
     parser = argparse.ArgumentParser(description="Zabbix Monitoring Integration")
     parser.add_argument("--mode", required=True, choices=[
         "collect", "analyze-templates", "detect-connectivity",
-        "analyze-data", "check-master-items", "generate-report"
+        "analyze-data", "check-master-items", "generate-report",
+        "tag-based-connectivity"
     ], help="Operation mode")
     parser.add_argument("--data-source", default="api", choices=["api", "database"],
                        help="Data source (api or database)")
@@ -297,6 +412,9 @@ def main():
     parser.add_argument("--inactive-threshold", type=int, help="Inactive threshold in seconds")
     parser.add_argument("--min-connectivity-score", type=float, help="Minimum connectivity score")
     parser.add_argument("--master-item-threshold", type=int, help="Master item threshold in seconds")
+    parser.add_argument("--connection-tag", default="connection status", help="Tag name for connection items")
+    parser.add_argument("--history-limit", type=int, default=10, help="Number of history records to analyze per item")
+    parser.add_argument("--threshold-percentage", type=float, default=70.0, help="Minimum acceptable connectivity percentage")
     parser.add_argument("--output-formats", help="Comma-separated output formats")
     parser.add_argument("--filename-pattern", help="Output filename pattern")
     parser.add_argument("--log-level", default="INFO", help="Log level")
@@ -328,6 +446,8 @@ def main():
         return check_master_items(args)
     elif args.mode == "generate-report":
         return generate_report(args)
+    elif args.mode == "tag-based-connectivity":
+        return tag_based_connectivity_check(args)
     else:
         logger.error(f"Unknown mode: {args.mode}")
         return 1

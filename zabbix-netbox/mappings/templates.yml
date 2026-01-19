@@ -12,8 +12,6 @@ Inspur M5:
 HPE IPMI:
   - name: BLT - HPE ProLiant DL380 by SNMP
     type: snmpv2
-  - name: HPE iLO by HTTP
-    type: api
     macros:
       "{$REDFISH.API.URL}": "https://{HOST.IP}/"
       "{$REDFISH.PASSWORD}": "A!UCZcCUSRwZ"
@@ -21,8 +19,6 @@ HPE IPMI:
 Dell IPMI:
   - name: BLT - Dell iDRAC SNMP
     type: snmpv2
-  - name: Dell iDRAC by Redfish
-    type: api
     macros:
       "{$IDRAC.API.URL}": "https://{HOST.IP}/"
       "{$IDRAC.PASSWORD}": "A!UCZcCUSRwZ"

@@ -2,7 +2,29 @@
 
 ## 📊 Genel Durum
 
-**İlerleme**: ~%75 tamamlandı
+**İlerleme**: ~%85 tamamlandı
+
+## 🆕 Yeni Feature: Tag-Based Connectivity Detection (✅ Tamamlandı)
+
+### Özellik Özeti
+- ✅ Template mapping yerine Zabbix tag'leri kullanarak connectivity item'larını tespit etme
+- ✅ "connection status" tag'ine sahip item'ları otomatik bulma
+- ✅ Son 10 değere göre per-item connectivity score hesaplama
+- ✅ %70 altındaki item'ları raporlama
+- ✅ Connection item'ı olmayan host'ları listeleme
+- ✅ HTML email notification
+
+### Yeni Dosyalar
+- `playbooks/zabbix_tag_based_monitoring.yaml` - Ana playbook
+- `playbooks/roles/zabbix_monitoring/tasks/tag_based_connectivity_check.yml` - Check task'ı
+- `playbooks/roles/zabbix_monitoring/tasks/send_tag_based_notification_email.yml` - Email task'ı
+- `docs/development/TAG_BASED_CONNECTIVITY_FEATURE.md` - Feature dokümantasyonu
+
+### Güncellemeler
+- `api_collector.py`: `get_items_by_tags()`, `get_item_history_by_value_types()` metodları
+- `connectivity_analyzer.py`: `detect_connectivity_items_by_tags()` metodu
+- `data_analyzer.py`: `calculate_connectivity_score()`, `analyze_tag_based_connectivity()` metodları
+- `main.py`: Yeni mode: `tag-based-connectivity`
 
 ### ✅ Tamamlanan Fazlar
 
