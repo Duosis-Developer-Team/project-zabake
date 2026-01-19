@@ -1,80 +1,55 @@
 ---
-# Main task file for zabbix_monitoring role
-# Each step is designed to be debuggable in AWX
+# Main task file for Zabbix Monitoring role
+# PRIMARY MODE: Tag-Based Connectivity Detection
+# Legacy template-based tasks moved to legacy/ folder
 
-- name: "Zabbix Monitoring Check - Main Tasks"
-  block:
-    - name: "Validate configuration"
-      include_tasks: validate_config.yml
-      when: step_collect_data | default(true) | bool
+- name: "Display mode information"
+  debug:
+    msg: |
+      =====================================
+      Zabbix Monitoring - Tag-Based Mode
+      =====================================
+      Using tag-based connectivity detection.
+      No configuration files needed!
+      See TAG_BASED_CONNECTIVITY_README.md
+  when: debug_enabled | default(false) | bool
 
-    - name: "Collect data from Zabbix"
-      include_tasks: collect_data.yml
-      when: step_collect_data | default(true) | bool
-      vars:
-        debug_step: "collect_data"
+# ========================================
+# PRIMARY: Tag-Based Connectivity Check
+# ========================================
 
-    - name: "Analyze templates and detect connectivity items"
-      include_tasks: analyze_templates.yml
-      when: step_analyze_templates | default(true) | bool
-      vars:
-        debug_step: "analyze_templates"
+- name: "Run tag-based connectivity check"
+  include_tasks: tag_based_connectivity_check.yml
 
-    - name: "Detect connectivity items"
-      include_tasks: detect_connectivity.yml
-      when: step_detect_connectivity | default(true) | bool
-      vars:
-        debug_step: "detect_connectivity"
+- name: "Send email notification"
+  include_tasks: send_tag_based_notification_email.yml
+  when: send_email | default(true) | bool
 
-    - name: "Analyze connectivity data"
-      include_tasks: analyze_data.yml
-      when: step_analyze_data | default(true) | bool
-      vars:
-        debug_step: "analyze_data"
+# ========================================
+# LEGACY MODE (Deprecated)
+# ========================================
+# Uncomment below to use legacy mode
+# WARNING: Will be removed in June 2026
+# See LEGACY_DEPRECATION.md
 
-    - name: "Check master items"
-      include_tasks: check_master_items.yml
-      when: step_check_master_items | default(true) | bool
-      vars:
-        debug_step: "check_master_items"
-
-    - name: "Generate report"
-      include_tasks: generate_report.yml
-      when: step_generate_report | default(true) | bool
-      vars:
-        debug_step: "generate_report"
-
-    - name: "Send email notification"
-      include_tasks: send_notification_email.yml
-      when: 
-        - step_send_notifications | default(true) | bool
-        - mail_recipients is defined
-        - mail_recipients | length > 0
-      vars:
-        debug_step: "send_notification"
-
-  rescue:
-    - name: "Error occurred during monitoring check"
-      debug:
-        msg: "Error in step: {{ debug_step | default('unknown') }}"
-      
-    - name: "Create debug output directory if it doesn't exist"
-      file:
-        path: "{{ debug_output_dir }}"
-        state: directory
-        mode: '0755'
-      when: debug_save_intermediate_files | default(true) | bool
-    
-    - name: "Save error information"
-      copy:
-        content: |
-          Error occurred at: {{ ansible_date_time.iso8601 }}
-          Step: {{ debug_step | default('unknown') }}
-          Error: {{ ansible_failed_result.msg | default('Unknown error') }}
-        dest: "{{ debug_output_dir }}/error_{{ ansible_date_time.epoch }}.txt"
-        mode: '0644'
-      when: debug_save_intermediate_files | default(true) | bool
-      
-    - name: "Fail the playbook"
-      fail:
-        msg: "Zabbix monitoring check failed at step: {{ debug_step | default('unknown') }}"
+# - name: "⚠️  DEPRECATION WARNING"
+#   debug:
+#     msg: |
+#       =====================================
+#       ⚠️  WARNING: LEGACY MODE
+#       =====================================
+#       Legacy template-based mode is deprecated.
+#       Migrate to tag-based mode.
+#       See LEGACY_DEPRECATION.md
+#
+# - include_tasks: legacy/validate_config.yml
+#   when: use_legacy_mode | default(false) | bool
+#
+# - include_tasks: legacy/collect_data.yml
+#   when: use_legacy_mode | default(false) | bool
+#
+# - include_tasks: legacy/detect_connectivity.yml
+#   when: use_legacy_mode | default(false) | bool
+#
+# - include_tasks: legacy/analyze_data.yml
+#   when: use_legacy_mode | default(false) | bool
