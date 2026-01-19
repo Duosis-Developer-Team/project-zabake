@@ -311,7 +311,8 @@ class ConnectivityAnalyzer:
     def detect_connectivity_items_by_tags(
         self,
         items_data: List[Dict[str, Any]],
-        connection_tag: str = "connection status"
+        connection_tag: str = "connection status",
+        all_hosts_data: List[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Detect connectivity items by tag
@@ -319,15 +320,26 @@ class ConnectivityAnalyzer:
         Args:
             items_data: List of item dictionaries with tags
             connection_tag: Tag name to identify connection items (default: "connection status")
+            all_hosts_data: Optional list of all host dictionaries (to detect hosts without items)
             
         Returns:
             Dictionary with connectivity items grouped by host and list of hosts without connection items
         """
         logger.info(f"Detecting connectivity items by tag: {connection_tag}")
         
+        # Build set of all hosts
+        all_hosts = set()
+        if all_hosts_data:
+            # Use provided host list (accurate for detecting hosts without items)
+            for host in all_hosts_data:
+                host_id = host.get("hostid")
+                hostname = host.get("host", "")
+                host_name = host.get("name", hostname)
+                all_hosts.add((host_id, hostname, host_name))
+            logger.info(f"Using {len(all_hosts)} hosts from provided host list")
+        
         # Group items by host
         items_by_host = {}
-        all_hosts = set()
         
         for item in items_data:
             # Get host info from item
@@ -340,7 +352,9 @@ class ConnectivityAnalyzer:
             hostname = host_info.get("host", "")
             host_name = host_info.get("name", hostname)
             
-            all_hosts.add((host_id, hostname, host_name))
+            # If all_hosts_data not provided, build from items (backward compatibility)
+            if not all_hosts_data:
+                all_hosts.add((host_id, hostname, host_name))
             
             # Check if item has connection status tag
             tags = item.get("tags", [])

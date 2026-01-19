@@ -309,7 +309,8 @@ def tag_based_connectivity_check(args):
         
         detection_result = analyzer.detect_connectivity_items_by_tags(
             items_data=items_with_tag,
-            connection_tag=connection_tag
+            connection_tag=connection_tag,
+            all_hosts_data=hosts  # Pass all hosts to detect hosts without connection items
         )
         
         # Save detection result
