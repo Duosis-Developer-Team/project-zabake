@@ -17,16 +17,26 @@
         <thead>
           <tr style="background-color: #f2f2f2;">
             <th>Host</th>
+            <th>Host Status</th>
             <th>Item</th>
             <th>Score</th>
-            <th>Status</th>
+            <th>Item Status</th>
             <th>Detail</th>
           </tr>
         </thead>
         <tbody>
         {% for item in items %}
-          <tr style="background-color: {% if item.status == 'critical' %}#ffcccc{% elif item.status == 'warning' %}#fff4cc{% else %}#ffffff{% endif %};">
+          <tr style="background-color: {% if item.host_status == 'all_critical' %}#ffcccc{% elif item.host_status == 'partial' %}#ffe4b3{% else %}#ffffff{% endif %};">
             <td>{{ item.host_name | default(item.hostname) }}</td>
+            <td style="text-align: center;">
+              {% if item.host_status == 'all_critical' %}
+              <span style="color: red; font-weight: bold;">ALL CRITICAL</span>
+              {% elif item.host_status == 'partial' %}
+              <span style="color: orange; font-weight: bold;">PARTIAL</span>
+              {% else %}
+              <span style="color: green;">ALL OK</span>
+              {% endif %}
+            </td>
             <td>{{ item.item_name }}</td>
             <td style="text-align: center;">{{ item.percentage }}%</td>
             <td style="text-align: center;">

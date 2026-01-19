@@ -477,16 +477,32 @@ class DataAnalyzer:
                 # Check if item is below threshold
                 if score_result["percentage"] < threshold_percentage:
                     host_has_issues = True
+            
+            # Determine host status
+            items_below = sum(1 for i in analyzed_items if i["below_threshold"])
+            total_items_count = len(analyzed_items)
+            
+            if items_below == 0:
+                host_status = "all_ok"
+            elif items_below == total_items_count:
+                host_status = "all_critical"
+            else:
+                host_status = "partial"  # Some items have issues, some are OK
+            
+            # Add problematic items with host status
+            for item in analyzed_items:
+                if item["below_threshold"]:
                     problematic_items.append({
                         "hostid": host_id,
                         "hostname": hostname,
                         "host_name": host_name,
-                        "itemid": item_id,
-                        "item_key": item.get("key"),
-                        "item_name": item.get("name"),
-                        "percentage": score_result["percentage"],
-                        "status": score_result["status"],
-                        "detail": f"{host_name} hostunda bulunan {item.get('name')} item'ı için connection problemleri bulunmakta."
+                        "itemid": item["itemid"],
+                        "item_key": item["key"],
+                        "item_name": item["name"],
+                        "percentage": item["percentage"],
+                        "status": item["status"],
+                        "host_status": host_status,
+                        "detail": f"{host_name} hostunda bulunan {item['name']} item'ı için connection problemleri bulunmakta."
                     })
             
             analyzed_hosts.append({
@@ -494,9 +510,10 @@ class DataAnalyzer:
                 "hostname": hostname,
                 "host_name": host_name,
                 "items": analyzed_items,
-                "total_items": len(analyzed_items),
-                "items_below_threshold": sum(1 for i in analyzed_items if i["below_threshold"]),
-                "has_issues": host_has_issues
+                "total_items": total_items_count,
+                "items_below_threshold": items_below,
+                "has_issues": host_has_issues,
+                "host_status": host_status
             })
         
         # Calculate summary
