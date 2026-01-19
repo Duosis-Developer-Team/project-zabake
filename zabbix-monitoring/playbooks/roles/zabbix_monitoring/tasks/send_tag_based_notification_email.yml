@@ -21,7 +21,6 @@
             <th>Item</th>
             <th>Score</th>
             <th>Item Status</th>
-            <th>Detail</th>
           </tr>
         </thead>
         <tbody>
@@ -58,7 +57,6 @@
               <span style="color: gray;">{{ item.status | upper }}</span>
               {% endif %}
             </td>
-            <td>{{ item.detail }}</td>
           </tr>
         {% endfor %}
         </tbody>
