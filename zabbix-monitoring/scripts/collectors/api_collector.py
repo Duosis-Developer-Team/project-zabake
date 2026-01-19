@@ -281,8 +281,10 @@ class ZabbixAPICollector:
         Get items by tags
         
         Args:
-            tags: List of tag dictionaries with 'tag' and 'value' keys
-                  Example: [{"tag": "connection status", "value": "", "operator": "like"}]
+            tags: List of tag dictionaries with 'tag' key (and optional 'value', 'operator')
+                  Example: [{"tag": "connection status"}]  # Matches any value including empty/None
+                  Example: [{"tag": "connection status", "value": ""}]  # Matches empty value
+                  Note: "operator" removed for Zabbix 7.x compatibility
             host_ids: Optional list of host IDs to filter
             monitored_only: Only get monitored items (status=0)
             
@@ -344,14 +346,12 @@ class ZabbixAPICollector:
         time_to_ts = int(time_to.timestamp())
         
         history_data = {}
-        batch_size = 50  # Process in smaller batches for history
         
-        for i in range(0, len(item_ids), batch_size):
-            batch = item_ids[i:i + batch_size]
-            
+        # Zabbix 7.x: Collect history per item with limit
+        for item_id in item_ids:
             params = {
                 "output": "extend",
-                "itemids": batch,
+                "itemids": [item_id],
                 "history": value_type,
                 "time_from": time_from_ts,
                 "time_to": time_to_ts,
@@ -362,20 +362,14 @@ class ZabbixAPICollector:
             
             try:
                 response = self._api_request("history.get", params)
-                batch_history = response.get("result", [])
+                item_history = response.get("result", [])
                 
-                # Group by item_id
-                for record in batch_history:
-                    item_id = record.get("itemid")
-                    if item_id not in history_data:
-                        history_data[item_id] = []
-                    history_data[item_id].append(record)
+                if item_history:
+                    history_data[item_id] = item_history
                 
-                logger.debug(f"Collected history for batch {i // batch_size + 1}")
-            
             except Exception as e:
-                logger.error(f"Failed to collect history for batch: {str(e)}")
-                # Continue with other batches
+                logger.debug(f"Failed to collect history for item {item_id}: {str(e)}")
+                # Continue with other items
         
         logger.info(f"Collected history for {len(history_data)} items")
         return history_data

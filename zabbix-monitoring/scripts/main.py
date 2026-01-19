@@ -293,7 +293,7 @@ def tag_based_connectivity_check(args):
         logger.info("Step 2: Collecting items by 'connection status' tag")
         connection_tag = args.connection_tag if hasattr(args, 'connection_tag') else "connection status"
         items_with_tag = collector.get_items_by_tags(
-            tags=[{"tag": connection_tag, "operator": "like"}],
+            tags=[{"tag": connection_tag}],  # Removed "operator": "like" for Zabbix 7.x compatibility
             host_ids=host_ids,
             monitored_only=True
         )
@@ -327,6 +327,28 @@ def tag_based_connectivity_check(args):
             limit=history_limit
         )
         logger.info(f"Collected history for {len(history_data)} items")
+        
+        # For internal items (type=5) that don't have history, use lastvalue
+        for item in all_connection_items:
+            item_id = item.get("itemid")
+            item_type = int(item.get("type", 0))
+            
+            # If item is internal (type=5) and has no history, use lastvalue
+            if item_type == 5 and item_id not in history_data:
+                lastvalue = item.get("lastvalue")
+                lastclock = item.get("lastclock")
+                
+                if lastvalue is not None and lastclock:
+                    # Create fake history records using lastvalue
+                    history_data[item_id] = [
+                        {
+                            "itemid": item_id,
+                            "clock": lastclock,
+                            "value": lastvalue
+                        }
+                    ]
+        
+        logger.info(f"Total items with history (including lastvalue): {len(history_data)}")
         
         # Save history
         collector.save_collected_data(
