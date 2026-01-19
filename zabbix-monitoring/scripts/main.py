@@ -386,12 +386,13 @@ def generate_report(args):
 
 def main():
     """Main entry point"""
-    parser = argparse.ArgumentParser(description="Zabbix Monitoring Integration")
+    parser = argparse.ArgumentParser(description="Zabbix Monitoring Integration - Tag-Based Connectivity")
     parser.add_argument("--mode", required=True, choices=[
+        "tag-based-connectivity",  # Primary mode
+        # Legacy modes (deprecated, kept for backward compatibility)
         "collect", "analyze-templates", "detect-connectivity",
-        "analyze-data", "check-master-items", "generate-report",
-        "tag-based-connectivity"
-    ], help="Operation mode")
+        "analyze-data", "check-master-items", "generate-report"
+    ], help="Operation mode (use 'tag-based-connectivity' for new implementation)")
     parser.add_argument("--data-source", default="api", choices=["api", "database"],
                        help="Data source (api or database)")
     parser.add_argument("--zabbix-url", help="Zabbix API URL")
@@ -434,20 +435,30 @@ def main():
     )
     
     # Execute based on mode
-    if args.mode == "collect":
-        return collect_data(args)
-    elif args.mode == "analyze-templates":
-        return analyze_templates(args)
-    elif args.mode == "detect-connectivity":
-        return detect_connectivity(args)
-    elif args.mode == "analyze-data":
-        return analyze_data(args)
-    elif args.mode == "check-master-items":
-        return check_master_items(args)
-    elif args.mode == "generate-report":
-        return generate_report(args)
-    elif args.mode == "tag-based-connectivity":
+    if args.mode == "tag-based-connectivity":
+        # Primary mode - tag-based connectivity check
         return tag_based_connectivity_check(args)
+    
+    # Legacy modes (deprecated)
+    elif args.mode in ["collect", "analyze-templates", "detect-connectivity", 
+                       "analyze-data", "check-master-items", "generate-report"]:
+        logger.warning(f"⚠️  Mode '{args.mode}' is DEPRECATED and will be removed in future versions.")
+        logger.warning(f"⚠️  Please use 'tag-based-connectivity' mode instead.")
+        logger.warning(f"⚠️  See TAG_BASED_CONNECTIVITY_README.md for migration guide.")
+        
+        if args.mode == "collect":
+            return collect_data(args)
+        elif args.mode == "analyze-templates":
+            return analyze_templates(args)
+        elif args.mode == "detect-connectivity":
+            return detect_connectivity(args)
+        elif args.mode == "analyze-data":
+            return analyze_data(args)
+        elif args.mode == "check-master-items":
+            return check_master_items(args)
+        elif args.mode == "generate-report":
+            return generate_report(args)
+    
     else:
         logger.error(f"Unknown mode: {args.mode}")
         return 1
