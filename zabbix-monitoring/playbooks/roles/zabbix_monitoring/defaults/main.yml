@@ -1,12 +1,14 @@
 ---
 # Default variables for zabbix_monitoring role
+# These values will be overridden by AWX Extra Variables
 
 # ========================================
-# Zabbix Connection Settings
+# Zabbix Connection Settings (Required from AWX)
 # ========================================
-zabbix_url: "{{ lookup('env', 'ZABBIX_URL') | default('http://localhost/zabbix', true) }}"
-zabbix_user: "{{ lookup('env', 'ZABBIX_USER') | default('Admin', true) }}"
-zabbix_password: "{{ lookup('env', 'ZABBIX_PASSWORD') | default('zabbix', true) }}"
+# Set these in AWX Extra Variables or Survey
+zabbix_url: ""  # e.g., "http://zabbix.example.com/api_jsonrpc.php"
+zabbix_user: ""  # e.g., "Admin"
+zabbix_password: ""  # Use AWX Credentials or Vault
 
 # ========================================
 # Tag-Based Connectivity Settings
@@ -28,15 +30,15 @@ host_groups: ""
 # ========================================
 send_email: true
 
-# SMTP settings
-smtp_server: "{{ lookup('env', 'SMTP_SERVER') | default('localhost', true) }}"
-smtp_port: "{{ lookup('env', 'SMTP_PORT') | default(25, true) }}"
-smtp_username: "{{ lookup('env', 'SMTP_USERNAME') | default('', true) }}"
-smtp_password: "{{ lookup('env', 'SMTP_PASSWORD') | default('', true) }}"
+# SMTP settings (Set in AWX Extra Variables)
+smtp_server: "localhost"  # Override in AWX
+smtp_port: 25
+smtp_username: ""  # Optional
+smtp_password: ""  # Optional, use AWX Credentials
 
-# Email addresses
-email_from: "{{ lookup('env', 'EMAIL_FROM') | default('zabbix-monitoring@example.com', true) }}"
-email_to: "{{ lookup('env', 'EMAIL_TO') | default('admin@example.com', true) }}"
+# Email addresses (Set in AWX Extra Variables)
+email_from: "zabbix-monitoring@example.com"
+email_to: "admin@example.com"
 
 # ========================================
 # Debug and Logging Settings

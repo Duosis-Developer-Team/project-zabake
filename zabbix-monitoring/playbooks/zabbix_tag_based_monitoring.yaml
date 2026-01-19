@@ -1,42 +1,28 @@
 ---
 # Zabbix Tag-Based Connectivity Monitoring Playbook
 # This playbook performs tag-based connectivity monitoring for Zabbix hosts
+# 
+# Required AWX Extra Variables:
+#   - zabbix_url: Zabbix API URL
+#   - zabbix_user: Zabbix username
+#   - zabbix_password: Zabbix password (use AWX Credentials)
+#   - smtp_server: SMTP server address
+#   - email_to: Recipient email address(es)
+#
+# Optional AWX Extra Variables:
+#   - connection_tag: Tag name (default: "connection status")
+#   - history_limit: Number of values to analyze (default: 10)
+#   - threshold_percentage: Minimum % (default: 70.0)
+#   - host_groups: Filter by host groups (default: "" = all)
+#   - smtp_port: SMTP port (default: 25)
+#   - email_from: Sender email (default: zabbix-monitoring@example.com)
 
 - name: "Zabbix Tag-Based Connectivity Monitoring"
   hosts: localhost
   gather_facts: yes
   
-  vars:
-    # Zabbix API settings
-    zabbix_url: "{{ lookup('env', 'ZABBIX_URL') }}"
-    zabbix_user: "{{ lookup('env', 'ZABBIX_USER') }}"
-    zabbix_password: "{{ lookup('env', 'ZABBIX_PASSWORD') }}"
-    
-    # Connection settings
-    connection_tag: "connection status"  # Tag name to identify connection items
-    history_limit: 10  # Number of history records to analyze per item
-    threshold_percentage: 70.0  # Minimum acceptable connectivity percentage
-    
-    # Host filtering
-    host_groups: ""  # Comma-separated host group names (empty for all)
-    
-    # Email settings
-    send_email: true
-    smtp_server: "{{ lookup('env', 'SMTP_SERVER') | default('localhost', true) }}"
-    smtp_port: "{{ lookup('env', 'SMTP_PORT') | default(25, true) }}"
-    smtp_username: "{{ lookup('env', 'SMTP_USERNAME') | default('', true) }}"
-    smtp_password: "{{ lookup('env', 'SMTP_PASSWORD') | default('', true) }}"
-    email_from: "{{ lookup('env', 'EMAIL_FROM') | default('zabbix-monitoring@example.com', true) }}"
-    email_to: "{{ lookup('env', 'EMAIL_TO') | default('admin@example.com', true) }}"
-    
-    # Debug settings
-    debug_enabled: false
-    debug_output_dir: "/tmp/zabbix_monitoring_output"
-    debug_save_intermediate_files: true
-    
-    # Logging
-    log_level: "INFO"
-    log_file: "/tmp/zabbix_tag_based_monitoring.log"
+  # All variables should come from AWX Extra Variables or defaults/main.yml
+  # No environment variable lookups - AWX manages variables
   
   tasks:
     - name: "Create debug output directory"
