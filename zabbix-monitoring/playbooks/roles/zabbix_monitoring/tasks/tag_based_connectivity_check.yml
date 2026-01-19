@@ -1,0 +1,69 @@
+---
+# Tag-based connectivity check task
+
+- name: "Run tag-based connectivity check"
+  command: >
+    python3 {{ playbook_dir }}/../scripts/main.py
+    --mode tag-based-connectivity
+    --zabbix-url {{ zabbix_url }}
+    --zabbix-user {{ zabbix_user }}
+    --zabbix-password {{ zabbix_password }}
+    --output-dir {{ debug_output_dir }}
+    --host-groups {{ host_groups | default('') }}
+    --connection-tag "{{ connection_tag | default('connection status') }}"
+    --history-limit {{ history_limit | default(10) }}
+    --threshold-percentage {{ threshold_percentage | default(70.0) }}
+    --log-level {{ log_level }}
+    --log-file {{ log_file }}
+    --verbose
+  register: tag_based_check_result
+  changed_when: false
+  failed_when: tag_based_check_result.rc != 0
+
+- name: "Display tag-based check result"
+  debug:
+    msg: "{{ tag_based_check_result.stdout_lines }}"
+  when: 
+    - debug_enabled | default(false) | bool
+    - tag_based_check_result.stdout_lines is defined
+
+- name: "Check analysis results file"
+  stat:
+    path: "{{ debug_output_dir }}/tag_based_connectivity_analysis.json"
+  register: analysis_results_file
+
+- name: "Display analysis file status"
+  debug:
+    msg: "Analysis results file: {{ 'exists' if analysis_results_file.stat.exists else 'missing' }}"
+  when: debug_enabled | default(false) | bool
+
+- name: "Load and display analysis summary"
+  slurp:
+    src: "{{ debug_output_dir }}/tag_based_connectivity_analysis.json"
+  register: analysis_data
+  when: analysis_results_file.stat.exists
+
+- name: "Parse and display summary"
+  debug:
+    msg: |
+      Tag-Based Connectivity Analysis Summary:
+      ========================================
+      Total Hosts Analyzed: {{ (analysis_data.content | b64decode | from_json).summary.total_hosts_analyzed }}
+      Hosts with Issues: {{ (analysis_data.content | b64decode | from_json).summary.hosts_with_issues }}
+      Hosts without Connection Items: {{ (analysis_data.content | b64decode | from_json).summary.hosts_without_connection_items }}
+      Total Items Analyzed: {{ (analysis_data.content | b64decode | from_json).summary.total_items_analyzed }}
+      Items Below Threshold: {{ (analysis_data.content | b64decode | from_json).summary.items_below_threshold }}
+      Threshold: {{ (analysis_data.content | b64decode | from_json).summary.threshold_percentage }}%
+  when: 
+    - analysis_results_file.stat.exists
+    - analysis_data is defined
+    - debug_enabled | default(false) | bool
+
+- name: "Save check summary for debugging"
+  copy:
+    content: |
+      Tag-Based Connectivity Check completed at: {{ ansible_date_time.iso8601 }}
+      Analysis results: {{ 'Available' if analysis_results_file.stat.exists else 'Not available' }}
+    dest: "{{ debug_output_dir }}/tag_based_check_summary.txt"
+    mode: '0644'
+  when: debug_save_intermediate_files | default(true) | bool

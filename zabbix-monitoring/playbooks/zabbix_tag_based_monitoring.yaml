@@ -1,0 +1,74 @@
+---
+# Zabbix Tag-Based Connectivity Monitoring Playbook
+# This playbook performs tag-based connectivity monitoring for Zabbix hosts
+
+- name: "Zabbix Tag-Based Connectivity Monitoring"
+  hosts: localhost
+  gather_facts: yes
+  
+  vars:
+    # Zabbix API settings
+    zabbix_url: "{{ lookup('env', 'ZABBIX_URL') }}"
+    zabbix_user: "{{ lookup('env', 'ZABBIX_USER') }}"
+    zabbix_password: "{{ lookup('env', 'ZABBIX_PASSWORD') }}"
+    
+    # Connection settings
+    connection_tag: "connection status"  # Tag name to identify connection items
+    history_limit: 10  # Number of history records to analyze per item
+    threshold_percentage: 70.0  # Minimum acceptable connectivity percentage
+    
+    # Host filtering
+    host_groups: ""  # Comma-separated host group names (empty for all)
+    
+    # Email settings
+    send_email: true
+    smtp_server: "{{ lookup('env', 'SMTP_SERVER') | default('localhost', true) }}"
+    smtp_port: "{{ lookup('env', 'SMTP_PORT') | default(25, true) }}"
+    smtp_username: "{{ lookup('env', 'SMTP_USERNAME') | default('', true) }}"
+    smtp_password: "{{ lookup('env', 'SMTP_PASSWORD') | default('', true) }}"
+    email_from: "{{ lookup('env', 'EMAIL_FROM') | default('zabbix-monitoring@example.com', true) }}"
+    email_to: "{{ lookup('env', 'EMAIL_TO') | default('admin@example.com', true) }}"
+    
+    # Debug settings
+    debug_enabled: false
+    debug_output_dir: "/tmp/zabbix_monitoring_output"
+    debug_save_intermediate_files: true
+    
+    # Logging
+    log_level: "INFO"
+    log_file: "/tmp/zabbix_tag_based_monitoring.log"
+  
+  tasks:
+    - name: "Create debug output directory"
+      file:
+        path: "{{ debug_output_dir }}"
+        state: directory
+        mode: '0755'
+    
+    - name: "Validate required variables"
+      assert:
+        that:
+          - zabbix_url is defined and zabbix_url | length > 0
+          - zabbix_user is defined and zabbix_user | length > 0
+          - zabbix_password is defined and zabbix_password | length > 0
+        fail_msg: "Zabbix connection parameters (ZABBIX_URL, ZABBIX_USER, ZABBIX_PASSWORD) must be set"
+    
+    - name: "Run tag-based connectivity check"
+      include_role:
+        name: zabbix_monitoring
+        tasks_from: tag_based_connectivity_check.yml
+    
+    - name: "Send email notification"
+      include_role:
+        name: zabbix_monitoring
+        tasks_from: send_tag_based_notification_email.yml
+      when: send_email | default(true) | bool
+    
+    - name: "Display completion message"
+      debug:
+        msg: |
+          ========================================
+          Tag-Based Connectivity Check Completed
+          ========================================
+          Results saved to: {{ debug_output_dir }}
+          Log file: {{ log_file }}

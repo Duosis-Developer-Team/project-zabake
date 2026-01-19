@@ -271,6 +271,47 @@ class ZabbixAPICollector:
         logger.info(f"Collected total {len(items)} items")
         return items
     
+    def get_items_by_tags(
+        self,
+        tags: List[Dict[str, str]],
+        host_ids: List[str] = None,
+        monitored_only: bool = True
+    ) -> List[Dict[str, Any]]:
+        """
+        Get items by tags
+        
+        Args:
+            tags: List of tag dictionaries with 'tag' and 'value' keys
+                  Example: [{"tag": "connection status", "value": "", "operator": "like"}]
+            host_ids: Optional list of host IDs to filter
+            monitored_only: Only get monitored items (status=0)
+            
+        Returns:
+            List of item dictionaries with tags
+        """
+        logger.info(f"Collecting items by tags: {tags}")
+        
+        params = {
+            "output": "extend",
+            "selectTags": "extend",
+            "selectHosts": ["hostid", "host", "name"],
+            "tags": tags,
+            "monitored": monitored_only
+        }
+        
+        if host_ids:
+            params["hostids"] = host_ids
+        
+        try:
+            response = self._api_request("item.get", params)
+            items = response.get("result", [])
+            logger.info(f"Collected {len(items)} items by tags")
+            return items
+        
+        except Exception as e:
+            logger.error(f"Failed to collect items by tags: {str(e)}")
+            raise
+    
     def get_item_history(
         self,
         item_ids: List[str],
@@ -292,7 +333,7 @@ class ZabbixAPICollector:
         Returns:
             Dictionary mapping item_id to list of history records
         """
-        logger.info(f"Collecting history for {len(item_ids)} items")
+        logger.info(f"Collecting history for {len(item_ids)} items (limit={limit})")
         
         if time_from is None:
             time_from = datetime.now() - timedelta(hours=1)
@@ -338,6 +379,51 @@ class ZabbixAPICollector:
         
         logger.info(f"Collected history for {len(history_data)} items")
         return history_data
+    
+    def get_item_history_by_value_types(
+        self,
+        items_with_types: List[Dict[str, Any]],
+        time_from: Optional[datetime] = None,
+        time_to: Optional[datetime] = None,
+        limit: int = 10
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Get history data for items with different value types
+        
+        Args:
+            items_with_types: List of item dictionaries with 'itemid' and 'value_type'
+            time_from: Start time (default: 1 hour ago)
+            time_to: End time (default: now)
+            limit: Number of records per item (default: 10)
+            
+        Returns:
+            Dictionary mapping item_id to list of history records
+        """
+        logger.info(f"Collecting history for {len(items_with_types)} items with different value types (limit={limit})")
+        
+        # Group items by value_type
+        items_by_type = {}
+        for item in items_with_types:
+            value_type = int(item.get("value_type", 3))
+            item_id = item.get("itemid")
+            if value_type not in items_by_type:
+                items_by_type[value_type] = []
+            items_by_type[value_type].append(item_id)
+        
+        # Collect history for each value type
+        all_history = {}
+        for value_type, item_ids in items_by_type.items():
+            logger.info(f"Collecting history for {len(item_ids)} items with value_type={value_type}")
+            history = self.get_item_history(
+                item_ids=item_ids,
+                value_type=value_type,
+                time_from=time_from,
+                time_to=time_to,
+                limit=limit
+            )
+            all_history.update(history)
+        
+        return all_history
     
     def get_item_trends(
         self,

@@ -1,0 +1,161 @@
+---
+# Send email notification for tag-based connectivity analysis
+
+- name: "Check if tag-based analysis results exist"
+  stat:
+    path: "{{ debug_output_dir }}/tag_based_connectivity_analysis.json"
+  register: analysis_file
+
+- name: "Load tag-based analysis results"
+  slurp:
+    src: "{{ debug_output_dir }}/tag_based_connectivity_analysis.json"
+  register: analysis_data
+  when: analysis_file.stat.exists
+
+- name: "Parse analysis results"
+  set_fact:
+    analysis: "{{ analysis_data.content | b64decode | from_json }}"
+  when: analysis_file.stat.exists
+
+- name: "Build email content for problematic items"
+  set_fact:
+    problematic_items_table: |
+      {% set items = analysis.problematic_items | default([]) %}
+      {% if items | length > 0 %}
+      <h2>⚠️ Connection Problems Detected</h2>
+      <p>The following items have connectivity scores below {{ analysis.summary.threshold_percentage }}%:</p>
+      <table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%;">
+        <thead>
+          <tr style="background-color: #f2f2f2;">
+            <th>Host</th>
+            <th>Item</th>
+            <th>Score</th>
+            <th>Status</th>
+            <th>Detail</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for item in items %}
+          <tr style="background-color: {% if item.status == 'critical' %}#ffcccc{% elif item.status == 'warning' %}#fff4cc{% else %}#ffffff{% endif %};">
+            <td>{{ item.host_name | default(item.hostname) }}</td>
+            <td>{{ item.item_name }}</td>
+            <td style="text-align: center;">{{ item.percentage }}%</td>
+            <td style="text-align: center;">
+              {% if item.status == 'critical' %}
+              <span style="color: red; font-weight: bold;">CRITICAL</span>
+              {% elif item.status == 'warning' %}
+              <span style="color: orange; font-weight: bold;">WARNING</span>
+              {% else %}
+              <span style="color: green;">OK</span>
+              {% endif %}
+            </td>
+            <td>{{ item.detail }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="color: green;">✅ All connection items are healthy (above {{ analysis.summary.threshold_percentage }}% threshold).</p>
+      {% endif %}
+  when: analysis_file.stat.exists
+
+- name: "Build email content for hosts without connection items"
+  set_fact:
+    hosts_without_items_section: |
+      {% set hosts = analysis.hosts_without_connection_items | default([]) %}
+      {% if hosts | length > 0 %}
+      <h2>ℹ️ Hosts Without Connection Items</h2>
+      <p>The following hosts do not have any items with 'connection status' tag:</p>
+      <table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%;">
+        <thead>
+          <tr style="background-color: #f2f2f2;">
+            <th>Host ID</th>
+            <th>Hostname</th>
+            <th>Display Name</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for host in hosts %}
+          <tr>
+            <td>{{ host.hostid }}</td>
+            <td>{{ host.hostname }}</td>
+            <td>{{ host.host_name | default(host.hostname) }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+  when: analysis_file.stat.exists
+
+- name: "Build email summary"
+  set_fact:
+    email_summary: |
+      <h2>📊 Summary</h2>
+      <ul>
+        <li><strong>Total Hosts Analyzed:</strong> {{ analysis.summary.total_hosts_analyzed }}</li>
+        <li><strong>Hosts with Issues:</strong> {{ analysis.summary.hosts_with_issues }}</li>
+        <li><strong>Hosts without Issues:</strong> {{ analysis.summary.hosts_without_issues }}</li>
+        <li><strong>Hosts without Connection Items:</strong> {{ analysis.summary.hosts_without_connection_items }}</li>
+        <li><strong>Total Items Analyzed:</strong> {{ analysis.summary.total_items_analyzed }}</li>
+        <li><strong>Items Below Threshold:</strong> {{ analysis.summary.items_below_threshold }}</li>
+        <li><strong>Threshold Percentage:</strong> {{ analysis.summary.threshold_percentage }}%</li>
+        <li><strong>Analysis Timestamp:</strong> {{ analysis.summary.analysis_timestamp }}</li>
+      </ul>
+  when: analysis_file.stat.exists
+
+- name: "Build complete email body"
+  set_fact:
+    email_body: |
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; }
+          table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+          th { background-color: #4CAF50; color: white; }
+        </style>
+      </head>
+      <body>
+        <h1>🔍 Zabbix Tag-Based Connectivity Report</h1>
+        {{ email_summary }}
+        {{ problematic_items_table }}
+        {{ hosts_without_items_section }}
+        <hr>
+        <p style="color: gray; font-size: 12px;">
+          This is an automated report generated by Zabbix Monitoring Integration.<br>
+          Analysis Date: {{ analysis.summary.analysis_timestamp }}
+        </p>
+      </body>
+      </html>
+  when: analysis_file.stat.exists
+
+- name: "Send email notification"
+  community.general.mail:
+    host: "{{ smtp_server }}"
+    port: "{{ smtp_port }}"
+    username: "{{ smtp_username | default(omit) }}"
+    password: "{{ smtp_password | default(omit) }}"
+    from: "{{ email_from }}"
+    to: "{{ email_to }}"
+    subject: "Zabbix Tag-Based Connectivity Report - {{ analysis.summary.hosts_with_issues }} hosts with issues"
+    subtype: html
+    body: "{{ email_body }}"
+  when: 
+    - analysis_file.stat.exists
+    - send_email | default(true) | bool
+  register: email_result
+  ignore_errors: yes
+
+- name: "Display email sending result"
+  debug:
+    msg: "Email sent successfully to {{ email_to }}"
+  when: 
+    - email_result is defined
+    - email_result is succeeded
+
+- name: "Display email sending error"
+  debug:
+    msg: "Failed to send email: {{ email_result.msg }}"
+  when: 
+    - email_result is defined
+    - email_result is failed
