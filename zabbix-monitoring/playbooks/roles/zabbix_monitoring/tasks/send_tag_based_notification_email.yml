@@ -129,33 +129,127 @@
       </html>
   when: analysis_file.stat.exists
 
-- name: "Send email notification"
-  community.general.mail:
-    host: "{{ smtp_server }}"
-    port: "{{ smtp_port }}"
-    username: "{{ smtp_username | default(omit) }}"
-    password: "{{ smtp_password | default(omit) }}"
-    from: "{{ email_from }}"
-    to: "{{ email_to }}"
-    subject: "Zabbix Tag-Based Connectivity Report - {{ analysis.summary.hosts_with_issues }} hosts with issues"
-    subtype: html
-    body: "{{ email_body }}"
+- name: "Generate email subject"
+  set_fact:
+    email_subject: >-
+      {%- if analysis.summary.hosts_with_issues > 0 -%}
+      Zabbix Connectivity Report - {{ analysis.summary.hosts_with_issues }} Host(s) with Issues
+      {%- else -%}
+      Zabbix Connectivity Report - All Hosts Healthy
+      {%- endif -%}
+  when: analysis_file.stat.exists
+
+- name: "Prepare email recipients"
+  set_fact:
+    mail_recipients_str: "{{ email_to if email_to is string else email_to | join(',') }}"
+  when: analysis_file.stat.exists
+
+- name: "Send notification email using Python SMTP"
+  shell: |
+    python3 << 'PYTHON_SCRIPT'
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    import sys
+    
+    # Email configuration
+    smtp_host = "{{ smtp_server }}"
+    smtp_port = {{ smtp_port }}
+    smtp_user = "{{ smtp_username | default('') }}"
+    smtp_pass = "{{ smtp_password | default('') }}"
+    from_addr = "{{ email_from }}"
+    recipients_str = "{{ mail_recipients_str }}"
+    subject = "{{ email_subject }}"
+    
+    # Parse recipients
+    to_addrs_list = [addr.strip() for addr in recipients_str.split(',') if addr.strip()]
+    to_addrs_str = ', '.join(to_addrs_list)
+    
+    # Create message
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = subject
+    msg['From'] = from_addr
+    msg['To'] = to_addrs_str
+    
+    # Plain text version (basic)
+    text_content = """
+    Zabbix Tag-Based Connectivity Report
+    ====================================
+    
+    This is an HTML email. Please view it in an HTML-capable email client.
+    
+    Summary:
+    - Total Hosts Analyzed: {{ analysis.summary.total_hosts_analyzed }}
+    - Hosts with Issues: {{ analysis.summary.hosts_with_issues }}
+    - Items Below Threshold: {{ analysis.summary.items_below_threshold }}
+    
+    Please view this email in HTML format for detailed information.
+    """
+    
+    # HTML version
+    html_content = r"""{{ email_body }}"""
+    
+    # Attach both versions
+    part1 = MIMEText(text_content, 'plain', 'utf-8')
+    part2 = MIMEText(html_content, 'html', 'utf-8')
+    msg.attach(part1)
+    msg.attach(part2)
+    
+    # Send email
+    try:
+        server = smtplib.SMTP(smtp_host, smtp_port, timeout=30)
+        if smtp_user and smtp_pass:
+            server.login(smtp_user, smtp_pass)
+        server.sendmail(from_addr, to_addrs_list, msg.as_string())
+        server.quit()
+        print("✅ Email sent successfully to: " + to_addrs_str)
+        sys.exit(0)
+    except Exception as e:
+        print(f"⚠️  Failed to send email: {e}")
+        sys.exit(1)
+    PYTHON_SCRIPT
+  args:
+    executable: /bin/bash
   when: 
     - analysis_file.stat.exists
     - send_email | default(true) | bool
-  register: email_result
-  ignore_errors: yes
+    - email_to is defined
+    - email_to | length > 0
+  delegate_to: localhost
+  run_once: true
+  ignore_errors: true
+  register: email_send_result
 
-- name: "Display email sending result"
+- name: "Display email notification status"
   debug:
-    msg: "Email sent successfully to {{ email_to }}"
-  when: 
-    - email_result is defined
-    - email_result is succeeded
-
-- name: "Display email sending error"
-  debug:
-    msg: "Failed to send email: {{ email_result.msg }}"
-  when: 
-    - email_result is defined
-    - email_result is failed
+    msg: |
+      ============================================
+      EMAIL NOTIFICATION STATUS
+      ============================================
+      {% if analysis_file.stat.exists %}
+      📊 Analysis Summary:
+      - Total Hosts: {{ analysis.summary.total_hosts_analyzed }}
+      - Hosts with Issues: {{ analysis.summary.hosts_with_issues }}
+      - Hosts without Issues: {{ analysis.summary.hosts_without_issues }}
+      - Hosts without Connection Items: {{ analysis.summary.hosts_without_connection_items }}
+      - Total Items Analyzed: {{ analysis.summary.total_items_analyzed }}
+      - Items Below Threshold: {{ analysis.summary.items_below_threshold }}
+      
+      {% if email_send_result is defined and email_send_result.rc is defined %}
+      {% if email_send_result.rc == 0 %}
+      ✅ Email sent successfully to: {{ email_to if email_to is string else email_to | join(', ') }}
+      Method: Python SMTP
+      {% else %}
+      ⚠️  Email sending failed
+      Error: {{ email_send_result.stdout | default('Unknown error') }}
+      {% endif %}
+      {% elif email_send_result is skipped %}
+      ℹ️  Email sending skipped
+      {% else %}
+      ℹ️  Email status: Undefined
+      {% endif %}
+      {% else %}
+      ℹ️  Analysis results not found
+      {% endif %}
+      ============================================
+  run_once: true
