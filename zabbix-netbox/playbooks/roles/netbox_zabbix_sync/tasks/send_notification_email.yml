@@ -1,12 +1,11 @@
 ---
 - name: Calculate device statistics
   set_fact:
-    has_failed_devices: "{{ processing_results | default([]) | selectattr('status', 'equalto', 'eklenemedi') | list | length > 0 }}"
-    failed_devices_count: "{{ processing_results | default([]) | selectattr('status', 'equalto', 'eklenemedi') | list | length }}"
-    added_devices_count: "{{ processing_results | default([]) | selectattr('status', 'equalto', 'eklendi') | list | length }}"
-    updated_devices_count: "{{ processing_results | default([]) | selectattr('status', 'equalto', 'güncellendi') | list | length }}"
-    current_devices_count: "{{ processing_results | default([]) | selectattr('status', 'equalto', 'güncel') | list | length }}"
-    total_devices_count: "{{ processing_results | default([]) | length }}"
+    failed_devices_count: "{{ processing_results | default([]) | selectattr('status', 'equalto', 'eklenemedi') | list | length | int }}"
+    added_devices_count: "{{ processing_results | default([]) | selectattr('status', 'equalto', 'eklendi') | list | length | int }}"
+    updated_devices_count: "{{ processing_results | default([]) | selectattr('status', 'equalto', 'güncellendi') | list | length | int }}"
+    current_devices_count: "{{ processing_results | default([]) | selectattr('status', 'equalto', 'güncel') | list | length | int }}"
+    total_devices_count: "{{ processing_results | default([]) | length | int }}"
 
 - name: Generate email HTML content (Summary + Failures Only)
   set_fact:
@@ -28,18 +27,18 @@
       </head>
       <body>
         <h2>Loki - Zabbix Entegrasyonu Raporu</h2>
-        <div class="summary {%- if failed_devices_count > 0 %} summary-warning{%- endif %}">
+        <div class="summary {%- if failed_devices_count | int > 0 %} summary-warning{%- endif %}">
           <h3>📊 Özet</h3>
-          <p><strong>Toplam İşlem:</strong> {{ processing_results | default([]) | length }}</p>
-          <p><strong>✅ Başarılı (Eklendi):</strong> {{ processing_results | default([]) | selectattr('status', 'equalto', 'eklendi') | list | length }}</p>
-          <p><strong>🔄 Güncellendi:</strong> {{ processing_results | default([]) | selectattr('status', 'equalto', 'güncellendi') | list | length }}</p>
-          <p><strong>ℹ️ Güncel (Değişiklik Yok):</strong> {{ processing_results | default([]) | selectattr('status', 'equalto', 'güncel') | list | length }}</p>
+          <p><strong>Toplam İşlem:</strong> {{ total_devices_count }}</p>
+          <p><strong>✅ Başarılı (Eklendi):</strong> {{ added_devices_count }}</p>
+          <p><strong>🔄 Güncellendi:</strong> {{ updated_devices_count }}</p>
+          <p><strong>ℹ️ Güncel (Değişiklik Yok):</strong> {{ current_devices_count }}</p>
           <p><strong>❌ Başarısız (Eklenemedi):</strong> {{ failed_devices_count }}</p>
         </div>
         
-        {%- set failed_devices = processing_results | default([]) | selectattr('status', 'equalto', 'eklenemedi') | list -%}
-        {%- if failed_devices | length > 0 -%}
-        <div class="section-header"><h3>❌ HATA: Eklenemeyen Cihazlar ({{ failed_devices | length }})</h3></div>
+        {%- set failed_list = processing_results | default([]) | selectattr('status', 'equalto', 'eklenemedi') | list -%}
+        {%- if failed_list | length > 0 -%}
+        <div class="section-header"><h3>❌ HATA: Eklenemeyen Cihazlar ({{ failed_devices_count }})</h3></div>
         <table>
           <thead>
             <tr>
@@ -50,7 +49,7 @@
             </tr>
           </thead>
           <tbody>
-            {%- for result in failed_devices -%}
+            {%- for result in failed_list -%}
             <tr>
               <td>{{ result.hostname | default('N/A') }}</td>
               <td>{{ result.ip | default('N/A') }}</td>
@@ -85,18 +84,18 @@
       
       ÖZET:
       -----
-      Toplam İşlem: {{ processing_results | default([]) | length }}
-      ✅ Başarılı (Eklendi): {{ processing_results | default([]) | selectattr('status', 'equalto', 'eklendi') | list | length }}
-      🔄 Güncellendi: {{ processing_results | default([]) | selectattr('status', 'equalto', 'güncellendi') | list | length }}
-      ℹ️ Güncel (Değişiklik Yok): {{ processing_results | default([]) | selectattr('status', 'equalto', 'güncel') | list | length }}
+      Toplam İşlem: {{ total_devices_count }}
+      ✅ Başarılı (Eklendi): {{ added_devices_count }}
+      🔄 Güncellendi: {{ updated_devices_count }}
+      ℹ️ Güncel (Değişiklik Yok): {{ current_devices_count }}
       ❌ Başarısız (Eklenemedi): {{ failed_devices_count }}
       
-      {%- set failed_devices = processing_results | default([]) | selectattr('status', 'equalto', 'eklenemedi') | list -%}
-      {%- if failed_devices | length > 0 %}
+      {%- set failed_list = processing_results | default([]) | selectattr('status', 'equalto', 'eklenemedi') | list -%}
+      {%- if failed_list | length > 0 %}
       
-      ❌ HATA: EKLENEMEYEN CİHAZLAR ({{ failed_devices | length }}):
+      ❌ HATA: EKLENEMEYEN CİHAZLAR ({{ failed_devices_count }}):
       ------------------------------------------
-      {%- for result in failed_devices %}
+      {%- for result in failed_list %}
       
       Sunucu: {{ result.hostname | default('N/A') }}
       IP: {{ result.ip | default('N/A') }}
@@ -121,7 +120,7 @@
 - name: Generate email subject
   set_fact:
     email_subject: >-
-      {%- if has_failed_devices -%}
+      {%- if failed_devices_count | int > 0 -%}
       Loki - Zabbix Entegrasyonu Raporu - {{ failed_devices_count }} Sunucu Eklenemedi
       {%- else -%}
       Loki - Zabbix Entegrasyonu Raporu - Tüm İşlemler Başarılı ({{ added_devices_count }} Eklendi, {{ updated_devices_count }} Güncellendi)
@@ -297,7 +296,7 @@
       - Güncellendi: {{ updated_devices_count }}
       - Güncel: {{ current_devices_count }}
       - Başarısız: {{ failed_devices_count }}
-      {% if has_failed_devices %}
+      {% if failed_devices_count | int > 0 %}
       UYARI: Başarısız işlem var - {{ failed_devices_count }} sunucu eklenemedi
       {% else %}
       BAŞARILI: Tüm işlemler başarılı
@@ -306,7 +305,7 @@
       {% if mail_send_result is defined and mail_send_result.rc is defined %}
       {% if mail_send_result.rc == 0 %}
       BAŞARILI: E-posta başarıyla gönderildi: {{ mail_recipients | join(', ') }}
-      Yöntem: Python SMTP
+      Yöntem: Python SMTP ile CSV eki
       {% else %}
       HATA: E-posta gönderilemedi
       Hata: {{ mail_send_result.stdout | default('Bilinmeyen hata') }}
