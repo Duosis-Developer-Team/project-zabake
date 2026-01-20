@@ -19,10 +19,13 @@ HPE IPMI:
 Dell IPMI:
   - name: BLT - Dell iDRAC SNMP
     type: snmpv2
+Supermicro API:
+  - name: BLT- Supermicro ILO by Redfish API
+    type: api
     macros:
-      "{$IDRAC.API.URL}": "https://{HOST.IP}/"
-      "{$IDRAC.PASSWORD}": "A!UCZcCUSRwZ"
-      "{$IDRAC.USER}": "root"
+      "{$REDFISH.API.URL}": "https://{HOST.IP}/"
+      "{$REDFISH.PASSWORD}": "A!UCZcCUSRwZ"
+      "{$REDFISH.USER}": "zabbix"
 Arista Switch:
   - name: Arista SNMP
     type: snmpv2

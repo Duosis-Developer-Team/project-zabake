@@ -40,3 +40,10 @@ mappings:
       manufacturer: "DELL"
     priority: 1
 
+  # Supermicro devices
+  - device_type: "Supermicro API"
+    conditions:
+      device_role: "HOST"
+      manufacturer: "Supermicro"
+    priority: 1
+
