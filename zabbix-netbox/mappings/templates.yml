@@ -4,19 +4,23 @@
 Lenovo IPMI:
   - name: BLT - Lenovo ICT XCC Monitoring
     type: snmpv3
-    host_groups:  # Optional: Additional host groups for this template
-      - "Production Servers"
+    host_groups: 
+      - "Physical Hosts"
 Inspur M6:
   - name: BLT - Inspur M6 Template
     type: snmpv2
-    host_groups:
-      - "Inspur Infrastructure"
+    host_groups: 
+      - "Physical Hosts"
 Inspur M5:
   - name: BLT - Server Inspur BMC All Items 4 Zabbix5.0
     type: snmpv2
+    host_groups: 
+      - "Physical Hosts"
 HPE IPMI:
   - name: BLT - HPE ProLiant DL380 by SNMP
     type: snmpv2
+    host_groups: 
+      - "Physical Hosts"
     macros:
       "{$REDFISH.API.URL}": "https://{HOST.IP}/"
       "{$REDFISH.PASSWORD}": "A!UCZcCUSRwZ"
@@ -24,64 +28,14 @@ HPE IPMI:
 Dell IPMI:
   - name: BLT - Dell iDRAC SNMP
     type: snmpv2
+    host_groups: 
+      - "Physical Hosts"
 Supermicro API:
   - name: BLT- Supermicro ILO by Redfish API
     type: api
+    host_groups: 
+      - "Physical Hosts"
     macros:
       "{$REDFISH.API.URL}": "https://{HOST.IP}/"
       "{$REDFISH.PASSWORD}": "A!UCZcCUSRwZ"
       "{$REDFISH.USER}": "zabbix"
-Arista Switch:
-  - name: Arista SNMP
-    type: snmpv2
-Checkpoint Firewall:
-  - name: Check Point Next Generation Firewall by SNMP
-    type: snmpv2
-Cisco Switch:
-  - name: Cisco Catalyst 3750V2-48TS SNMP
-    type: snmpv2
-Cisco Management Switch:
-  - name: Cisco IOS SNMP
-    type: snmpv2
-Dell Switch:
-  - name: Dell Emc OS10
-    type: snmpv2
-Dell Management Switch:
-  - name: Dell Force S-Series SNMP
-    type: snmpv2
-Fortigate Firewall:
-  - name: FortiGate by HTTP
-    type: api
-    macros:
-      "{$FORTIGATE.API.URL}": "https://{HOST.IP}/"
-      "{$FORTIGATE.API.KEY}": "change_me"
-HP Management Switch:
-  - name: HP Comware HH3C SNMP
-    type: snmpv2
-HP CX Switch:
-  - name: HP CX Switch SNMP
-    type: snmpv2
-Huawei VRP:
-  - name: Huawei VRP SNMP
-    type: snmpv2
-Juniper Switch:
-  - name: Juniper by SNMP
-    type: snmpv2
-Mellanox Switch:
-  - name: Mellanox SNMP
-    type: snmpv2
-Network Generic:
-  - name: Network Generic Device SNMP
-    type: snmpv2
-Palo Alto Firewall:
-  - name: Palo Alto SNMPv2 64-bit counters
-    type: snmpv2
-Ruckus Wireless:
-  - name: SNMP Ruckus Zonedirector
-    type: snmpv2
-Citrix ADC:
-  - name: Template Citrix ADC
-    type: snmpv2
-Sophos Switch:
-  - name: Virtual Sophos SNMP
-    type: snmpv2
