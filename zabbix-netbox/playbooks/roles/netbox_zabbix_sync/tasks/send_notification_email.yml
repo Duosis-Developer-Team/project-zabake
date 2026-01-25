@@ -43,6 +43,7 @@
           <thead>
             <tr>
               <th>Sunucu Adı</th>
+              <th>Device Role</th>
               <th>IP Adresi</th>
               <th>İşlem Durumu</th>
               <th>Hata Sebebi</th>
@@ -52,6 +53,7 @@
             {%- for result in failed_list -%}
             <tr>
               <td>{{ result.hostname | default('N/A') }}</td>
+              <td>{{ result.device_role | default('N/A') }}</td>
               <td>{{ result.ip | default('N/A') }}</td>
               <td class="status-eklenemedi">EKLENEMEDI</td>
               <td>{{ result.reason | default('-') }}</td>
@@ -199,6 +201,7 @@
         csv_writer.writerow([
             'Sıra No',
             'Sunucu Adı',
+            'Device Role',
             'IP Adresi',
             'İşlem Durumu',
             'Açıklama/Hata Sebebi',
@@ -218,6 +221,7 @@
         # Write data rows
         for idx, result in enumerate(sorted_results, 1):
             hostname = result.get('hostname', 'N/A')
+            device_role = result.get('device_role', 'N/A')
             ip_addr = result.get('ip', 'N/A')
             status = result.get('status', 'N/A').upper()
             reason = result.get('reason', '-')
@@ -230,7 +234,7 @@
                 'EKLENEMEDI': 'EKLENEMEDI'
             }.get(status, status)
             
-            csv_writer.writerow([idx, hostname, ip_addr, status_tr, reason, timestamp])
+            csv_writer.writerow([idx, hostname, device_role, ip_addr, status_tr, reason, timestamp])
         
         # Create CSV attachment
         csv_content = csv_buffer.getvalue()

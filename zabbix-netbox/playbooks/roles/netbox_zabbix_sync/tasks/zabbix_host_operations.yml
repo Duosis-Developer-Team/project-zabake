@@ -48,9 +48,10 @@
     zbx_template_names: "{{ zbx_templates | map(attribute='name') | list }}"
     zbx_template_types: "{{ zbx_templates | map(attribute='type') | list | unique }}"
 
-- name: Collect macros from all templates
+- name: Collect macros and host_groups from all templates
   vars:
     _all_macros: {}
+    _all_host_groups: []
   set_fact:
     _all_macros: >-
       {%- set macros = {} -%}
@@ -62,6 +63,16 @@
         {%- endif -%}
       {%- endfor -%}
       {{ macros }}
+    _template_host_groups: >-
+      {%- set groups = [] -%}
+      {%- for template in zbx_templates -%}
+        {%- if template.host_groups is defined -%}
+          {%- for group in template.host_groups -%}
+            {%- set _ = groups.append(group) -%}
+          {%- endfor -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ groups | unique }}
 
 - name: Replace {HOST.IP} variable in macros
   vars:
@@ -222,7 +233,8 @@
 - name: Collect required host groups for this record
   vars:
     _csv_group_names: "{{ (zbx_record.HOST_GROUPS | default('')).split(',') | map('trim') | reject('equalto', '') | list }}"
-    _all_target_groups: "{{ (_csv_group_names + [zbx_record.DEVICE_TYPE]) | unique }}"
+    _template_groups: "{{ _template_host_groups | default([]) }}"
+    _all_target_groups: "{{ (_csv_group_names + _template_groups + [zbx_record.DEVICE_TYPE]) | unique }}"
   set_fact:
     zbx_required_groups_for_record: "{{ _all_target_groups }}"
 
@@ -387,6 +399,7 @@
   set_fact:
     device_result:
       hostname: "{{ zbx_record.HOSTNAME | default('N/A') }}"
+      device_role: "{{ zbx_record.DEVICE_ROLE | default('N/A') }}"
       status: "eklenemedi"
       reason: "{{ _validation_errors | join(', ') }}"
       ip: "{{ zbx_record.HOST_IP | default('N/A') }}"
@@ -432,6 +445,7 @@
   set_fact:
     device_result:
       hostname: "{{ zbx_record.HOSTNAME }}"
+      device_role: "{{ zbx_record.DEVICE_ROLE | default('N/A') }}"
       status: "eklendi"
       reason: ""
       ip: "{{ zbx_record.HOST_IP }}"
@@ -445,6 +459,7 @@
   set_fact:
     device_result:
       hostname: "{{ zbx_record.HOSTNAME }}"
+      device_role: "{{ zbx_record.DEVICE_ROLE | default('N/A') }}"
       status: "eklenemedi"
       reason: "{{ zbx_create_resp.json.error.message | default('Bilinmeyen hata') }}"
       ip: "{{ zbx_record.HOST_IP }}"
@@ -478,6 +493,7 @@
   set_fact:
     device_result:
       hostname: "{{ zbx_record.HOSTNAME }}"
+      device_role: "{{ zbx_record.DEVICE_ROLE | default('N/A') }}"
       status: "eklenemedi"
       reason: "{{ 'Proxy group bulunamadı (DC_ID: ' + zbx_dc_number + ')' if (zbx_dc_number is defined and zbx_dc_number != '' and (zbx_proxy_group_id is not defined or zbx_proxy_group_id == '')) else 'Gerekli parametreler eksik: ' + (_missing_params | default([]) | join(', ')) }}"
       ip: "{{ zbx_record.HOST_IP | default('N/A') }}"
@@ -654,6 +670,7 @@
   set_fact:
     device_result:
       hostname: "{{ zbx_record.HOSTNAME }}"
+      device_role: "{{ zbx_record.DEVICE_ROLE | default('N/A') }}"
       status: "güncel"
       reason: "Değişiklik yok, güncelleme yapılmadı"
       ip: "{{ zbx_record.HOST_IP }}"
@@ -705,6 +722,7 @@
   set_fact:
     device_result:
       hostname: "{{ zbx_record.HOSTNAME }}"
+      device_role: "{{ zbx_record.DEVICE_ROLE | default('N/A') }}"
       status: "güncellendi"
       reason: "{{ _updated_fields | default('Bilinmeyen değişiklikler') }}"
       ip: "{{ zbx_record.HOST_IP }}"
@@ -721,6 +739,7 @@
   set_fact:
     device_result:
       hostname: "{{ zbx_record.HOSTNAME }}"
+      device_role: "{{ zbx_record.DEVICE_ROLE | default('N/A') }}"
       status: "eklenemedi"
       reason: "Güncelleme hatası: {{ zbx_update_resp.json.error.message | default(zbx_update_resp.json.error.data | default('Bilinmeyen hata')) }}"
       ip: "{{ zbx_record.HOST_IP }}"

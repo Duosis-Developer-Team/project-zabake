@@ -342,8 +342,13 @@
                   # Loki tag'leri "Loki_Tag_" prefix'i ile ekle
                   tags_dict[f'Loki_Tag_{loki_tag}'] = loki_tag
           
+          # Get device role
+          role_obj = device.get('role') or device.get('device_role')
+          device_role = role_obj.get('name', '') if role_obj and isinstance(role_obj, dict) else ''
+          
           result = {
               'device_type': device_type,
+              'device_role': device_role,
               'primary_ip': get_primary_ip(device, netbox_url, netbox_token, verify_ssl),
               'host_groups': extract_host_groups(device, device_type, netbox_url, netbox_token, verify_ssl),
               'tags': tags_dict,
@@ -434,11 +439,13 @@
   set_fact:
     device_result:
       hostname: "{{ netbox_device.name | default('N/A') }}"
+      device_role: "{{ device_info.device_role | default('N/A') }}"
       status: "eklenemedi"
       reason: "Device type bulunamadı"
       ip: "{{ device_info.primary_ip | default('N/A') }}"
     current_device_result:
       hostname: "{{ netbox_device.name | default('N/A') }}"
+      device_role: "{{ device_info.device_role | default('N/A') }}"
       status: "eklenemedi"
       reason: "Device type bulunamadı"
       ip: "{{ device_info.primary_ip | default('N/A') }}"
@@ -449,11 +456,13 @@
   set_fact:
     device_result:
       hostname: "{{ netbox_device.name | default('N/A') }}"
+      device_role: "{{ device_info.device_role | default('N/A') }}"
       status: "eklenemedi"
       reason: "IP adresi bulunamadı"
       ip: "N/A"
     current_device_result:
       hostname: "{{ netbox_device.name | default('N/A') }}"
+      device_role: "{{ device_info.device_role | default('N/A') }}"
       status: "eklenemedi"
       reason: "IP adresi bulunamadı"
       ip: "N/A"
@@ -482,6 +491,7 @@
   set_fact:
     zbx_record:
       DEVICE_TYPE: "{{ device_info.device_type }}"
+      DEVICE_ROLE: "{{ device_info.device_role | default('N/A') }}"
       HOST_IP: "{{ device_info.primary_ip }}"
       HOSTNAME: "{{ netbox_device.name }}"
       DC_ID: "{{ device_info.location }}"

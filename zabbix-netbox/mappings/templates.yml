@@ -1,11 +1,16 @@
 # DEVICE_TYPE -> Zabbix template names or IDs
 # macros field supports {HOST.IP} variable which will be replaced with device's IP address
+# host_groups field is optional and will be added to the host groups from Netbox
 Lenovo IPMI:
   - name: BLT - Lenovo ICT XCC Monitoring
     type: snmpv3
+    host_groups:  # Optional: Additional host groups for this template
+      - "Production Servers"
 Inspur M6:
   - name: BLT - Inspur M6 Template
     type: snmpv2
+    host_groups:
+      - "Inspur Infrastructure"
 Inspur M5:
   - name: BLT - Server Inspur BMC All Items 4 Zabbix5.0
     type: snmpv2
