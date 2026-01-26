@@ -186,7 +186,7 @@
       all_devices = []
       # Build API URL with location filter if location ID was resolved
       # If multiple location IDs (parent + children), we'll need to fetch separately or use a different approach
-      api_url = f"{netbox_url}/api/dcim/devices/?limit=1000"
+      api_url = f"{netbox_url}/api/dcim/devices/?limit=1000&status=active"
       if location_ids_to_filter:
           # Netbox API supports filtering by multiple location IDs using location_id parameter multiple times
           # But we'll use a simpler approach: fetch for each location ID and combine
@@ -196,7 +196,7 @@
           else:
               # For multiple locations, we'll fetch all and filter in Python
               print(f"DEBUG: Multiple location IDs found ({len(location_ids_to_filter)}). Will fetch all devices and filter by location in Python.", file=sys.stderr)
-              api_url = f"{netbox_url}/api/dcim/devices/?limit=1000"
+              api_url = f"{netbox_url}/api/dcim/devices/?limit=1000&status=active"
       
       next_url = api_url
       
