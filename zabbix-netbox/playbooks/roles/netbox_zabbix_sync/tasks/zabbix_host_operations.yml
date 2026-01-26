@@ -337,13 +337,10 @@
     zbx_groups_formatted: []
 
 - name: Resolve Group IDs from map
-  vars:
-    _csv_group_names: "{{ (zbx_record.HOST_GROUPS | default('')).split(',') | map('trim') | reject('equalto', '') | list }}"
-    _all_target_groups: "{{ (_csv_group_names + [zbx_record.DEVICE_TYPE]) | unique }}"
   set_fact:
     zbx_group_id_list: "{{ zbx_group_id_list + [zbx_group_map[group_name]] }}"
     zbx_groups_formatted: "{{ zbx_groups_formatted + [{'groupid': zbx_group_map[group_name]}] }}"
-  loop: "{{ _all_target_groups }}"
+  loop: "{{ zbx_required_groups_for_record }}"
   loop_control:
     loop_var: group_name
   when: group_name is defined and group_name in zbx_group_map
