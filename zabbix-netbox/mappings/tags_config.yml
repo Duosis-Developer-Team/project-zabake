@@ -1,0 +1,158 @@
+# Tags Configuration
+# This file defines how tags are extracted from Netbox and added to Zabbix hosts
+#
+# Configuration structure:
+# - definitions: List of tag definitions
+#   - tag_name: Name of the tag in Zabbix
+#   - source_type: Type of source (netbox_attribute, custom_field, computed, array_expansion)
+#   - enabled: Whether this tag is active
+#   - Additional fields depend on the source_type
+
+tags:
+  definitions:
+    # === MAPPING RESULTS ===
+    
+    # Device Type Category (from device_type_mapping.yml)
+    - tag_name: "Device_Type_Category"
+      source_type: "mapping_result"
+      enabled: true
+      description: "Device type category from mapping (e.g., Lenovo IPMI, Dell IPMI, Inspur M6)"
+    
+    # === NETBOX DIRECT ATTRIBUTES ===
+    
+    # Manufacturer from device type
+    - tag_name: "Manufacturer"
+      source_type: "netbox_attribute"
+      path: "device_type.manufacturer.name"
+      enabled: true
+      description: "Device manufacturer (e.g., LENOVO, DELL, HPE)"
+      
+    # Device Type/Model
+    - tag_name: "Device_Type"
+      source_type: "netbox_attribute"
+      path: "device_type.model"
+      fallback: "device_type.display"
+      enabled: true
+      description: "Device model/type"
+      
+    # Location Detail
+    - tag_name: "Location_Detail"
+      source_type: "netbox_attribute"
+      path: "location.name"
+      fallback: "site.name"
+      enabled: true
+      description: "Detailed location name"
+      
+    # City (from site)
+    - tag_name: "City"
+      source_type: "netbox_attribute"
+      path: "site.name"
+      enabled: true
+      description: "Site/City name"
+      
+    # Tenant (Organization/Company)
+    - tag_name: "Tenant"
+      source_type: "netbox_attribute"
+      path: "tenant.name"
+      enabled: true
+      description: "Tenant/Organization name"
+      
+    # Loki ID (Device ID)
+    - tag_name: "Loki_ID"
+      source_type: "netbox_attribute"
+      path: "id"
+      enabled: true
+      transform: "to_string"
+      description: "Netbox device ID converted to string"
+      
+    # Rack Name
+    - tag_name: "Rack_Name"
+      source_type: "netbox_attribute"
+      path: "rack.name"
+      enabled: true
+      description: "Rack name if device is in a rack"
+      
+    # Rack Type (from rack role)
+    - tag_name: "Rack_Type"
+      source_type: "netbox_attribute"
+      path: "rack.role.name"
+      enabled: true
+      description: "Rack role/type"
+      
+    # Cluster
+    - tag_name: "Cluster"
+      source_type: "netbox_attribute"
+      path: "cluster.name"
+      enabled: true
+      description: "Cluster name for virtualization hosts"
+      
+    # === CUSTOM FIELDS ===
+    
+    # Contact (Ownership)
+    - tag_name: "Contact"
+      source_type: "custom_field"
+      field_name: "Sahiplik"
+      enabled: true
+      description: "Contact/Ownership from custom field"
+      
+    # Responsible Team
+    - tag_name: "Sorumlu_Ekip"
+      source_type: "custom_field"
+      field_name: "Sorumlu_Ekip"
+      enabled: true
+      description: "Responsible team from custom field"
+      
+    # Installation Date
+    - tag_name: "Kurulum_Tarihi"
+      source_type: "custom_field"
+      field_name: "Kurulum_Tarihi"
+      enabled: true
+      description: "Installation date from custom field"
+    
+    # === TEMPLATE MAPPINGS ===
+    
+    # Template Groups (from templates.yml)
+    - tag_name: "Template_Group"
+      source_type: "template_mapping"
+      enabled: true
+      attribute: "host_groups"
+      separator: ","
+      description: "Host groups from template mappings (e.g., Physical Hosts)"
+      
+    # === COMPUTED/PROCESSED VALUES ===
+    
+    # Hall (from location description or name)
+    - tag_name: "Hall"
+      source_type: "computed"
+      compute_function: "extract_hall"
+      priority_paths:
+        - "location.description"
+        - "location.name"
+      enabled: true
+      description: "Hall information from location (e.g., DATA HALL X)"
+      
+    # === ARRAY EXPANSION ===
+    
+    # Loki Tags (from device.tags array)
+    # Each tag in the array becomes a separate Zabbix tag with Loki_Tag_ prefix
+    # Example: device.tags = ["production", "critical"] -> Loki_Tag_production, Loki_Tag_critical
+    - tag_name: "Loki_Tag_"
+      source_type: "array_expansion"
+      path: "tags"
+      prefix: "Loki_Tag_"
+      enabled: true
+      description: "Netbox tags expanded with Loki_Tag_ prefix"
+
+  # Global settings
+  settings:
+    # Skip empty/null values
+    skip_empty: true
+    
+    # Skip None values
+    skip_none: true
+    
+    # Trim whitespace from values
+    trim: true
+    
+    # Convert empty strings to skip
+    treat_empty_as_none: true

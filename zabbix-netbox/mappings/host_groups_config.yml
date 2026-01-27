@@ -1,0 +1,76 @@
+# Host Groups Configuration
+# This file defines how host groups are extracted from Netbox and added to Zabbix hosts
+# 
+# Configuration structure:
+# - sources: List of host group sources
+#   - name: Unique identifier for the source
+#   - type: Source type (mapping_result, netbox_attribute, custom_field, template_mapping, computed)
+#   - enabled: Whether this source is active
+#   - priority: Order of evaluation (lower number = higher priority)
+#   - Additional fields depend on the type
+
+host_groups:
+  sources:
+    # 1. Device Type from Mapping Result
+    # This is the result of netbox_device_type_mapping.yml evaluation
+    # Example: "Lenovo IPMI", "Dell IPMI", "Inspur M6"
+    - name: "device_type_mapping"
+      type: "mapping_result"
+      enabled: true
+      priority: 1
+      description: "Device type determined from netbox_device_type_mapping.yml conditions"
+      
+    # 2. Device Role from Netbox
+    # Device role/function from Netbox
+    # Example: "HOST", "SWITCH", "ROUTER", "FIREWALL"
+    - name: "device_role"
+      type: "netbox_attribute"
+      enabled: true
+      priority: 2
+      path: "role.name"
+      fallback: "device_role.name"
+      description: "Device role from Netbox (e.g., HOST, SWITCH, ROUTER)"
+      
+    # 3. Location Hierarchy
+    # Uses parent location if exists, otherwise location, otherwise site
+    # Example: "DC11", "ISTANBUL"
+    - name: "location"
+      type: "computed"
+      enabled: true
+      priority: 3
+      compute_function: "get_location_name"
+      description: "Location from hierarchy: parent.name -> location.name -> site.name"
+      
+    # 4. Ownership (Custom Field)
+    # Example: "TEAM VIRTUALIZATION", "SABANCI DX"
+    - name: "ownership"
+      type: "custom_field"
+      enabled: true
+      priority: 4
+      field_name: "Sahiplik"
+      description: "Ownership/Contact from custom field Sahiplik"
+      
+    # 5. Template Host Groups
+    # Host groups defined in templates.yml for each device type
+    # Example: "Physical Hosts"
+    - name: "template_groups"
+      type: "template_mapping"
+      enabled: true
+      priority: 5
+      source_file: "templates.yml"
+      attribute: "host_groups"
+      description: "Static host groups from template mappings"
+
+  # Global settings
+  settings:
+    # Separator for joining multiple host groups
+    separator: ","
+    
+    # Skip empty values
+    skip_empty: true
+    
+    # Remove duplicates
+    unique: true
+    
+    # Trim whitespace
+    trim: true

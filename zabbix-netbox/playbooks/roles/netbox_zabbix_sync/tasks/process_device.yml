@@ -14,7 +14,68 @@
       #!/usr/bin/env python3
       import json
       import sys
+      import os
       import requests
+      import yaml
+      
+      # ============= YAML CONFIG LOADING =============
+      
+      def load_yaml_config(config_path):
+          """Load YAML configuration file"""
+          try:
+              if os.path.exists(config_path):
+                  with open(config_path, 'r') as f:
+                      return yaml.safe_load(f)
+          except Exception as e:
+              print(f"Warning: Failed to load config {config_path}: {e}", file=sys.stderr)
+          return None
+      
+      # ============= GENERIC ATTRIBUTE EXTRACTION =============
+      
+      def extract_by_path(obj, path):
+          """
+          Extract value from nested object using dot notation path
+          Example: extract_by_path(device, "device_type.manufacturer.name")
+          Returns None if path doesn't exist
+          """
+          if not obj or not path:
+              return None
+          
+          keys = path.split('.')
+          current = obj
+          
+          for key in keys:
+              if current is None:
+                  return None
+              if isinstance(current, dict):
+                  current = current.get(key)
+              else:
+                  return None
+          
+          return current
+      
+      def extract_by_path_with_fallback(obj, path, fallback_paths=None):
+          """
+          Extract value with fallback paths
+          Returns first non-None value found
+          """
+          # Try primary path
+          value = extract_by_path(obj, path)
+          if value is not None and value != '':
+              return value
+          
+          # Try fallback paths
+          if fallback_paths:
+              if isinstance(fallback_paths, str):
+                  fallback_paths = [fallback_paths]
+              for fallback_path in fallback_paths:
+                  value = extract_by_path(obj, fallback_path)
+                  if value is not None and value != '':
+                      return value
+          
+          return None
+      
+      # ============= ORIGINAL FUNCTIONS (PRESERVED) =============
       
       def check_condition(device, condition_key, condition_value):
           """Check if device matches a condition"""
@@ -217,7 +278,98 @@
               return site['name']
           return ''
       
+      def extract_host_groups_from_config(device, config, device_type, templates, netbox_url, netbox_token, verify_ssl):
+          """
+          Extract host groups using YAML configuration
+          Falls back to hardcoded logic if config is None
+          """
+          groups = []
+          
+          if config is None:
+              # FALLBACK: Use original hardcoded logic
+              if device_type:
+                  groups.append(device_type)
+              location_name = get_location_name(device, netbox_url, netbox_token, verify_ssl)
+              if location_name:
+                  groups.append(location_name)
+              custom_fields = device.get('custom_fields') or {}
+              if custom_fields.get('Sahiplik'):
+                  groups.append(custom_fields['Sahiplik'])
+              return ','.join(groups) if groups else ''
+          
+          # CONFIG-DRIVEN LOGIC
+          sources = config.get('host_groups', {}).get('sources', [])
+          settings = config.get('host_groups', {}).get('settings', {})
+          
+          # Sort sources by priority
+          sorted_sources = sorted(sources, key=lambda x: x.get('priority', 999))
+          
+          for source in sorted_sources:
+              if not source.get('enabled', True):
+                  continue
+              
+              source_type = source.get('type')
+              value = None
+              
+              if source_type == 'mapping_result':
+                  # Device type from mapping result
+                  value = device_type
+              
+              elif source_type == 'netbox_attribute':
+                  # Extract from Netbox attribute path
+                  path = source.get('path')
+                  fallback = source.get('fallback')
+                  value = extract_by_path_with_fallback(device, path, fallback)
+              
+              elif source_type == 'custom_field':
+                  # Extract from custom field
+                  field_name = source.get('field_name')
+                  custom_fields = device.get('custom_fields') or {}
+                  value = custom_fields.get(field_name)
+              
+              elif source_type == 'computed':
+                  # Use computed function
+                  compute_func = source.get('compute_function')
+                  if compute_func == 'get_location_name':
+                      value = get_location_name(device, netbox_url, netbox_token, verify_ssl)
+              
+              elif source_type == 'template_mapping':
+                  # Extract from template mappings
+                  attr = source.get('attribute', 'host_groups')
+                  template_groups = []
+                  for template in templates:
+                      if attr in template:
+                          template_groups.extend(template.get(attr, []))
+                  if template_groups:
+                      groups.extend(template_groups)
+                      continue
+              
+              # Add value if not empty
+              if value and value != '':
+                  if settings.get('trim', True) and isinstance(value, str):
+                      value = value.strip()
+                  groups.append(value)
+          
+          # Apply global settings
+          if settings.get('unique', True):
+              # Preserve order while removing duplicates
+              seen = set()
+              unique_groups = []
+              for g in groups:
+                  if g not in seen:
+                      seen.add(g)
+                      unique_groups.append(g)
+              groups = unique_groups
+          
+          if settings.get('skip_empty', True):
+              groups = [g for g in groups if g and g != '']
+          
+          separator = settings.get('separator', ',')
+          return separator.join(groups) if groups else ''
+      
+      # Keep original function for backward compatibility
       def extract_host_groups(device, device_type, netbox_url, netbox_token, verify_ssl):
+          """Original hardcoded host groups extraction (deprecated, use extract_host_groups_from_config)"""
           groups = []
           # 1. Device type (from mapping)
           if device_type:
@@ -232,7 +384,132 @@
               groups.append(custom_fields['Sahiplik'])
           return ','.join(groups) if groups else ''
       
-      def extract_tags(device):
+      def extract_hall(device):
+          """Computed function to extract Hall information"""
+          location = device.get('location')
+          if location and isinstance(location, dict):
+              # Try description first (e.g., "DATA HALL X")
+              if location.get('description'):
+                  return location['description']
+              elif location.get('name'):
+                  return location['name']
+          return None
+      
+      def extract_tags_from_config(device, config, device_type=None, templates=None):
+          """
+          Extract tags using YAML configuration
+          Falls back to hardcoded logic if config is None
+          
+          Args:
+              device: Netbox device data
+              config: Tags configuration from YAML
+              device_type: Device type from mapping (optional, for mapping_result source)
+              templates: Templates list (optional, for template_mapping source)
+          """
+          tags = {}
+          loki_tags = []
+          
+          if config is None:
+              # FALLBACK: Use original hardcoded logic
+              return extract_tags_original(device)
+          
+          # CONFIG-DRIVEN LOGIC
+          definitions = config.get('tags', {}).get('definitions', [])
+          settings = config.get('tags', {}).get('settings', {})
+          
+          for tag_def in definitions:
+              if not tag_def.get('enabled', True):
+                  continue
+              
+              tag_name = tag_def.get('tag_name')
+              source_type = tag_def.get('source_type')
+              value = None
+              
+              if source_type == 'netbox_attribute':
+                  # Extract from Netbox attribute path
+                  path = tag_def.get('path')
+                  fallback = tag_def.get('fallback')
+                  value = extract_by_path_with_fallback(device, path, fallback)
+                  
+                  # Apply transform if specified
+                  transform = tag_def.get('transform')
+                  if transform == 'to_string' and value is not None:
+                      value = str(value)
+              
+              elif source_type == 'custom_field':
+                  # Extract from custom field
+                  field_name = tag_def.get('field_name')
+                  custom_fields = device.get('custom_fields') or {}
+                  value = custom_fields.get(field_name)
+              
+              elif source_type == 'computed':
+                  # Use computed function
+                  compute_func = tag_def.get('compute_function')
+                  if compute_func == 'extract_hall':
+                      value = extract_hall(device)
+              
+              elif source_type == 'mapping_result':
+                  # Device type from mapping result
+                  value = device_type
+              
+              elif source_type == 'template_mapping':
+                  # Extract host groups from template mappings as tags
+                  # This creates multiple tags if multiple template groups exist
+                  if templates:
+                      attr = tag_def.get('attribute', 'host_groups')
+                      template_groups = []
+                      for template in templates:
+                          if attr in template:
+                              template_groups.extend(template.get(attr, []))
+                      
+                      # Join with separator or create individual tags
+                      if template_groups:
+                          separator = tag_def.get('separator', ',')
+                          value = separator.join(template_groups)
+              
+              elif source_type == 'array_expansion':
+                  # Expand array into multiple tags with prefix
+                  path = tag_def.get('path')
+                  prefix = tag_def.get('prefix', '')
+                  array_data = extract_by_path(device, path)
+                  
+                  if array_data and isinstance(array_data, list):
+                      for item in array_data:
+                          item_name = None
+                          if isinstance(item, dict):
+                              item_name = item.get('name')
+                          elif isinstance(item, str):
+                              item_name = item
+                          
+                          if item_name:
+                              loki_tags.append(item_name)
+                              # Add as separate tag with prefix
+                              tags[f'{prefix}{item_name}'] = item_name
+                  continue  # Skip normal tag addition
+              
+              # Add tag if value is not empty
+              if value is not None and value != '':
+                  if settings.get('trim', True) and isinstance(value, str):
+                      value = value.strip()
+                  
+                  # Skip if treat_empty_as_none and value is empty string
+                  if settings.get('treat_empty_as_none', True) and value == '':
+                      continue
+                  
+                  tags[tag_name] = value
+          
+          # Apply global settings
+          if settings.get('skip_none', True):
+              tags = {k: v for k, v in tags.items() if v is not None}
+          
+          if settings.get('skip_empty', True):
+              tags = {k: v for k, v in tags.items() if v != ''}
+          
+          return tags, loki_tags
+      
+      # Keep original function for backward compatibility
+      def extract_tags_original(device):
+          """Original hardcoded tags extraction (deprecated, use extract_tags_from_config)"""
           tags = {}
           
           # Mevcut tag'ler
@@ -317,12 +594,19 @@
           
           return tags, loki_tags  # İki ayrı return: tags dict ve loki_tags list
       
+      def extract_tags(device):
+          """Wrapper for backward compatibility"""
+          return extract_tags_original(device)
+      
       if __name__ == '__main__':
           device_file = sys.argv[1]
           device_type_mapping_file = sys.argv[2]
           netbox_url = sys.argv[3]
           netbox_token = sys.argv[4]
           verify_ssl = sys.argv[5].lower() == 'true'
+          host_groups_config_file = sys.argv[6] if len(sys.argv) > 6 else None
+          tags_config_file = sys.argv[7] if len(sys.argv) > 7 else None
+          templates_file = sys.argv[8] if len(sys.argv) > 8 else None
           
           # Load device JSON from file
           with open(device_file, 'r') as f:
@@ -332,15 +616,46 @@
           with open(device_type_mapping_file, 'r') as f:
               device_type_mapping = json.load(f)
           
+          # Load YAML configs (optional)
+          host_groups_config = None
+          tags_config = None
+          templates = []
+          
+          if host_groups_config_file:
+              host_groups_config = load_yaml_config(host_groups_config_file)
+          
+          if tags_config_file:
+              tags_config = load_yaml_config(tags_config_file)
+          
+          if templates_file:
+              templates_data = load_yaml_config(templates_file)
+              if templates_data:
+                  # templates.yml format: device_type -> list of templates
+                  # We need to convert this for the specific device_type
+                  device_type_temp = determine_device_type(device, device_type_mapping)
+                  if device_type_temp and device_type_temp in templates_data:
+                      templates = templates_data[device_type_temp]
+          
+          # Determine device type
           device_type = determine_device_type(device, device_type_mapping)
           location_name = get_location_name(device, netbox_url, netbox_token, verify_ssl)
-          tags_dict, loki_tags_list = extract_tags(device)
           
-          # Loki tags'i tags dict'ine ekle (her biri ayrı tag olarak)
-          for loki_tag in loki_tags_list:
-              if loki_tag:
-                  # Loki tag'leri "Loki_Tag_" prefix'i ile ekle
-                  tags_dict[f'Loki_Tag_{loki_tag}'] = loki_tag
+          # Extract host groups using config or fallback
+          host_groups_str = extract_host_groups_from_config(
+              device, host_groups_config, device_type, templates, 
+              netbox_url, netbox_token, verify_ssl
+          )
+          
+          # Extract tags using config or fallback
+          tags_dict, loki_tags_list = extract_tags_from_config(device, tags_config, device_type, templates)
+          
+          # If using fallback (no config), manually add Loki tags with prefix
+          # (Config-driven mode handles this automatically via array_expansion)
+          if tags_config is None:
+              for loki_tag in loki_tags_list:
+                  if loki_tag:
+                      # Loki tag'leri "Loki_Tag_" prefix'i ile ekle
+                      tags_dict[f'Loki_Tag_{loki_tag}'] = loki_tag
           
           # Get device role
           role_obj = device.get('role') or device.get('device_role')
@@ -350,7 +665,7 @@
               'device_type': device_type,
               'device_role': device_role,
               'primary_ip': get_primary_ip(device, netbox_url, netbox_token, verify_ssl),
-              'host_groups': extract_host_groups(device, device_type, netbox_url, netbox_token, verify_ssl),
+              'host_groups': host_groups_str,
               'tags': tags_dict,
               'loki_tags': loki_tags_list,
               'location': location_name,
@@ -375,6 +690,27 @@
     dest: "/tmp/netbox_device_type_mapping_{{ netbox_device.id | default('temp') }}.json"
   delegate_to: localhost
 
+- name: Check if host_groups_config exists
+  stat:
+    path: "{{ host_groups_config_path | default((playbook_dir | default(ansible_playbook_directory)) + '/../mappings/host_groups_config.yml') }}"
+  register: host_groups_config_stat
+  delegate_to: localhost
+  run_once: true
+
+- name: Check if tags_config exists
+  stat:
+    path: "{{ tags_config_path | default((playbook_dir | default(ansible_playbook_directory)) + '/../mappings/tags_config.yml') }}"
+  register: tags_config_stat
+  delegate_to: localhost
+  run_once: true
+
+- name: Check if templates file exists
+  stat:
+    path: "{{ templates_map_path | default((playbook_dir | default(ansible_playbook_directory)) + '/../mappings/templates.yml') }}"
+  register: templates_stat
+  delegate_to: localhost
+  run_once: true
+
 - name: Process device with Python script
   command: >
     python3 /tmp/netbox_device_processor.py
@@ -383,6 +719,9 @@
     "{{ netbox_url }}"
     "{{ netbox_token }}"
     "{{ netbox_verify_ssl | string }}"
+    "{{ host_groups_config_path | default((playbook_dir | default(ansible_playbook_directory)) + '/../mappings/host_groups_config.yml') if host_groups_config_stat.stat.exists else '' }}"
+    "{{ tags_config_path | default((playbook_dir | default(ansible_playbook_directory)) + '/../mappings/tags_config.yml') if tags_config_stat.stat.exists else '' }}"
+    "{{ templates_map_path | default((playbook_dir | default(ansible_playbook_directory)) + '/../mappings/templates.yml') if templates_stat.stat.exists else '' }}"
   register: device_processing_result
   changed_when: false
   delegate_to: localhost

@@ -21,6 +21,8 @@ location_filter: ""  # Optional: Filter devices by location name (e.g., "DC11", 
 templates_map_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/templates.yml"
 datacenters_map_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/datacenters.yml"
 device_type_mapping_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/netbox_device_type_mapping.yml"
+host_groups_config_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/host_groups_config.yml"
+tags_config_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/tags_config.yml"
 
 # Email notification settings
 mail_smtp_host: "10.34.8.191"
