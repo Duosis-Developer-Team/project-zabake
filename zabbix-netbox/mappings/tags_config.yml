@@ -34,6 +34,17 @@ tags:
       fallback: "device_type.display"
       enabled: true
       description: "Device model/type"
+
+    # Location
+    - tag_name: "Location"
+      source_type: "computed"
+      priority_paths:
+        - "parent.name"
+        - "location.name"
+        - "site.name"
+      enabled: true
+      compute_function: "get_location_name"
+      description: "Location from hierarchy: parent.name -> location.name -> site.name"
       
     # Location Detail
     - tag_name: "Location_Detail"
