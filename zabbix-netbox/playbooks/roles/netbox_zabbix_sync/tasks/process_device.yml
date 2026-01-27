@@ -395,7 +395,7 @@
                   return location['name']
           return None
       
-      def extract_tags_from_config(device, config, device_type=None, templates=None):
+      def extract_tags_from_config(device, config, device_type=None, templates=None, netbox_url=None, netbox_token=None, verify_ssl=True):
           """
           Extract tags using YAML configuration
           Falls back to hardcoded logic if config is None
@@ -405,6 +405,9 @@
               config: Tags configuration from YAML
               device_type: Device type from mapping (optional, for mapping_result source)
               templates: Templates list (optional, for template_mapping source)
+              netbox_url: Netbox URL (optional, for computed functions that need API access)
+              netbox_token: Netbox API token (optional, for computed functions that need API access)
+              verify_ssl: SSL verification flag (optional, for computed functions that need API access)
           """
           tags = {}
           loki_tags = []
@@ -447,6 +450,18 @@
                   compute_func = tag_def.get('compute_function')
                   if compute_func == 'extract_hall':
                       value = extract_hall(device)
+                  elif compute_func == 'get_location_name':
+                      # Location hierarchy computation
+                      if netbox_url and netbox_token is not None:
+                          value = get_location_name(device, netbox_url, netbox_token, verify_ssl)
+                      else:
+                          # Fallback to simple extraction if API credentials not available
+                          location = device.get('location') or {}
+                          if location.get('name'):
+                              value = location['name']
+                          else:
+                              site = device.get('site') or {}
+                              value = site.get('name')
               
               elif source_type == 'mapping_result':
                   # Device type from mapping result
@@ -647,7 +662,10 @@
           )
           
           # Extract tags using config or fallback
-          tags_dict, loki_tags_list = extract_tags_from_config(device, tags_config, device_type, templates)
+          tags_dict, loki_tags_list = extract_tags_from_config(
+              device, tags_config, device_type, templates,
+              netbox_url, netbox_token, verify_ssl
+          )
           
           # If using fallback (no config), manually add Loki tags with prefix
           # (Config-driven mode handles this automatically via array_expansion)

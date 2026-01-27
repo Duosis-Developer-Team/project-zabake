@@ -141,9 +141,10 @@ tags:
 
 **3. `computed`**
 - Uses computed function
-- Available functions: `extract_hall`
+- Available functions: `extract_hall`, `get_location_name`
 
 ```yaml
+# Example 1: Hall extraction
 - tag_name: "Hall"
   source_type: "computed"
   compute_function: "extract_hall"
@@ -151,6 +152,13 @@ tags:
     - "location.description"
     - "location.name"
   enabled: true
+
+# Example 2: Location hierarchy
+- tag_name: "Location"
+  source_type: "computed"
+  compute_function: "get_location_name"
+  enabled: true
+  description: "Location from hierarchy: parent.name -> location.name -> site.name"
 ```
 
 **4. `array_expansion`**
