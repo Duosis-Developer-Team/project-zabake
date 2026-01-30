@@ -406,7 +406,7 @@
 
 - name: Build interface for create
   set_fact:
-    _zbx_interface_create: "{{ [{'type': zbx_iface.type, 'main': 1, 'useip': 1, 'ip': zbx_record.HOST_IP, 'dns': zbx_iface.dns | default(''), 'port': (zbx_iface.port | default(161)) | string, 'details': zbx_iface.details | default(omit)}] if zbx_iface is not none else [] }}"
+    _zbx_interface_create: "{{ [{'type': zbx_iface.type, 'main': 1, 'useip': 1, 'ip': zbx_record.HOST_IP, 'dns': zbx_iface.dns | default(''), 'port': (zbx_iface.port | default(161)) | string, 'details': zbx_iface.details | default(omit)}] if (zbx_iface is not none and zbx_iface is mapping and zbx_iface.type is defined) else [] }}"
   when:
     - zbx_scenario == 'create'
     - _missing_params | default([]) | length == 0
@@ -572,7 +572,7 @@
 
 - name: Build interface for update
   set_fact:
-    _zbx_interface_update: "{{ [{'interfaceid': _interface_id, 'type': zbx_iface.type, 'main': 1, 'useip': 1, 'ip': zbx_record.HOST_IP, 'dns': zbx_iface.dns | default(''), 'port': (zbx_iface.port | default(161)) | string, 'details': zbx_iface.details | default(omit)}] if zbx_iface is not none else omit }}"
+    _zbx_interface_update: "{{ [{'interfaceid': _interface_id, 'type': zbx_iface.type, 'main': 1, 'useip': 1, 'ip': zbx_record.HOST_IP, 'dns': zbx_iface.dns | default(''), 'port': (zbx_iface.port | default(161)) | string, 'details': zbx_iface.details | default(omit)}] if (zbx_iface is not none and zbx_iface is mapping and zbx_iface.type is defined) else omit }}"
   when:
     - zbx_scenario == 'update'
     - zbx_existing_host is defined

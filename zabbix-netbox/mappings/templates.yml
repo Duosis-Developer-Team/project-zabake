@@ -41,7 +41,7 @@ Supermicro API:
       "{$REDFISH.USER}": "zabbix"
 HPE Primera:
   - name: BLT - HPE Primera by HTTP
-    type: API
+    type: api
     host_groups: 
       - "Storage Devices"
     macros:
