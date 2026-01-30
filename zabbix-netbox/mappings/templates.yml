@@ -23,7 +23,7 @@ HPE IPMI:
       - "Physical Hosts"
     macros:
       "{$REDFISH.API.URL}": "https://{HOST.IP}/"
-      "{$REDFISH.PASSWORD}": "A!UCZcCUSRwZ"
+      "{$REDFISH.PASSWORD}": "S7G3y9TtmRSm"
       "{$REDFISH.USER}": "zabbix"
 Dell IPMI:
   - name: BLT - Dell iDRAC SNMP
@@ -39,3 +39,71 @@ Supermicro API:
       "{$REDFISH.API.URL}": "https://{HOST.IP}/"
       "{$REDFISH.PASSWORD}": "A!UCZcCUSRwZ"
       "{$REDFISH.USER}": "zabbix"
+HPE Primera:
+  - name: BLT - HPE Primera by HTTP
+    type: API
+    host_groups: 
+      - "Storage Devices"
+    macros:
+      "{$HPE.PRIMERA.API.HOST}": "{HOST.IP}"
+      "{$HPE.PRIMERA.API.PASSWORD": "gUkUmZ/fh4J$6$eg$DW+"
+      "{$HPE.PRIMERA.API.USERNAME}": "monitor"
+Huawei Storage:
+  - name: Huawei OceanStor 5300 V5 by SNMP
+    type: snmpv2
+    host_groups: 
+      - "Storage Devices"
+DELL Storage:
+  - name: BLT - DELL Storage Template
+    type: snmpv2
+    host_groups: 
+      - "Storage Devices"
+IBM Storage:  
+  - name: BLT - IBM Storage Template
+    type: snmpv2
+    host_groups: 
+      - "Storage Devices"
+Lenovo Storage:
+  - name: BLT - Lenovo Thinksystem by HTTP
+    type: snmpv2
+    host_groups: 
+      - "Storage Devices"
+    macros:
+      "{$API.IP}": "{HOST.IP}"
+      "{$API.TOKEN}": "eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJDTj1qd3QuMDMyMjUyMDAyMTg2LjMyMzAzMDMyMzIzMDMyMzAzMDMyMzEzODY1QkZCNDdCIiwianRpIjoiRzBPRG1TeVB4anZpSHYyaFFLOTROU091b0xXLUtaU0tzZ185Ul9YVUgzSSIsImlhdCI6MTc1NTE3Nzc4NCwibmJmIjoxNzU1MTc3Nzg0LCJleHAiOjE3ODY3MTM3ODQsInN1YiI6Im1vbml0b3IiLCJyb2xlcyI6WyJzdG9yYWdlLm1vbml0b3IiXSwiYXVkIjoiMzIzMDMwMzIzMjMwMzIzMDMwMzIzMTM4NjVCRkI0N0IifQ.NfIqaMabpWKDeZtWE1op_zKHfjwNulVXwdywF8QQcV-HJ12wcPA3OOYlbfZ0jqPN4cShWGuKfzQQy7VccvLZUe2JFfYN3AVp7E6JGAc7I0xDV8RroSTNoOO3K7hroulgQqsLdVtCwGshBMgWbnoY9eO9y3j0OIeE4NpR2c5ZYnprLshdW7Ke5Ixn9Xk1IzRoNEh2iwWwbF404X276et8PllOPprclOH4uoj8lmg1GSFXC16ysz3nBhiQ_bnP3x0g-MM_RNmj-KcvShJ_P5ZdSJcnjjQdED32OnYR6JE87GdYnqM2ApgD0xoOUEVAeR43wWVlVOgRWdeLhMfUGXti_Q"
+      "{$DEVMGR.API.URL}": "https://{HOST.IP}/"
+      "{$DEVMGR.DEBUG}": "true"
+      "{$DEVMGR.PASSWORD}": "S7G3y9TtmRSm"
+      "{$DEVMGR.TIMEOUT}": "10"
+      "{$DEVMGR.USER}": "monitor"
+      "{$SYSTEM.ID}": "1"
+NetApp Storage:
+  - name: BLT - NetApp Storage Template
+    type: snmpv2
+    host_groups: 
+      - "Storage Devices"
+Netgear Storage:
+  - name: BLT - Netgear Storage Template
+    type: snmpv2
+    host_groups: 
+      - "Storage Devices"
+Oracle Storage:
+  - name: BLT - Oracle Storage Template
+    type: snmpv2
+    host_groups: 
+      - "Storage Devices"
+Purestorage:
+  - name: BLT - Purestorage Template
+    type: snmpv2
+    host_groups: 
+      - "Storage Devices"
+QNAP Storage:
+  - name: BLT - QNAP Storage Template
+    type: snmpv2
+    host_groups: 
+      - "Storage Devices"
+Synology Storage:
+  - name: BLT - Synology Storage Template
+    type: snmpv2
+    host_groups: 
+      - "Storage Devices"

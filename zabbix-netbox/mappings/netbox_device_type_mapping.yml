@@ -47,3 +47,79 @@ mappings:
       manufacturer: "Supermicro"
     priority: 1
 
+  # Primera devices
+  - device_type: "HPE Primera"
+    conditions:
+      device_role: "Storage"
+      manufacturer: ["HPE", "HP"]
+    priority: 1
+
+  # DELL Storage devices
+  - device_type: "DELL Storage"
+    conditions:
+      device_role: "Storage"
+      manufacturer: "DELL"
+    priority: 1
+  
+  # Huawei Storage devices
+  - device_type: "Huawei Storage"
+    conditions:
+      device_role: "Storage"
+      manufacturer: "HUAWEI"
+    priority: 1
+
+  # IBM Storage devices
+  - device_type: "HPE Primera"
+    conditions:
+      device_role: "Storage"
+      manufacturer: "IBM"
+    priority: 1
+
+  # Lenovo Storage devices
+  - device_type: "Lenovo Storage"
+    conditions:
+      device_role: "Storage"
+      manufacturer: "LENOVO"
+    priority: 1
+
+  # NetApp Storage devices
+  - device_type: "NetApp Storage"
+    conditions:
+      device_role: "Storage"
+      manufacturer: "NETAPP"
+    priority: 1
+
+  # Netgear Storage devices
+  - device_type: "Netgear Storage"
+    conditions:
+      device_role: "Storage"
+      manufacturer: "NETGEAR"
+    priority: 1
+
+  # Oracle Storage devices
+  - device_type: "Oracle Storage"
+    conditions:
+      device_role: "Storage"
+      manufacturer: "ORACLE"
+    priority: 1
+
+  # Purestorage Storage devices
+  - device_type: "Purestorage"
+    conditions:
+      device_role: "Storage"
+      manufacturer: "PURESTORAGE"
+    priority: 1
+
+  # QNAP Storage devices
+  - device_type: "QNAP Storage"
+    conditions:
+      device_role: "Storage"
+      manufacturer: "QNAP"
+    priority: 1
+
+  # SYNOLOGY Storage devices
+  - device_type: "Synology Storage"
+    conditions:
+      device_role: "Storage"
+      manufacturer: "SYNOLOGY"
+    priority: 1
