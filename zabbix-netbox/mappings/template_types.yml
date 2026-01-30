@@ -39,9 +39,17 @@ none:
 
 
 api:
-  interface: null
+  interface:
+    type: 1        # Zabbix agent (dummy interface for HTTP/API templates)
+    port: 10050
+    useip: 1
+    dns: ""
 
 API:
-  interface: null
+  interface:
+    type: 1        # Zabbix agent (dummy interface for HTTP/API templates)
+    port: 10050
+    useip: 1
+    dns: ""
 
 
