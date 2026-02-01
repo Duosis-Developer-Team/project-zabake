@@ -69,7 +69,7 @@ mappings:
     priority: 1
 
   # IBM Storage devices
-  - device_type: "HPE Primera"
+  - device_type: "IBM Storage"
     conditions:
       device_role: "Storage"
       manufacturer: "IBM"
