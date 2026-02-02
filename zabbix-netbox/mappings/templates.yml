@@ -46,7 +46,7 @@ HPE Primera:
       - "Storage Devices"
     macros:
       "{$HPE.PRIMERA.API.HOST}": "{HOST.IP}"
-      "{$HPE.PRIMERA.API.PASSWORD": "gUkUmZ/fh4J$6$eg$DW+"
+      "{$HPE.PRIMERA.API.PASSWORD}": "gUkUmZ/fh4J$6$eg$DW+"
       "{$HPE.PRIMERA.API.USERNAME}": "monitor"
 Huawei Storage:
   - name: Huawei OceanStor 5300 V5 by SNMP

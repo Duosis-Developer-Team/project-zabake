@@ -411,6 +411,27 @@
     - zbx_scenario == 'create'
     - _missing_params | default([]) | length == 0
 
+- name: Debug - Show full create request body
+  debug:
+    msg: |
+      ========================================
+      ZABBIX API CREATE REQUEST
+      ========================================
+      Host: {{ zbx_record.HOSTNAME }}
+      IP: {{ zbx_record.HOST_IP }}
+      Device Type: {{ zbx_record.DEVICE_TYPE | default('N/A') }}
+      Templates: {{ zbx_template_id_list | to_nice_json }}
+      Groups: {{ zbx_groups_formatted | to_nice_json }}
+      Interface: {{ _zbx_interface_create | to_nice_json }}
+      Macros: {{ zbx_host_macros_formatted | to_nice_json }}
+      Monitored By: {{ zbx_monitored_by }}
+      Proxy Group ID: {{ zbx_proxy_group_id }}
+      Tags: {{ zbx_tags | default([]) | to_nice_json }}
+      ========================================
+  when:
+    - zbx_scenario == 'create'
+    - _missing_params | default([]) | length == 0
+
 - name: Create new host (scenario create)
   uri:
     url: "{{ zabbix_url }}"
@@ -459,7 +480,29 @@
       device_role: "{{ zbx_record.DEVICE_ROLE | default('N/A') }}"
       status: "eklenemedi"
       reason: "{{ zbx_create_resp.json.error.message | default('Bilinmeyen hata') }}"
+      error_data: "{{ zbx_create_resp.json.error.data | default('') }}"
+      error_code: "{{ zbx_create_resp.json.error.code | default('') }}"
       ip: "{{ zbx_record.HOST_IP }}"
+  when:
+    - zbx_scenario == 'create'
+    - _missing_params | default([]) | length == 0
+    - zbx_create_resp.json.error is defined
+
+- name: Debug - Show detailed create error
+  debug:
+    msg: |
+      ========================================
+      ZABBIX API CREATE ERROR
+      ========================================
+      Host: {{ zbx_record.HOSTNAME }}
+      IP: {{ zbx_record.HOST_IP }}
+      Error Message: {{ zbx_create_resp.json.error.message | default('N/A') }}
+      Error Code: {{ zbx_create_resp.json.error.code | default('N/A') }}
+      Error Data: {{ zbx_create_resp.json.error.data | default('N/A') | to_nice_json }}
+      ========================================
+      FULL RESPONSE:
+      {{ zbx_create_resp.json | to_nice_json }}
+      ========================================
   when:
     - zbx_scenario == 'create'
     - _missing_params | default([]) | length == 0
@@ -633,6 +676,32 @@
     - zbx_scenario == 'update'
     - zbx_existing_host.hostid is defined
 
+- name: Debug - Show full update request body
+  debug:
+    msg: |
+      ========================================
+      ZABBIX API UPDATE REQUEST
+      ========================================
+      Host: {{ zbx_record.HOSTNAME }}
+      Host ID: {{ zbx_existing_host.hostid }}
+      IP: {{ zbx_record.HOST_IP }}
+      Device Type: {{ zbx_record.DEVICE_TYPE | default('N/A') }}
+      Interface: {{ _zbx_interface_update | to_nice_json }}
+      Macros: {{ zbx_host_macros_formatted_update | to_nice_json }}
+      Monitored By: {{ zbx_monitored_by }}
+      Proxy Group ID: {{ zbx_proxy_group_id }}
+      Needs Update: {{ _needs_update | default(true) | bool }}
+      ========================================
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host is defined
+    - zbx_existing_host.hostid is defined
+    - _interface_id is defined
+    - _interface_id != ''
+    - _zbx_interface_update is defined
+    - _missing_params | default([]) | length == 0
+    - _needs_update | default(true) | bool
+
 - name: Update existing host (scenario update - only continuous fields, NO TAGS)
   uri:
     url: "{{ zabbix_url }}"
@@ -739,7 +808,33 @@
       device_role: "{{ zbx_record.DEVICE_ROLE | default('N/A') }}"
       status: "eklenemedi"
       reason: "Güncelleme hatası: {{ zbx_update_resp.json.error.message | default(zbx_update_resp.json.error.data | default('Bilinmeyen hata')) }}"
+      error_data: "{{ zbx_update_resp.json.error.data | default('') }}"
+      error_code: "{{ zbx_update_resp.json.error.code | default('') }}"
       ip: "{{ zbx_record.HOST_IP }}"
+  when:
+    - zbx_scenario == 'update'
+    - _needs_update is defined
+    - _needs_update | bool
+    - zbx_update_resp is defined
+    - zbx_update_resp.json is defined
+    - zbx_update_resp.json.error is defined
+
+- name: Debug - Show detailed update error
+  debug:
+    msg: |
+      ========================================
+      ZABBIX API UPDATE ERROR
+      ========================================
+      Host: {{ zbx_record.HOSTNAME }}
+      Host ID: {{ zbx_existing_host.hostid }}
+      IP: {{ zbx_record.HOST_IP }}
+      Error Message: {{ zbx_update_resp.json.error.message | default('N/A') }}
+      Error Code: {{ zbx_update_resp.json.error.code | default('N/A') }}
+      Error Data: {{ zbx_update_resp.json.error.data | default('N/A') | to_nice_json }}
+      ========================================
+      FULL RESPONSE:
+      {{ zbx_update_resp.json | to_nice_json }}
+      ========================================
   when:
     - zbx_scenario == 'update'
     - _needs_update is defined
