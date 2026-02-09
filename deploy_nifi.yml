@@ -3,6 +3,9 @@
   hosts: all
   become: yes
   vars:
+    # -------------------------------------------------------------
+    # AYARLAR VE ADRESLER
+    # -------------------------------------------------------------
     target_path: "/Datalake_Project/"
     backup_base_path: "/backup/datalake_configs/"
     
@@ -15,6 +18,9 @@
     git_branch: "main"
 
   tasks:
+    # -------------------------------------------------------------
+    # 1. ADIM: Datalake Dosyalarını Geçici Bir Yere İndir
+    # -------------------------------------------------------------
     - name: Datalake Deposunu Çek (Temp)
       git:
         repo: "{{ git_repo_url }}"
@@ -23,6 +29,9 @@
         force: yes
         accept_hostkey: yes
 
+    # -------------------------------------------------------------
+    # 2. ADIM: Mevcut Dosyaları Yedekle (Güvenlik)
+    # -------------------------------------------------------------
     - name: Yedekleme Klasörü Oluştur
       file:
         path: "{{ backup_base_path }}backup_{{ ansible_date_time.iso8601_basic_short }}"
@@ -36,6 +45,9 @@
         dest: "{{ backup_base_path }}backup_{{ ansible_date_time.iso8601_basic_short }}/"
         fail_on_missing: no
 
+    # -------------------------------------------------------------
+    # 3. ADIM: Yeni Dosyaları Yerine Koy (Deploy)
+    # -------------------------------------------------------------
     - name: Yeni Dosyaları Kopyala
       copy:
         remote_src: yes
@@ -44,6 +56,9 @@
         mode: '0755'
         force: yes
 
+    # -------------------------------------------------------------
+    # 4. ADIM: Temizlik
+    # -------------------------------------------------------------
     - name: Geçici Klasörü Sil
       file:
         path: "/tmp/datalake_temp"
