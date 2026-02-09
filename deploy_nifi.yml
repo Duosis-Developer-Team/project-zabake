@@ -5,8 +5,13 @@
   vars:
     target_path: "/Datalake_Project/"
     backup_base_path: "/backup/datalake_configs/"
-    # ŞİFREYİ BURAYA GÖMDÜK:
-    git_repo_url: "http://admin:Qwerasdf123@10.134.16.135:3000/Duosis-Developer-Team/datalake.git"
+    
+    # İŞTE DÜZELTİLMİŞ ADRES (Admin + Şifre + Port 3000):
+    # Kullanıcı: admin
+    # Şifre: Qwerasdf123
+    # Adres: 10.134.16.135:3000/Admin/datalake.git
+    git_repo_url: "http://admin:Qwerasdf123@10.134.16.135:3000/Admin/datalake.git"
+    
     git_branch: "main"
 
   tasks:
