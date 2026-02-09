@@ -3,24 +3,16 @@
   hosts: all
   become: yes
   vars:
-    # -------------------------------------------------------------
-    # AYARLAR VE ADRESLER
-    # -------------------------------------------------------------
+    # AYARLAR
     target_path: "/Datalake_Project/"
     backup_base_path: "/backup/datalake_configs/"
     
-    # İŞTE DÜZELTİLMİŞ ADRES (Admin + Şifre + Port 3000):
-    # Kullanıcı: admin
-    # Şifre: Qwerasdf123
-    # Adres: 10.134.16.135:3000/Admin/datalake.git
+    # ADRES (Başarıyla Çalışan Ayar)
     git_repo_url: "http://admin:Qwerasdf123@10.134.16.135:3000/Admin/datalake.git"
-    
     git_branch: "main"
 
   tasks:
-    # -------------------------------------------------------------
-    # 1. ADIM: Datalake Dosyalarını Geçici Bir Yere İndir
-    # -------------------------------------------------------------
+    # 1. ADIM: Datalake Deposunu Çek
     - name: Datalake Deposunu Çek (Temp)
       git:
         repo: "{{ git_repo_url }}"
@@ -29,9 +21,7 @@
         force: yes
         accept_hostkey: yes
 
-    # -------------------------------------------------------------
-    # 2. ADIM: Mevcut Dosyaları Yedekle (Güvenlik)
-    # -------------------------------------------------------------
+    # 2. ADIM: Yedekleme
     - name: Yedekleme Klasörü Oluştur
       file:
         path: "{{ backup_base_path }}backup_{{ ansible_date_time.iso8601_basic_short }}"
@@ -43,11 +33,10 @@
         remote_src: yes
         src: "{{ target_path }}"
         dest: "{{ backup_base_path }}backup_{{ ansible_date_time.iso8601_basic_short }}/"
-        fail_on_missing: no
+      # 'fail_on_missing' yerine bunu kullanıyoruz:
+      ignore_errors: yes 
 
-    # -------------------------------------------------------------
-    # 3. ADIM: Yeni Dosyaları Yerine Koy (Deploy)
-    # -------------------------------------------------------------
+    # 3. ADIM: Deploy
     - name: Yeni Dosyaları Kopyala
       copy:
         remote_src: yes
@@ -56,9 +45,7 @@
         mode: '0755'
         force: yes
 
-    # -------------------------------------------------------------
     # 4. ADIM: Temizlik
-    # -------------------------------------------------------------
     - name: Geçici Klasörü Sil
       file:
         path: "/tmp/datalake_temp"
