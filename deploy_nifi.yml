@@ -13,9 +13,6 @@
     git_repo_url: "http://admin:Qwerasdf123@10.134.16.135:3000/Admin/datalake.git"
     git_branch: "main"
 
-    # DİKKAT: Burası 1. Sadece en son yedeği tutar, eskileri siler.
-    keep_backup_count: 1
-
   tasks:
     # -------------------------------------------------------------
     # 1. ADIM: Datalake Deposunu Çek (Temp)
@@ -29,15 +26,15 @@
         accept_hostkey: yes
 
     # -------------------------------------------------------------
-    # 2. ADIM: Mevcut Dosyaları Yedekle
+    # 2. ADIM: YENİ YEDEĞİ OLUŞTUR (Tarihli İsimle)
     # -------------------------------------------------------------
-    - name: Yedekleme Klasörü Oluştur
+    - name: Yeni Yedek Klasörü Oluştur
       file:
         path: "{{ backup_base_path }}backup_{{ ansible_date_time.iso8601_basic_short }}"
         state: directory
         mode: '0755'
 
-    - name: Mevcut Dosyaları Yedekle
+    - name: Mevcut Dosyaları Yeni Yedeğe Kopyala
       copy:
         remote_src: yes
         src: "{{ target_path }}"
@@ -45,7 +42,27 @@
       ignore_errors: yes 
 
     # -------------------------------------------------------------
-    # 3. ADIM: Yeni Dosyaları Yerine Koy (Deploy)
+    # 3. ADIM: ESKİLERİ TEMİZLE (Sadece En Yeni 1 Tane Kalsın)
+    # -------------------------------------------------------------
+    - name: Yedek Klasöründeki Tüm Klasörleri Bul
+      find:
+        paths: "{{ backup_base_path }}"
+        file_type: directory
+        recurse: no
+        patterns: "backup_*"
+      register: found_backups
+
+    - name: En Yeni Yedek HARİÇ Diğerlerini Sil
+      file:
+        path: "{{ item.path }}"
+        state: absent
+      # Mantık: Listeyi zamana göre sırala (en yeni en üstte).
+      # [1:] diyerek ilk sıradakini (en yeniyi) atla, gerisini sil.
+      loop: "{{ (found_backups.files | sort(attribute='mtime', reverse=true))[1:] }}"
+      when: found_backups.matched > 1
+
+    # -------------------------------------------------------------
+    # 4. ADIM: Yeni Dosyaları Yerine Koy (Deploy)
     # -------------------------------------------------------------
     - name: Yeni Dosyaları Kopyala
       copy:
@@ -56,25 +73,9 @@
         force: yes
 
     # -------------------------------------------------------------
-    # 4. ADIM: Temizlik (Geçici Dosyalar)
+    # 5. ADIM: Temizlik (Geçici Dosyalar)
     # -------------------------------------------------------------
     - name: Geçici Git Klasörünü Sil
       file:
         path: "/tmp/datalake_temp"
         state: absent
-
-    # -------------------------------------------------------------
-    # 5. ADIM: ESKİ YEDEKLERİ SİLME (Sadece En Yeni 1 Tane Kalsın)
-    # -------------------------------------------------------------
-    - name: Yedek Klasöründeki Tüm Yedekleri Bul
-      find:
-        paths: "{{ backup_base_path }}"
-        file_type: directory
-        recurse: no
-      register: found_backups
-
-    - name: Fazlalık Yedekleri Sil
-      file:
-        path: "{{ item.path }}"
-        state: absent
-      loop: "{{ (found_backups.files | sort(attribute='mtime', reverse=true))[keep_backup_count:] }}"
