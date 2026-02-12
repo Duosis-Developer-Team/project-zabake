@@ -3,16 +3,23 @@
   hosts: all
   become: yes
   vars:
-    # AYARLAR
+    # -------------------------------------------------------------
+    # AYARLAR VE ADRESLER
+    # -------------------------------------------------------------
     target_path: "/Datalake_Project/"
     backup_base_path: "/backup/datalake_configs/"
     
-    # ADRES (Başarıyla Çalışan Ayar)
+    # Gitea Ayarları (Admin + Şifre + Port 3000)
     git_repo_url: "http://admin:Qwerasdf123@10.134.16.135:3000/Admin/datalake.git"
     git_branch: "main"
 
+    # DİKKAT: Burası 1. Sadece en son yedeği tutar, eskileri siler.
+    keep_backup_count: 1
+
   tasks:
-    # 1. ADIM: Datalake Deposunu Çek
+    # -------------------------------------------------------------
+    # 1. ADIM: Datalake Deposunu Çek (Temp)
+    # -------------------------------------------------------------
     - name: Datalake Deposunu Çek (Temp)
       git:
         repo: "{{ git_repo_url }}"
@@ -21,7 +28,9 @@
         force: yes
         accept_hostkey: yes
 
-    # 2. ADIM: Yedekleme
+    # -------------------------------------------------------------
+    # 2. ADIM: Mevcut Dosyaları Yedekle
+    # -------------------------------------------------------------
     - name: Yedekleme Klasörü Oluştur
       file:
         path: "{{ backup_base_path }}backup_{{ ansible_date_time.iso8601_basic_short }}"
@@ -33,10 +42,11 @@
         remote_src: yes
         src: "{{ target_path }}"
         dest: "{{ backup_base_path }}backup_{{ ansible_date_time.iso8601_basic_short }}/"
-      # 'fail_on_missing' yerine bunu kullanıyoruz:
       ignore_errors: yes 
 
-    # 3. ADIM: Deploy
+    # -------------------------------------------------------------
+    # 3. ADIM: Yeni Dosyaları Yerine Koy (Deploy)
+    # -------------------------------------------------------------
     - name: Yeni Dosyaları Kopyala
       copy:
         remote_src: yes
@@ -45,8 +55,26 @@
         mode: '0755'
         force: yes
 
-    # 4. ADIM: Temizlik
-    - name: Geçici Klasörü Sil
+    # -------------------------------------------------------------
+    # 4. ADIM: Temizlik (Geçici Dosyalar)
+    # -------------------------------------------------------------
+    - name: Geçici Git Klasörünü Sil
       file:
         path: "/tmp/datalake_temp"
         state: absent
+
+    # -------------------------------------------------------------
+    # 5. ADIM: ESKİ YEDEKLERİ SİLME (Sadece En Yeni 1 Tane Kalsın)
+    # -------------------------------------------------------------
+    - name: Yedek Klasöründeki Tüm Yedekleri Bul
+      find:
+        paths: "{{ backup_base_path }}"
+        file_type: directory
+        recurse: no
+      register: found_backups
+
+    - name: Fazlalık Yedekleri Sil
+      file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ (found_backups.files | sort(attribute='mtime', reverse=true))[keep_backup_count:] }}"
