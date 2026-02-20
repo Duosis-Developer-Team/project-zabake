@@ -195,7 +195,7 @@ Fortinet Firewall:
       "{$FGATE.API.FQDN}": "{HOST.IP}"
       "{$FGATE.API.PORT}": "10443"
       "{$FGATE.SCHEME}": "https"
-      {$FGATE.API.TOKEN}: "HH58bhNQxkrjhnrss05yxrww086k7t"
+      "{$FGATE.API.TOKEN}": "HH58bhNQxkrjhnrss05yxrww086k7t"
 H3C Management Switch:
   - name: BLT - HP Comware HH3C SNMP
     type: snmpv2
