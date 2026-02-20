@@ -107,3 +107,237 @@ Synology Storage:
     type: snmpv2
     host_groups: 
       - "Storage Devices"
+Arista Switch:
+  - name: BLT - Arista SNMP
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Arista Router:
+  - name: BLT - Arista Router SNMP
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Angora Switch:
+  - name: unknown
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+ARBOR Switch:
+  - name: unknown
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Birsen Switch:
+  - name: unknown
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Brocade SAN Switch:
+  - name: BLT - IBM SAN Switch by HTTP
+    type: API
+    host_groups: 
+      - "Network Devices"
+    macros:
+      "{$SAN_URL}": "{HOST.IP}"
+      "{$SAN_PASS}": "O7!QB0r*p3T5G"
+      "{$SAN_USER}": "zabbix"
+Check Point Firewall:
+  - name: BLT - Check Point Next Generation Firewall by SNMP
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Cisco Switch:
+  - name: BLT - Cisco Catalyst 3750V2-48TS SNMP
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Cisco Router:
+  - name: unknown
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Cisco SAN Switch:
+  - name: unknown
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Cisco Managemet Switch:
+  - name: BLT - Cisco IOS SNMP
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+DELL Management Switch:
+  - name: BLT - Dell Force S-Series SNMP
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+DELL Router:
+  - name: unknown
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+DELL Switch:
+  - name: BLT - Dell Emc OS10
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Edge-Core Management Switch:
+  - name: unknown
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Fortinet Firewall:
+  - name: BLT - FortiGate by HTTP
+    type: API
+    host_groups: 
+      - "Network Devices"
+    macros:
+      "{$FGATE.API.FQDN}": "{HOST.IP}"
+      "{$FGATE.API.PORT}": "10443"
+      "{$FGATE.SCHEME}": "https"
+      {$FGATE.API.TOKEN}: "HH58bhNQxkrjhnrss05yxrww086k7t"
+H3C Management Switch:
+  - name: BLT - HP Comware HH3C SNMP
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+HPE Management Switch:
+  - name: unknown
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+HPE SAN Switch:
+  - name: unknown
+    type: API
+    host_groups: 
+      - "Network Devices"
+HPE Switch:
+  - name: unknown
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Huawei Backbone Switch:
+  - name: BLT - Huawei VRP SNMP
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+  - name: BLT - Template SNMP Device Huawei BGP
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Huawei Firewall:
+  - name: BLT - Huawei VRP SNMP
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+  - name: BLT - Template SNMP Device Huawei BGP
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Huawei Operator Switch:
+  - name: unknown
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Huawei Management Switch:
+  - name: BLT - Huawei VRP SNMP
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+  - name: BLT - Template SNMP Device Huawei BGP
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Huawei Router:
+  - name: BLT - Huawei VRP SNMP
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+  - name: BLT - Template SNMP Device Huawei BGP
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Huawei Switch:
+  - name: unknown
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+IBM SAN Switch:
+  - name: BLT - IBM SAN Switch by HTTP
+    type: API
+    host_groups: 
+      - "Network Devices"
+    macros:
+      "{$SAN_URL}": "{HOST.IP}"
+      "{$SAN_PASS}": "O7!QB0r*p3T5G"
+      "{$SAN_USER}": "zabbix"
+Juniper Management Switch:
+  - name: BLT - Juniper by SNMP
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Labris Firewall:
+  - name: unknown
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Lenovo SAN Switch:
+  - name: unknown
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Mellanox Switch:
+  - name: BLT - Mellanox SNMP
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Mikrotik Firewall:
+  - name: unknown
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Palo Alto Switch:
+  - name: unknown
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Palo Alto Firewall:
+  - name: BLT - Palo Alto SNMPv2 64-bit counters
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Raritan Switch:
+  - name: unknown
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Ruckus Management Switch:
+  - name: unknown
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Sophos Firewall:
+  - name: BLT - FortiGate by HTTP
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Thales Firewall:
+  - name: unknown
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Tipping Point Firewall:
+  - name: unknown
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Trend Micro Firewall:
+  - name: unknown
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+Yeastar Switch:
+  - name: unknown
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"

@@ -123,3 +123,276 @@ mappings:
       device_role: "Storage"
       manufacturer: "SYNOLOGY"
     priority: 1
+
+  # Network Devices - Arista
+  - device_type: "Arista Switch"
+    conditions:
+      device_role: "Switch"
+      manufacturer: "ARISTA"
+    priority: 1
+
+  - device_type: "Arista Router"
+    conditions:
+      device_role: "Router"
+      manufacturer: "ARISTA"
+    priority: 1
+
+  # Network Devices - Angora
+  - device_type: "Angora Switch"
+    conditions:
+      device_role: "Switch"
+      manufacturer: "ANGORA"
+    priority: 1
+
+  # Network Devices - ARBOR
+  - device_type: "ARBOR Switch"
+    conditions:
+      device_role: "Switch"
+      manufacturer: "ARBOR"
+    priority: 1
+
+  # Network Devices - Birsen
+  - device_type: "Birsen Switch"
+    conditions:
+      device_role: "Switch"
+      manufacturer: "BIRSEN"
+    priority: 1
+
+  # Network Devices - Brocade
+  - device_type: "Brocade SAN Switch"
+    conditions:
+      device_role: "SAN Switch"
+      manufacturer: "BROCADE"
+    priority: 1
+
+  # Network Devices - Check Point
+  - device_type: "Check Point Firewall"
+    conditions:
+      device_role: "Firewall"
+      manufacturer: ["CHECK POINT", "Check Point"]
+    priority: 1
+
+  # Network Devices - Cisco
+  - device_type: "Cisco Switch"
+    conditions:
+      device_role: "Switch"
+      manufacturer: "CISCO"
+    priority: 1
+
+  - device_type: "Cisco Router"
+    conditions:
+      device_role: "Router"
+      manufacturer: "CISCO"
+    priority: 1
+
+  - device_type: "Cisco SAN Switch"
+    conditions:
+      device_role: "SAN Switch"
+      manufacturer: "CISCO"
+    priority: 1
+
+  - device_type: "Cisco Managemet Switch"
+    conditions:
+      device_role: "Management Switch"
+      manufacturer: "CISCO"
+    priority: 1
+
+  # Network Devices - DELL
+  - device_type: "DELL Management Switch"
+    conditions:
+      device_role: "Management Switch"
+      manufacturer: "DELL"
+    priority: 1
+
+  - device_type: "DELL Router"
+    conditions:
+      device_role: "Router"
+      manufacturer: "DELL"
+    priority: 1
+
+  - device_type: "DELL Switch"
+    conditions:
+      device_role: "Switch"
+      manufacturer: "DELL"
+    priority: 1
+
+  # Network Devices - Edge-Core
+  - device_type: "Edge-Core Management Switch"
+    conditions:
+      device_role: "Management Switch"
+      manufacturer: ["EDGE-CORE", "Edge-Core"]
+    priority: 1
+
+  # Network Devices - Fortinet
+  - device_type: "Fortinet Firewall"
+    conditions:
+      device_role: "Firewall"
+      manufacturer: "FORTINET"
+    priority: 1
+
+  # Network Devices - H3C
+  - device_type: "H3C Management Switch"
+    conditions:
+      device_role: "Management Switch"
+      manufacturer: ["H3C", "HPE"]
+    priority: 1
+
+  # Network Devices - HPE
+  - device_type: "HPE Management Switch"
+    conditions:
+      device_role: "Management Switch"
+      manufacturer: ["HPE", "HP"]
+    priority: 1
+
+  - device_type: "HPE SAN Switch"
+    conditions:
+      device_role: "SAN Switch"
+      manufacturer: ["HPE", "HP"]
+    priority: 1
+
+  - device_type: "HPE Switch"
+    conditions:
+      device_role: "Switch"
+      manufacturer: ["HPE", "HP"]
+    priority: 1
+
+  # Network Devices - Huawei
+  - device_type: "Huawei Backbone Switch"
+    conditions:
+      device_role: "Backbone Switch"
+      manufacturer: "HUAWEI"
+    priority: 1
+
+  - device_type: "Huawei Firewall"
+    conditions:
+      device_role: "Firewall"
+      manufacturer: "HUAWEI"
+    priority: 1
+
+  - device_type: "Huawei Operator Switch"
+    conditions:
+      device_role: "Operator Switch"
+      manufacturer: "HUAWEI"
+    priority: 1
+
+  - device_type: "Huawei Management Switch"
+    conditions:
+      device_role: "Management Switch"
+      manufacturer: "HUAWEI"
+    priority: 1
+
+  - device_type: "Huawei Router"
+    conditions:
+      device_role: "Router"
+      manufacturer: "HUAWEI"
+    priority: 1
+
+  - device_type: "Huawei Switch"
+    conditions:
+      device_role: "Switch"
+      manufacturer: "HUAWEI"
+    priority: 1
+
+  # Network Devices - IBM
+  - device_type: "IBM SAN Switch"
+    conditions:
+      device_role: "SAN Switch"
+      manufacturer: "IBM"
+    priority: 1
+
+  # Network Devices - Juniper
+  - device_type: "Juniper Management Switch"
+    conditions:
+      device_role: "Management Switch"
+      manufacturer: "JUNIPER"
+    priority: 1
+
+  # Network Devices - Labris
+  - device_type: "Labris Firewall"
+    conditions:
+      device_role: "Firewall"
+      manufacturer: "LABRIS"
+    priority: 1
+
+  # Network Devices - Lenovo
+  - device_type: "Lenovo SAN Switch"
+    conditions:
+      device_role: "SAN Switch"
+      manufacturer: "LENOVO"
+    priority: 1
+
+  # Network Devices - Mellanox
+  - device_type: "Mellanox Switch"
+    conditions:
+      device_role: "Switch"
+      manufacturer: "MELLANOX"
+    priority: 1
+
+  # Network Devices - Mikrotik
+  - device_type: "Mikrotik Firewall"
+    conditions:
+      device_role: "Firewall"
+      manufacturer: "MIKROTIK"
+    priority: 1
+
+  # Network Devices - Palo Alto
+  - device_type: "Palo Alto Switch"
+    conditions:
+      device_role: "Switch"
+      manufacturer: "PALO ALTO"
+    priority: 1
+
+  - device_type: "Palo Alto Firewall"
+    conditions:
+      device_role: "Firewall"
+      manufacturer: "PALO ALTO"
+    priority: 1
+
+  # Network Devices - Raritan
+  - device_type: "Raritan Switch"
+    conditions:
+      device_role: "Switch"
+      manufacturer: "RARITAN"
+    priority: 1
+
+  # Network Devices - Ruckus
+  - device_type: "Ruckus Management Switch"
+    conditions:
+      device_role: "Management Switch"
+      manufacturer: "RUCKUS"
+    priority: 1
+
+  # Network Devices - Sophos
+  - device_type: "Sophos Firewall"
+    conditions:
+      device_role: "Firewall"
+      manufacturer: "SOPHOS"
+    priority: 1
+
+  # Network Devices - Thales
+  - device_type: "Thales Firewall"
+    conditions:
+      device_role: "Firewall"
+      manufacturer: "THALES"
+    priority: 1
+
+  # Network Devices - Tipping Point
+  - device_type: "Tipping Point Firewall"
+    conditions:
+      device_role: "Firewall"
+      manufacturer: ["TIPPING POINT", "Tipping Point"]
+    priority: 1
+
+  # Network Devices - Trend Micro
+  - device_type: "Trend Micro Firewall"
+    conditions:
+      device_role: "Firewall"
+      manufacturer: ["TREND MICRO", "Trend Micro"]
+    priority: 1
+
+  # Network Devices - Yeastar
+  - device_type: "Yeastar Switch"
+    conditions:
+      device_role: "Switch"
+      manufacturer: "YEASTAR"
+    priority: 1
