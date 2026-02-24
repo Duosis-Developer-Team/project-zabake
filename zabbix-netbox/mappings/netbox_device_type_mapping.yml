@@ -127,7 +127,7 @@ mappings:
   # Network Devices - Arista
   - device_type: "Arista Switch"
     conditions:
-      device_role: "Switch"
+      device_role: ["Switch", "Spine Switch", "Backbone Switch", "Leaf Switch"]
       manufacturer: "ARISTA"
     priority: 1
 
@@ -324,7 +324,7 @@ mappings:
   # Network Devices - Mellanox
   - device_type: "Mellanox Switch"
     conditions:
-      device_role: "Switch"
+      device_role: ["Switch", "Spine Switch", "Backbone Switch", "Leaf Switch"]
       manufacturer: "MELLANOX"
     priority: 1
 
@@ -338,7 +338,7 @@ mappings:
   # Network Devices - Palo Alto
   - device_type: "Palo Alto Switch"
     conditions:
-      device_role: "Switch"
+      device_role: ["Switch", "Spine Switch", "Backbone Switch", "Leaf Switch"]
       manufacturer: "PALO ALTO"
     priority: 1
 
@@ -351,7 +351,7 @@ mappings:
   # Network Devices - Raritan
   - device_type: "Raritan Switch"
     conditions:
-      device_role: "Switch"
+      device_role: ["Switch", "Spine Switch", "Backbone Switch", "Leaf Switch"]
       manufacturer: "RARITAN"
     priority: 1
 
