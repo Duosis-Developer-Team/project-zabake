@@ -136,147 +136,51 @@
   set_fact:
     processing_results_json: "{{ processing_results | to_json }}"
 
+- name: Ensure temporary directory for email data exists
+  file:
+    path: "{{ netbox_zabbix_sync_tmp_dir | default('/tmp/netbox_zabbix_sync') }}"
+    state: directory
+    mode: '0700'
+  delegate_to: localhost
+  run_once: true
+
+- name: Write processing results JSON to temporary file
+  copy:
+    content: "{{ processing_results_json }}"
+    dest: "{{ netbox_zabbix_sync_tmp_dir | default('/tmp/netbox_zabbix_sync') }}/processing_results.json"
+    mode: '0600'
+  delegate_to: localhost
+  run_once: true
+
+- name: Write email HTML content to temporary file
+  copy:
+    content: "{{ email_html_content }}"
+    dest: "{{ netbox_zabbix_sync_tmp_dir | default('/tmp/netbox_zabbix_sync') }}/email_body.html"
+    mode: '0600'
+  delegate_to: localhost
+  run_once: true
+
+- name: Write email plain text content to temporary file
+  copy:
+    content: "{{ email_text_content }}"
+    dest: "{{ netbox_zabbix_sync_tmp_dir | default('/tmp/netbox_zabbix_sync') }}/email_body.txt"
+    mode: '0600'
+  delegate_to: localhost
+  run_once: true
+
 - name: Send notification email with CSV attachment using Python SMTP
-  shell: |
-    python3 << 'PYTHON_SCRIPT'
-    import smtplib
-    from email.mime.text import MIMEText
-    from email.mime.multipart import MIMEMultipart
-    from email.mime.application import MIMEApplication
-    import json
-    import csv
-    import io
-    import sys
-    from datetime import datetime
-    
-    # Email configuration
-    smtp_host = "{{ mail_smtp_host }}"
-    smtp_port = {{ mail_smtp_port }}
-    smtp_user = "{{ mail_smtp_username | default('') }}"
-    smtp_pass = "{{ mail_smtp_password | default('') }}"
-    from_addr = "{{ mail_from }}"
-    recipients_str = "{{ mail_recipients_str }}"
-    subject = "{{ email_subject }}"
-    
-    # Processing results as JSON
-    processing_results_json = r'''{{ processing_results_json }}'''
-    
-    # Parse recipients from comma-separated string
-    to_addrs_list = [addr.strip() for addr in recipients_str.split(',') if addr.strip()]
-    
-    # Create comma-separated string for To header
-    to_addrs_str = ', '.join(to_addrs_list)
-    
-    # Create main message container
-    msg = MIMEMultipart('mixed')
-    msg['Subject'] = subject
-    msg['From'] = from_addr
-    msg['To'] = to_addrs_str
-    
-    # Create alternative part for text/html
-    msg_alternative = MIMEMultipart('alternative')
-    msg.attach(msg_alternative)
-    
-    # Plain text version
-    text_content = r"""{{ email_text_content }}"""
-    
-    # HTML version  
-    html_content = r"""{{ email_html_content }}"""
-    
-    # Attach text and HTML versions
-    part_text = MIMEText(text_content, 'plain', 'utf-8')
-    part_html = MIMEText(html_content, 'html', 'utf-8')
-    msg_alternative.attach(part_text)
-    msg_alternative.attach(part_html)
-    
-    # Generate CSV attachment with all details
-    try:
-        processing_results = json.loads(processing_results_json)
-        
-        # Create CSV in memory
-        csv_buffer = io.StringIO()
-        csv_writer = csv.writer(csv_buffer, quoting=csv.QUOTE_ALL)
-        
-        # Write CSV header
-        csv_writer.writerow([
-            'Sıra No',
-            'Sunucu Adı',
-            'Device Role',
-            'IP Adresi',
-            'İşlem Durumu',
-            'Açıklama/Hata Sebebi',
-            'Zaman Damgası'
-        ])
-        
-        # Get current timestamp
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
-        # Sort results: failures first, then added, then updated, then current
-        status_order = {'eklenemedi': 1, 'eklendi': 2, 'güncellendi': 3, 'güncel': 4}
-        sorted_results = sorted(
-            processing_results, 
-            key=lambda x: status_order.get(x.get('status', '').lower(), 5)
-        )
-        
-        # Write data rows
-        for idx, result in enumerate(sorted_results, 1):
-            hostname = result.get('hostname', 'N/A')
-            device_role = result.get('device_role', 'N/A')
-            ip_addr = result.get('ip', 'N/A')
-            status = result.get('status', 'N/A').upper()
-            reason = result.get('reason', '-')
-            
-            # Turkish status names
-            status_tr = {
-                'EKLENDI': 'EKLENDİ',
-                'GÜNCELLENDI': 'GÜNCELLENDİ',
-                'GÜNCEL': 'GÜNCEL',
-                'EKLENEMEDI': 'EKLENEMEDI'
-            }.get(status, status)
-            
-            csv_writer.writerow([idx, hostname, device_role, ip_addr, status_tr, reason, timestamp])
-        
-        # Create CSV attachment
-        csv_content = csv_buffer.getvalue()
-        csv_attachment = MIMEApplication(csv_content.encode('utf-8-sig'), _subtype='csv')
-        csv_attachment.add_header(
-            'Content-Disposition', 
-            'attachment', 
-            filename='zabbix_entegrasyon_detay.csv'
-        )
-        msg.attach(csv_attachment)
-        
-        print(f"INFO: CSV attachment created with {len(sorted_results)} records")
-        
-    except Exception as e:
-        print(f"WARNING: Failed to create CSV attachment: {e}")
-        print("INFO: Continuing without CSV attachment...")
-    
-    # Send email
-    try:
-        server = smtplib.SMTP(smtp_host, smtp_port, timeout=120)
-        server.set_debuglevel(0)  # Set to 1 for debugging
-        
-        if smtp_user and smtp_pass:
-            try:
-                server.starttls()
-            except:
-                pass  # STARTTLS not supported, continue anyway
-            server.login(smtp_user, smtp_pass)
-        
-        server.sendmail(from_addr, to_addrs_list, msg.as_string())
-        server.quit()
-        print("SUCCESS: Email sent successfully with CSV attachment")
-        sys.exit(0)
-    except smtplib.SMTPException as e:
-        print(f"SMTP ERROR: {e}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"ERROR: Failed to send email: {e}")
-        sys.exit(1)
-    PYTHON_SCRIPT
-  args:
-    executable: /bin/bash
+  command: >
+    python3 {{ role_path }}/files/send_notification_email_smtp.py
+    --smtp-host {{ mail_smtp_host }}
+    --smtp-port {{ mail_smtp_port }}
+    --smtp-user {{ mail_smtp_username | default('') }}
+    --smtp-pass {{ mail_smtp_password | default('') }}
+    --from-addr {{ mail_from }}
+    --recipients "{{ mail_recipients_str }}"
+    --subject "{{ email_subject }}"
+    --results-file "{{ netbox_zabbix_sync_tmp_dir | default('/tmp/netbox_zabbix_sync') }}/processing_results.json"
+    --html-file "{{ netbox_zabbix_sync_tmp_dir | default('/tmp/netbox_zabbix_sync') }}/email_body.html"
+    --text-file "{{ netbox_zabbix_sync_tmp_dir | default('/tmp/netbox_zabbix_sync') }}/email_body.txt"
   when: 
     - processing_results is defined
     - processing_results | length > 0

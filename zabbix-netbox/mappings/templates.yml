@@ -341,3 +341,8 @@ Yeastar Switch:
     type: snmpv2
     host_groups: 
       - "Network Devices"
+Citrix LB:
+  - name: BLT - Template Citrix ADC
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"

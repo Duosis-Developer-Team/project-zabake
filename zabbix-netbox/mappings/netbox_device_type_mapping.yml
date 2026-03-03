@@ -396,3 +396,10 @@ mappings:
       device_role: "Switch"
       manufacturer: "YEASTAR"
     priority: 1
+
+  # Network Devices - Yeastar
+  - device_type: "Citrix LB"
+    conditions:
+      device_role: "Load Balancer"
+      manufacturer: "Citrix"
+    priority: 1
