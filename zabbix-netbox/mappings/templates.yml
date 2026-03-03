@@ -31,7 +31,7 @@ Dell IPMI:
     host_groups: 
       - "Physical Hosts"
 Supermicro API:
-  - name: BLT- Supermicro ILO by Redfish API
+  - name: BLT - Supermicro ILO by Redfish API
     type: snmpv2
     host_groups: 
       - "Physical Hosts"
@@ -77,11 +77,6 @@ Lenovo Storage:
       "{$DEVMGR.TIMEOUT}": "10"
       "{$DEVMGR.USER}": "monitor"
       "{$SYSTEM.ID}": "1"
-NetApp Storage:
-  - name: BLT - NetApp Storage Template
-    type: snmpv2
-    host_groups: 
-      - "Storage Devices"
 Netgear Storage:
   - name: BLT - Netgear Storage Template
     type: snmpv2
