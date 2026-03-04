@@ -328,6 +328,13 @@ mappings:
       manufacturer: "MELLANOX"
     priority: 1
 
+ # Network Devices - Mellanox
+  - device_type: "Mellanox Operator Switch"
+    conditions:
+      device_role: ["Operator Switch"]
+      manufacturer: "MELLANOX"
+    priority: 1
+
   # Network Devices - Mikrotik
   - device_type: "Mikrotik Firewall"
     conditions:

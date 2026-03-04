@@ -291,6 +291,11 @@ Mellanox Switch:
     type: snmpv2
     host_groups: 
       - "Network Devices"
+Mellanox Operator Switch:
+  - name: BLT - Mellanox SNMP
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
 Mikrotik Firewall:
   - name: unknown
     type: snmpv2
