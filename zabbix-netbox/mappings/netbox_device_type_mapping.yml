@@ -82,13 +82,6 @@ mappings:
       manufacturer: "LENOVO"
     priority: 1
 
-  # NetApp Storage devices
-  - device_type: "NetApp Storage"
-    conditions:
-      device_role: "Storage"
-      manufacturer: "NETAPP"
-    priority: 1
-
   # Netgear Storage devices
   - device_type: "Netgear Storage"
     conditions:
