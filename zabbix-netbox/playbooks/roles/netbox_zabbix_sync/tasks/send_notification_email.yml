@@ -6,6 +6,7 @@
     updated_devices_count: "{{ processing_results | default([]) | selectattr('status', 'equalto', 'güncellendi') | list | length | int }}"
     current_devices_count: "{{ processing_results | default([]) | selectattr('status', 'equalto', 'güncel') | list | length | int }}"
     total_devices_count: "{{ processing_results | default([]) | length | int }}"
+    skipped_izlenmeyecek_count: "{{ processing_results | default([]) | selectattr('status', 'equalto', 'atlandı') | list | length | int }}"
 
 - name: Generate email HTML content (Summary + Failures Only)
   set_fact:
@@ -34,6 +35,7 @@
           <p><strong>🔄 Güncellendi:</strong> {{ updated_devices_count }}</p>
           <p><strong>ℹ️ Güncel (Değişiklik Yok):</strong> {{ current_devices_count }}</p>
           <p><strong>❌ Başarısız (Eklenemedi):</strong> {{ failed_devices_count }}</p>
+          <p><strong>⏭️ Atlandı (İzlenmeyecek):</strong> {{ skipped_izlenmeyecek_count }}</p>
         </div>
         
         {%- set failed_list = processing_results | default([]) | selectattr('status', 'equalto', 'eklenemedi') | list -%}
@@ -67,6 +69,35 @@
           <p>Hiçbir hata oluşmadı. Tüm cihazlar başarıyla eklendi veya güncellendi.</p>
         </div>
         {%- endif -%}
+
+        {%- if report_izlenmeyecek | default(true) | bool -%}
+        {%- set skipped_list = processing_results | default([]) | selectattr('status', 'equalto', 'atlandı') | list -%}
+        {%- if skipped_list | length > 0 -%}
+        <div class="section-header"><h3>⏭️ İzlenmeyecek Olarak İşaretlenenler ({{ skipped_izlenmeyecek_count }})</h3></div>
+        <table>
+          <thead>
+            <tr>
+              <th>Sunucu / Platform Adı</th>
+              <th>Device Role</th>
+              <th>IP Adresi</th>
+              <th>İşlem Durumu</th>
+              <th>Açıklama</th>
+            </tr>
+          </thead>
+          <tbody>
+            {%- for result in skipped_list -%}
+            <tr>
+              <td>{{ result.hostname | default('N/A') }}</td>
+              <td>{{ result.device_role | default('N/A') }}</td>
+              <td>{{ result.ip | default('N/A') }}</td>
+              <td>ATLANDI</td>
+              <td>{{ result.reason | default('İzlenmeyecek olarak işaretli') }}</td>
+            </tr>
+            {%- endfor -%}
+          </tbody>
+        </table>
+        {%- endif -%}
+        {%- endif -%}
         
         <div class="info-box">
           <p><strong>📎 Detaylı Rapor:</strong> Tüm cihazların detaylı bilgileri ekteki <code>zabbix_entegrasyon_detay.csv</code> dosyasında yer almaktadır.</p>
@@ -91,6 +122,7 @@
       🔄 Güncellendi: {{ updated_devices_count }}
       ℹ️ Güncel (Değişiklik Yok): {{ current_devices_count }}
       ❌ Başarısız (Eklenemedi): {{ failed_devices_count }}
+      ⏭️ Atlandı (İzlenmeyecek): {{ skipped_izlenmeyecek_count }}
       
       {%- set failed_list = processing_results | default([]) | selectattr('status', 'equalto', 'eklenemedi') | list -%}
       {%- if failed_list | length > 0 %}
@@ -109,6 +141,20 @@
       ✅ TÜM CİHAZLAR BAŞARIYLA İŞLENDİ
       ------------------------------------------
       Hiçbir hata oluşmadı. Tüm cihazlar başarıyla eklendi veya güncellendi.
+      {%- endif %}
+
+      {%- if report_izlenmeyecek | default(true) | bool %}
+
+      ⏭️ İZLENMEYECEK OLARAK İŞARETLENENLER ({{ skipped_izlenmeyecek_count }}):
+      ------------------------------------------
+      {%- set skipped_list = processing_results | default([]) | selectattr('status', 'equalto', 'atlandı') | list -%}
+      {%- for result in skipped_list %}
+
+      Ad: {{ result.hostname | default('N/A') }}
+      Rol: {{ result.device_role | default('N/A') }}
+      IP: {{ result.ip | default('N/A') }}
+      Açıklama: {{ result.reason | default('İzlenmeyecek olarak işaretli') }}
+      {%- endfor -%}
       {%- endif %}
       
       

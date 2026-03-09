@@ -8,6 +8,37 @@
     zbx_scenario: "create"
   run_once: false
 
+- name: Check izlenmeli flag on device
+  set_fact:
+    device_izlenmeyecek: >-
+      {{
+        (netbox_device.custom_fields | default({})).izlenmeli is defined
+        and ((netbox_device.custom_fields.izlenmeli | string) | lower in ['hayir', 'hayır', 'no', '0'])
+      }}
+
+- name: Record device marked as not to be monitored
+  set_fact:
+    current_device_result:
+      hostname: "{{ netbox_device.name | default('N/A') }}"
+      device_role: >-
+        {% if netbox_device.role is defined and netbox_device.role %}
+        {{ netbox_device.role.name | default('N/A') }}
+        {% elif netbox_device.device_role is defined and netbox_device.device_role %}
+        {{ netbox_device.device_role.name | default('N/A') }}
+        {% else %}
+        N/A
+        {% endif %}
+      status: "atlandı"
+      reason: "İzlenmeyecek olarak işaretli"
+      ip: "{{ (netbox_device.primary_ip4.address.split('/') [0]) if (netbox_device.primary_ip4 is defined and netbox_device.primary_ip4 and netbox_device.primary_ip4.address is defined) else 'N/A' }}"
+  when:
+    - device_izlenmeyecek | default(false) | bool
+    - report_izlenmeyecek | default(true) | bool
+
+- name: Skip further processing for devices marked as not to be monitored
+  meta: end_task
+  when: device_izlenmeyecek | default(false) | bool
+
 - name: Create temporary Python script for device processing
   copy:
     content: |

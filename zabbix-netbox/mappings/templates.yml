@@ -346,3 +346,15 @@ Citrix LB:
     type: snmpv2
     host_groups: 
       - "Network Devices"
+
+# Platform-specific settings and template mappings
+platform_settings:
+  dc_limit: 0  # 0 = no limit, N = maximum platforms per DC
+
+platforms:
+  Nutanix:
+    - name: BLT - Nutanix Platform Template
+      type: api
+      host_groups:
+        - "Platforms"
+        - "Nutanix"

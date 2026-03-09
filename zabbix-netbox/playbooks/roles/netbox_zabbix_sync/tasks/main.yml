@@ -100,6 +100,65 @@
   run_once: true
   when: result_files.files is defined
 
+- name: Fetch all platforms from Netbox API (with Zabbix and izlenmeli filtering)
+  include_tasks: fetch_all_platforms.yml
+  when: sync_platforms | bool
+
+- name: Display platform count
+  debug:
+    msg: >-
+      Found {{ netbox_platforms_raw | default([]) | length }} platforms to process for Zabbix
+      (sync_platforms={{ sync_platforms | bool }})
+  when: sync_platforms | bool
+
+- name: Process each platform
+  include_tasks: process_platform.yml
+  loop: "{{ netbox_platforms_raw | default([]) }}"
+  loop_control:
+    loop_var: outer_platform_item
+    label: "{{ outer_platform_item.name | default(outer_platform_item.display | default('Unknown Platform')) }}"
+  vars:
+    netbox_platform: "{{ outer_platform_item }}"
+  when: sync_platforms | bool
+
+- name: Collect all platform results from temporary files
+  find:
+    paths: /tmp
+    patterns: "zabbix_platform_operation_result_*.json"
+  register: platform_result_files
+  delegate_to: localhost
+  run_once: true
+  when: sync_platforms | bool
+
+- name: Append platform results to processing_results
+  set_fact:
+    processing_results: >-
+      {%- set results = processing_results | default([]) | list -%}
+      {%- for file in platform_result_files.files | default([]) -%}
+      {%- set file_content = lookup('file', file.path) | from_json -%}
+      {%- if file_content -%}
+      {%- set _ = results.append(file_content) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ results }}
+  delegate_to: localhost
+  run_once: true
+  when:
+    - sync_platforms | bool
+    - platform_result_files.files is defined
+    - platform_result_files.files | length > 0
+
+- name: Clean up temporary platform result files
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ platform_result_files.files | default([]) }}"
+  delegate_to: localhost
+  run_once: true
+  when:
+    - sync_platforms | bool
+    - platform_result_files.files is defined
+
 - name: Send notification email for failed devices
   include_tasks: send_notification_email.yml
   when: processing_results is defined and processing_results | length > 0

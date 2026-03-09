@@ -17,6 +17,10 @@ location_filter: ""  # Optional: Filter devices by location name (e.g., "DC11", 
 # All devices matching any condition in the mapping file will be selected
 # If location_filter is provided, only devices from that location will be fetched
 
+# Platforms synchronization and reporting
+sync_platforms: false          # Enable NetBox platforms synchronization
+report_izlenmeyecek: true      # Include \"izlenmeyecek\" items in email/CSV report
+
 # Mapping file paths
 templates_map_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/templates.yml"
 datacenters_map_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/datacenters.yml"
