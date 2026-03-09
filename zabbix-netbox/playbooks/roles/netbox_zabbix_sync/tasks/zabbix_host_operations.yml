@@ -141,17 +141,7 @@
 - name: Resolve proxy group by location (DC_ID)
   vars:
     location_name: "{{ zbx_record.DC_ID | default('') }}"
-    _dc_number: >-
-      {%- set loc = location_name | upper -%}
-      {%- if loc -%}
-      {%- if (loc | regex_search('(DC|AZ|ICT|UZ)[0-9]+')) is not none -%}
-      {{ (loc | regex_search('(DC|AZ|ICT|UZ)[0-9]+')).group(0) }}
-      {%- else -%}
-      {{ '' }}
-      {%- endif -%}
-      {%- else -%}
-      {{ '' }}
-      {%- endif -%}
+    _dc_number: "{{ (location_name | default('') | upper | regex_search('(DC|AZ|ICT|UZ)[0-9]+')) | default('') }}"
   set_fact:
     zbx_location_name: "{{ location_name }}"
     zbx_dc_number: "{{ _dc_number }}"
@@ -165,13 +155,7 @@
     pg_upper: "{{ proxy_group_item | upper }}"
     # Extract location code from proxy group name (supports DC/AZ/ICT/UZ prefixes)
     # Example: 'DC11-Proxy Group' -> 'DC11', 'AZ11-PROXY' -> 'AZ11'
-    pg_dc_num: >-
-      {%- set base = pg_upper | regex_replace('[-\\s]*PROXY.*$', '') | trim -%}
-      {%- if (base | regex_search('(DC|AZ|ICT|UZ)[0-9]+')) is not none -%}
-      {{ (base | regex_search('(DC|AZ|ICT|UZ)[0-9]+')).group(0) }}
-      {%- else -%}
-      {{ '' }}
-      {%- endif -%}
+    pg_dc_num: "{{ (pg_upper | regex_replace('[-\\s]*PROXY.*$', '') | trim | regex_search('(DC|AZ|ICT|UZ)[0-9]+')) | default('') }}"
   set_fact:
     zbx_matched_proxy_group: "{{ proxy_group_item }}"
     zbx_proxy_group_id: "{{ zbx_proxy_group_map[proxy_group_item] }}"
