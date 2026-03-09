@@ -35,10 +35,6 @@
     - device_izlenmeyecek | default(false) | bool
     - report_izlenmeyecek | default(true) | bool
 
-- name: Skip further processing for devices marked as not to be monitored
-  meta: end_task
-  when: device_izlenmeyecek | default(false) | bool
-
 - name: Create temporary Python script for device processing
   copy:
     content: |

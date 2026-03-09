@@ -41,10 +41,6 @@
     - platform_izlenmeyecek | default(false) | bool
     - report_izlenmeyecek | default(true) | bool
 
-- name: Skip processing for platforms marked as not to be monitored
-  meta: end_task
-  when: platform_izlenmeyecek | default(false) | bool
-
 - name: Extract platform IP and other custom fields
   set_fact:
     platform_ip: "{{ platform_custom_fields.ip_addresses | default('') }}"
@@ -75,10 +71,6 @@
     - not platform_site_valid
     - report_izlenmeyecek | bool
 
-- name: Skip processing platform with invalid site
-  meta: end_task
-  when: not platform_site_valid
-
 - name: Ensure platform has IP address
   set_fact:
     current_platform_result:
@@ -87,10 +79,6 @@
       status: "eklenemedi"
       reason: "IP address is missing on platform"
       ip: "N/A"
-  when: platform_ip is undefined or platform_ip is none or platform_ip | string == ""
-
-- name: Skip processing platform with no IP
-  meta: end_task
   when: platform_ip is undefined or platform_ip is none or platform_ip | string == ""
 
 - name: Load platform mapping config
@@ -120,10 +108,6 @@
       status: "eklenemedi"
       reason: "No platform mapping found for manufacturer {{ platform_manufacturer_name }}"
       ip: "{{ platform_ip | default('N/A') }}"
-  when: platform_mapping_entry is not defined or platform_mapping_entry is none
-
-- name: Skip processing platform with no mapping entry
-  meta: end_task
   when: platform_mapping_entry is not defined or platform_mapping_entry is none
 
 - name: Resolve device_type and per-DC limit from mapping
@@ -159,12 +143,6 @@
     - platform_limit_per_dc | int > 0
     - platform_dc_usage.get(platform_device_type, {}).get(platform_site_code, 0) | int > platform_limit_per_dc | int
 
-- name: Skip processing platform when per-DC limit exceeded
-  meta: end_task
-  when:
-    - platform_limit_per_dc | int > 0
-    - platform_dc_usage.get(platform_device_type, {}).get(platform_site_code, 0) | int > platform_limit_per_dc | int
-
 - name: Select templates for platform from templates map
   set_fact:
     platform_templates: "{{ (templates_map[platform_device_type] | default([])) }}"
@@ -177,10 +155,6 @@
       status: "eklenemedi"
       reason: "No templates found for device_type {{ platform_device_type }}"
       ip: "{{ platform_ip | default('N/A') }}"
-  when: platform_templates | length == 0
-
-- name: Skip processing platform with no templates
-  meta: end_task
   when: platform_templates | length == 0
 
 - name: Build base Zabbix tags for platform
