@@ -25,6 +25,7 @@ report_izlenmeyecek: true      # Include \"izlenmeyecek\" items in email/CSV rep
 templates_map_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/templates.yml"
 datacenters_map_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/datacenters.yml"
 device_type_mapping_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/netbox_device_type_mapping.yml"
+platform_mapping_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/netbox_platform_mapping.yml"
 host_groups_config_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/host_groups_config.yml"
 tags_config_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/tags_config.yml"
 

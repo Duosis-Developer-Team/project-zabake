@@ -6,12 +6,44 @@
     platform_info: {}
   run_once: false
 
+- name: Initialize platform DC usage map
+  set_fact:
+    platform_dc_usage: "{{ platform_dc_usage | default({}) }}"
+  run_once: false
+
 - name: Build basic platform info
   set_fact:
     platform_id: "{{ netbox_platform.id }}"
     platform_name: "{{ netbox_platform.name | default(netbox_platform.display | default('Unknown Platform')) }}"
     platform_manufacturer_name: "{{ netbox_platform.manufacturer.name | default('Unknown') if netbox_platform.manufacturer is defined and netbox_platform.manufacturer else 'Unknown' }}"
     platform_custom_fields: "{{ netbox_platform.custom_fields | default({}) }}"
+
+- name: Check izlenmeli flag on platform
+  set_fact:
+    platform_izlenmeyecek: >-
+      {{
+        platform_custom_fields.izlenmeli is defined and
+        (
+          (platform_custom_fields.izlenmeli | string) | lower
+          in ['hayir', 'hayır', 'no', '0']
+        )
+      }}
+
+- name: Record platform marked as not to be monitored
+  set_fact:
+    current_platform_result:
+      hostname: "{{ platform_name }}"
+      device_role: "PLATFORM"
+      status: "atlandı"
+      reason: "İzlenmeyecek olarak işaretli"
+      ip: "{{ platform_custom_fields.ip_addresses | default('N/A') }}"
+  when:
+    - platform_izlenmeyecek | default(false) | bool
+    - report_izlenmeyecek | default(true) | bool
+
+- name: Skip processing for platforms marked as not to be monitored
+  meta: end_task
+  when: platform_izlenmeyecek | default(false) | bool
 
 - name: Extract platform IP and other custom fields
   set_fact:
@@ -61,21 +93,93 @@
   meta: end_task
   when: platform_ip is undefined or platform_ip is none or platform_ip | string == ""
 
-- name: Select templates for platform from templates map
+- name: Load platform mapping config
   set_fact:
-    platform_templates: "{{ (templates_map.platforms[platform_manufacturer_name] | default([])) }}"
+    platform_mapping: "{{ lookup('file', platform_mapping_path | default((playbook_dir | default(ansible_playbook_directory)) + '/../mappings/netbox_platform_mapping.yml')) | from_yaml }}"
+  run_once: true
+  delegate_to: localhost
 
-- name: Record skipped platform when no template mapping found
+- name: Find mapping for platform manufacturer
+  set_fact:
+    platform_mapping_entry: >-
+      {%- set mfg = platform_manufacturer_name | string -%}
+      {%- set entry = None -%}
+      {%- for item in (platform_mapping.mappings | default([])) -%}
+        {%- if item.manufacturer is defined and (item.manufacturer | string) | lower == mfg | lower -%}
+          {%- set entry = item -%}
+          {%- break -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ entry }}
+
+- name: Record skipped platform when no mapping entry found
   set_fact:
     current_platform_result:
       hostname: "{{ platform_name }}"
       device_role: "PLATFORM"
       status: "eklenemedi"
-      reason: "No platform template mapping found for manufacturer {{ platform_manufacturer_name }}"
+      reason: "No platform mapping found for manufacturer {{ platform_manufacturer_name }}"
+      ip: "{{ platform_ip | default('N/A') }}"
+  when: platform_mapping_entry is not defined or platform_mapping_entry is none
+
+- name: Skip processing platform with no mapping entry
+  meta: end_task
+  when: platform_mapping_entry is not defined or platform_mapping_entry is none
+
+- name: Resolve device_type and per-DC limit from mapping
+  set_fact:
+    platform_device_type: "{{ platform_mapping_entry.device_type }}"
+    platform_limit_per_dc: "{{ platform_mapping_entry.limit_per_dc | default(0) | int }}"
+
+- name: Apply per-DC limit for platform
+  vars:
+    _dc_code: "{{ platform_site_code }}"
+    _usage_for_type: "{{ platform_dc_usage.get(platform_device_type, {}) }}"
+    _current_count: "{{ _usage_for_type.get(_dc_code, 0) }}"
+  set_fact:
+    platform_dc_usage: >-
+      {%- set usage = platform_dc_usage | default({}) | combine({}, recursive=True) -%}
+      {%- set by_type = usage.get(platform_device_type, {}) -%}
+      {%- set new_count = (_current_count | int) + 1 -%}
+      {%- set _ = by_type.update({_dc_code: new_count}) -%}
+      {%- set _ = usage.update({platform_device_type: by_type}) -%}
+      {{ usage }}
+  when:
+    - platform_limit_per_dc | int == 0 or _current_count | int < platform_limit_per_dc | int
+
+- name: Record skipped platform when per-DC limit exceeded
+  set_fact:
+    current_platform_result:
+      hostname: "{{ platform_name }}"
+      device_role: "PLATFORM"
+      status: "eklenemedi"
+      reason: "DC limit exceeded for {{ platform_device_type }} in {{ platform_site_code }}"
+      ip: "{{ platform_ip | default('N/A') }}"
+  when:
+    - platform_limit_per_dc | int > 0
+    - platform_dc_usage.get(platform_device_type, {}).get(platform_site_code, 0) | int > platform_limit_per_dc | int
+
+- name: Skip processing platform when per-DC limit exceeded
+  meta: end_task
+  when:
+    - platform_limit_per_dc | int > 0
+    - platform_dc_usage.get(platform_device_type, {}).get(platform_site_code, 0) | int > platform_limit_per_dc | int
+
+- name: Select templates for platform from templates map
+  set_fact:
+    platform_templates: "{{ (templates_map[platform_device_type] | default([])) }}"
+
+- name: Record skipped platform when no templates found for device_type
+  set_fact:
+    current_platform_result:
+      hostname: "{{ platform_name }}"
+      device_role: "PLATFORM"
+      status: "eklenemedi"
+      reason: "No templates found for device_type {{ platform_device_type }}"
       ip: "{{ platform_ip | default('N/A') }}"
   when: platform_templates | length == 0
 
-- name: Skip processing platform with no template mapping
+- name: Skip processing platform with no templates
   meta: end_task
   when: platform_templates | length == 0
 
@@ -108,7 +212,7 @@
 - name: Create Zabbix record for platform
   set_fact:
     zbx_record:
-      DEVICE_TYPE: "{{ platform_manufacturer_name }}"
+      DEVICE_TYPE: "{{ platform_device_type }}"
       DEVICE_ROLE: "PLATFORM"
       HOST_IP: "{{ platform_ip }}"
       HOSTNAME: "{{ platform_name }}"

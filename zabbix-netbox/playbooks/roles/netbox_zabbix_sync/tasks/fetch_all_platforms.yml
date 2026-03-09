@@ -1,5 +1,5 @@
 ---
-- name: Create Python script to fetch all platforms with filtering and DC limit
+- name: Create Python script to fetch all platforms with filtering
   copy:
     content: |
       #!/usr/bin/env python3
@@ -14,7 +14,6 @@
       netbox_url = sys.argv[1].rstrip("/")
       netbox_token = sys.argv[2]
       verify_ssl = sys.argv[3].lower() == "true"
-      dc_limit = int(sys.argv[4]) if len(sys.argv) > 4 and sys.argv[4].strip() != "" else 0
       
       session = requests.Session()
       session.headers.update(
@@ -84,35 +83,6 @@
           pattern = r"(DC|AZ|ICT|UZ)\d+"
           return re.search(pattern, site, re.IGNORECASE) is not None
       
-      def apply_dc_limit(filtered_platforms, limit):
-          """
-          Apply per-DC limit.
-          Group by DC (custom_fields['DC']) and within each DC by manufacturer name.
-          Keep the first N platforms per DC (across all manufacturers) in original order.
-          """
-          if limit <= 0:
-              return filtered_platforms
-      
-          by_dc = defaultdict(list)
-          for p in filtered_platforms:
-              custom_fields = p.get("custom_fields") or {}
-              dc = custom_fields.get("DC") or ""
-              dc = dc or ""
-              by_dc[dc].append(p)
-      
-          limited = []
-          for dc, items in by_dc.items():
-              count = 0
-              for p in items:
-                  if count < limit:
-                      limited.append(p)
-                      count += 1
-          print(
-              f"DEBUG: Applied DC limit {limit}. Before: {len(filtered_platforms)}, After: {len(limited)}",
-              file=sys.stderr,
-          )
-          return limited
-      
       all_platforms = fetch_all_platforms()
       
       zabbix_platforms = []
@@ -136,12 +106,9 @@
       
           zabbix_platforms.append(platform)
       
-      # Apply per-DC limit
-      limited_platforms = apply_dc_limit(zabbix_platforms, dc_limit)
-      
       result = {
-          "platforms": limited_platforms,
-          "platforms_count": len(limited_platforms),
+          "platforms": zabbix_platforms,
+          "platforms_count": len(zabbix_platforms),
           "izlenmeyecek_platforms": izlenmeyecek_platforms,
           "izlenmeyecek_count": len(izlenmeyecek_platforms),
           "invalid_site_platforms": invalid_site_platforms,
@@ -154,17 +121,12 @@
   delegate_to: localhost
   run_once: true
 
-- name: Determine DC limit for platforms from templates map
-  set_fact:
-    platforms_dc_limit: "{{ (templates_map.platform_settings.dc_limit | default(0)) | int }}"
-
-- name: Fetch all platforms using Python script with filtering and DC limit
+- name: Fetch all platforms using Python script with filtering
   command: >
     python3 /tmp/fetch_all_netbox_platforms.py
     "{{ netbox_url }}"
     "{{ netbox_token }}"
     "{{ netbox_verify_ssl | string }}"
-    "{{ platforms_dc_limit | string }}"
   register: fetch_platforms_result
   changed_when: false
   delegate_to: localhost
@@ -190,6 +152,5 @@
       Total platforms selected for Zabbix: {{ netbox_platforms_count }}
       Platforms marked as 'izlenmeyecek': {{ (fetch_platforms_result.stdout | from_json).izlenmeyecek_count }}
       Platforms with invalid site pattern: {{ (fetch_platforms_result.stdout | from_json).invalid_site_count }}
-      DC limit applied: {{ platforms_dc_limit }}
       ============================================
 
