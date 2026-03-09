@@ -14,6 +14,7 @@
       netbox_url = sys.argv[1].rstrip("/")
       netbox_token = sys.argv[2]
       verify_ssl = sys.argv[3].lower() == "true"
+      izlenmeli_mode = sys.argv[4] if len(sys.argv) > 4 else "monitor"
       
       session = requests.Session()
       session.headers.update(
@@ -25,7 +26,15 @@
       
       def fetch_all_platforms():
           results = []
-          next_url = f"{netbox_url}/api/dcim/platforms/?limit=100"
+          # Apply izlenmeli filter at API level
+          base_url = f"{netbox_url}/api/dcim/platforms/?limit=100"
+          if izlenmeli_mode == "monitor":
+              base_url += "&cf_izlenmeli=Evet&cf_izlenmeli=null"
+          elif izlenmeli_mode == "skip":
+              base_url += "&cf_izlenmeli=Hayır"
+
+          next_url = base_url
+          print(f\"DEBUG: Using NetBox platforms API URL ({izlenmeli_mode}): {base_url}\", file=sys.stderr)
           while next_url:
               resp = session.get(next_url, verify=verify_ssl, timeout=30)
               resp.raise_for_status()
@@ -94,11 +103,6 @@
               # Skip if Zabbix flag is not enabled
               continue
       
-          izlenmeli_status = get_izlenmeli_status(platform)
-          if izlenmeli_status == "hayir":
-              izlenmeyecek_platforms.append(platform)
-              continue
-      
           site = get_site_code(platform)
           if site and not is_standard_site(site):
               invalid_site_platforms.append(platform)
@@ -113,6 +117,7 @@
           "izlenmeyecek_count": len(izlenmeyecek_platforms),
           "invalid_site_platforms": invalid_site_platforms,
           "invalid_site_count": len(invalid_site_platforms),
+          "mode": izlenmeli_mode,
       }
       
       print(json.dumps(result))
@@ -121,27 +126,48 @@
   delegate_to: localhost
   run_once: true
 
-- name: Fetch all platforms using Python script with filtering
+- name: Fetch monitor platforms using Python script with filtering
   command: >
     python3 /tmp/fetch_all_netbox_platforms.py
     "{{ netbox_url }}"
     "{{ netbox_token }}"
     "{{ netbox_verify_ssl | string }}"
-  register: fetch_platforms_result
+    "monitor"
+  register: fetch_platforms_monitor_result
   changed_when: false
   delegate_to: localhost
 
-- name: Display Python script debug output for platforms
+- name: Fetch skip platforms using Python script with filtering
+  command: >
+    python3 /tmp/fetch_all_netbox_platforms.py
+    "{{ netbox_url }}"
+    "{{ netbox_token }}"
+    "{{ netbox_verify_ssl | string }}"
+    "skip"
+  register: fetch_platforms_skip_result
+  changed_when: false
+  delegate_to: localhost
+
+- name: Display Python script debug output for monitor platforms
   debug:
-    msg: "{{ fetch_platforms_result.stderr_lines | default([]) | join('\n') }}"
-  when: fetch_platforms_result.stderr_lines is defined and fetch_platforms_result.stderr_lines | length > 0
+    msg: "{{ fetch_platforms_monitor_result.stderr_lines | default([]) | join('\n') }}"
+  when: fetch_platforms_monitor_result.stderr_lines is defined and fetch_platforms_monitor_result.stderr_lines | length > 0
+
+- name: Display Python script debug output for skip platforms
+  debug:
+    msg: "{{ fetch_platforms_skip_result.stderr_lines | default([]) | join('\n') }}"
+  when: fetch_platforms_skip_result.stderr_lines is defined and fetch_platforms_skip_result.stderr_lines | length > 0
 
 - name: Parse fetched platforms
   set_fact:
-    netbox_platforms_raw: "{{ (fetch_platforms_result.stdout | from_json).platforms }}"
-    netbox_platforms_count: "{{ (fetch_platforms_result.stdout | from_json).platforms_count }}"
-    netbox_platforms_izlenmeyecek_raw: "{{ (fetch_platforms_result.stdout | from_json).izlenmeyecek_platforms }}"
-    netbox_platforms_invalid_site_raw: "{{ (fetch_platforms_result.stdout | from_json).invalid_site_platforms }}"
+    netbox_platforms_monitor_raw: "{{ (fetch_platforms_monitor_result.stdout | from_json).platforms }}"
+    netbox_platforms_monitor_count: "{{ (fetch_platforms_monitor_result.stdout | from_json).platforms_count }}"
+    netbox_platforms_skip_raw: "{{ (fetch_platforms_skip_result.stdout | from_json).platforms }}"
+    netbox_platforms_skip_count: "{{ (fetch_platforms_skip_result.stdout | from_json).platforms_count }}"
+    # Backwards compatibility for existing flow
+    netbox_platforms_raw: "{{ (fetch_platforms_monitor_result.stdout | from_json).platforms }}"
+    netbox_platforms_count: "{{ (fetch_platforms_monitor_result.stdout | from_json).platforms_count }}"
+    netbox_platforms_izlenmeyecek_raw: "{{ (fetch_platforms_skip_result.stdout | from_json).platforms }}"
 
 - name: Display platforms fetch results
   debug:
@@ -149,8 +175,7 @@
       ============================================
       NETBOX PLATFORMS FETCH RESULTS
       ============================================
-      Total platforms selected for Zabbix: {{ netbox_platforms_count }}
-      Platforms marked as 'izlenmeyecek': {{ (fetch_platforms_result.stdout | from_json).izlenmeyecek_count }}
-      Platforms with invalid site pattern: {{ (fetch_platforms_result.stdout | from_json).invalid_site_count }}
+      Monitor platforms (Evet/null) count: {{ netbox_platforms_monitor_count }}
+      Skip platforms (Hayır) count: {{ netbox_platforms_skip_count }}
       ============================================
 

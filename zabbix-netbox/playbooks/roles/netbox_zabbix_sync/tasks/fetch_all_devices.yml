@@ -15,6 +15,7 @@
       verify_ssl = sys.argv[3].lower() == 'true'
       mapping_file_path = sys.argv[4]
       location_filter = sys.argv[5] if len(sys.argv) > 5 else ''
+      izlenmeli_mode = sys.argv[6] if len(sys.argv) > 6 else 'monitor'
       
       # Load device type mapping from file
       with open(mapping_file_path, 'r') as f:
@@ -184,7 +185,7 @@
           return False
       
       all_devices = []
-      # Build API URL with location filter if location ID was resolved
+      # Build API URL with location and izlenmeli filters if provided
       # If multiple location IDs (parent + children), we'll need to fetch separately or use a different approach
       api_url = f"{netbox_url}/api/dcim/devices/?limit=1000&status=active"
       if location_ids_to_filter:
@@ -197,6 +198,16 @@
               # For multiple locations, we'll fetch all and filter in Python
               print(f"DEBUG: Multiple location IDs found ({len(location_ids_to_filter)}). Will fetch all devices and filter by location in Python.", file=sys.stderr)
               api_url = f"{netbox_url}/api/dcim/devices/?limit=1000&status=active"
+
+      # Apply izlenmeli filter at API level
+      if izlenmeli_mode == 'monitor':
+          # Devices to be monitored: izlenmeli = Evet or null (no choice set)
+          api_url += "&cf_izlenmeli=Evet&cf_izlenmeli=null"
+      elif izlenmeli_mode == 'skip':
+          # Devices explicitly marked as not to be monitored
+          api_url += "&cf_izlenmeli=Hayır"
+
+      print(f"DEBUG: Using NetBox API URL ({izlenmeli_mode}): {api_url}", file=sys.stderr)
       
       next_url = api_url
       
@@ -402,11 +413,12 @@
       filter_info = "mapping filters"
       if location_id_filter:
           filter_info += f" + location filter (ID: {location_id_filter}, name: {location_filter})"
-      print(f"DEBUG: Total devices after {filter_info}: {len(all_devices)}", file=sys.stderr)
+      print(f"DEBUG: Total devices after {filter_info} (mode={izlenmeli_mode}): {len(all_devices)}", file=sys.stderr)
       
       result = {
           'devices': all_devices,
-          'count': len(all_devices)
+          'count': len(all_devices),
+          'mode': izlenmeli_mode
       }
       
       print(json.dumps(result))
@@ -436,7 +448,7 @@
       {% endfor %}
       ============================================
 
-- name: Fetch all devices using Python script with mapping-based filtering
+- name: Fetch monitor devices using Python script with mapping-based filtering
   command: >
     python3 /tmp/fetch_all_netbox_devices.py
     "{{ netbox_url }}"
@@ -444,27 +456,51 @@
     "{{ netbox_verify_ssl | string }}"
     "/tmp/netbox_device_type_mapping.json"
     "{{ location_filter | default('') }}"
-  register: fetch_devices_result
+    "monitor"
+  register: fetch_devices_monitor_result
   changed_when: false
   delegate_to: localhost
 
-- name: Display Python script debug output
+- name: Fetch skip devices using Python script with mapping-based filtering
+  command: >
+    python3 /tmp/fetch_all_netbox_devices.py
+    "{{ netbox_url }}"
+    "{{ netbox_token }}"
+    "{{ netbox_verify_ssl | string }}"
+    "/tmp/netbox_device_type_mapping.json"
+    "{{ location_filter | default('') }}"
+    "skip"
+  register: fetch_devices_skip_result
+  changed_when: false
+  delegate_to: localhost
+
+- name: Display Python script debug output (monitor devices)
   debug:
-    msg: "{{ fetch_devices_result.stderr_lines | default([]) | join('\n') }}"
-  when: fetch_devices_result.stderr_lines is defined and fetch_devices_result.stderr_lines | length > 0
+    msg: "{{ fetch_devices_monitor_result.stderr_lines | default([]) | join('\n') }}"
+  when: fetch_devices_monitor_result.stderr_lines is defined and fetch_devices_monitor_result.stderr_lines | length > 0
 
-- name: Parse fetched devices
+- name: Display Python script debug output (skip devices)
+  debug:
+    msg: "{{ fetch_devices_skip_result.stderr_lines | default([]) | join('\n') }}"
+  when: fetch_devices_skip_result.stderr_lines is defined and fetch_devices_skip_result.stderr_lines | length > 0
+
+- name: Parse fetched monitor and skip devices
   set_fact:
-    netbox_devices_raw: "{{ (fetch_devices_result.stdout | from_json).devices }}"
-    netbox_devices_count: "{{ (fetch_devices_result.stdout | from_json).count }}"
+    netbox_devices_monitor_raw: "{{ (fetch_devices_monitor_result.stdout | from_json).devices }}"
+    netbox_devices_monitor_count: "{{ (fetch_devices_monitor_result.stdout | from_json).count }}"
+    netbox_devices_skip_raw: "{{ (fetch_devices_skip_result.stdout | from_json).devices }}"
+    netbox_devices_skip_count: "{{ (fetch_devices_skip_result.stdout | from_json).count }}"
+    # Backwards compatibility: main flow uses netbox_devices_raw/count for monitor set
+    netbox_devices_raw: "{{ (fetch_devices_monitor_result.stdout | from_json).devices }}"
+    netbox_devices_count: "{{ (fetch_devices_monitor_result.stdout | from_json).count }}"
 
-- name: Display fetch results
+- name: Display fetch results for monitor and skip devices
   debug:
     msg: |
       ============================================
       NETBOX API FETCH RESULTS
       ============================================
-      Total devices found after filters: {{ netbox_devices_count }}
-      Raw devices list length: {{ netbox_devices_raw | length }}
+      Monitor devices (Evet/null) count: {{ netbox_devices_monitor_count }}
+      Skip devices (Hayır) count: {{ netbox_devices_skip_count }}
       ============================================
 

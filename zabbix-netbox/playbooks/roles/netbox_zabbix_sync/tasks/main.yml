@@ -10,6 +10,7 @@
 
 - name: Fetch all hosts from Zabbix API (for mapping and update detection)
   include_tasks: fetch_all_zabbix_hosts.yml
+  when: not only_fetch | bool
 
 - name: Set filtered devices (mapping-based filters already applied in Python script)
   set_fact:
@@ -28,6 +29,31 @@
 - name: Initialize processing results list
   set_fact:
     processing_results: []
+
+- name: Summary of fetched devices from Netbox (monitor vs skip)
+  debug:
+    msg: |
+      ============================================
+      NETBOX DEVICES FETCH SUMMARY
+      ============================================
+      Monitor devices (Evet/null) count: {{ netbox_devices_monitor_count | default(netbox_devices_count | default(0)) }}
+      Skip devices (Hayır) count: {{ netbox_devices_skip_count | default(0) }}
+      ============================================
+
+- name: Summary of fetched platforms from Netbox (monitor vs skip)
+  debug:
+    msg: |
+      ============================================
+      NETBOX PLATFORMS FETCH SUMMARY
+      ============================================
+      Monitor platforms (Evet/null) count: {{ netbox_platforms_monitor_count | default(0) }}
+      Skip platforms (Hayır) count: {{ netbox_platforms_skip_count | default(0) }}
+      ============================================
+  when: sync_platforms | bool
+
+- name: End play early in only_fetch mode after fetching from Netbox
+  meta: end_play
+  when: only_fetch | bool
 
 - name: Display device count
   debug:
@@ -60,6 +86,25 @@
     label: "{{ outer_device_item.name | default('Unknown') }}"
   vars:
     netbox_device: "{{ outer_device_item }}"
+
+- name: Add skipped devices (izlenmeli=Hayır) to processing results
+  set_fact:
+    processing_results: >-
+      {%- set results = processing_results | default([]) | list -%}
+      {%- for device in netbox_devices_skip_raw | default([]) -%}
+      {%- set _ = results.append({
+        'hostname': device.name | default('N/A'),
+        'device_role': (device.role.name if device.role else 'N/A'),
+        'status': 'atlandı',
+        'reason': 'İzlenmeyecek (NetBox izlenmeli=Hayır filtresi)',
+        'ip': 'N/A'
+      }) -%}
+      {%- endfor -%}
+      {{ results }}
+  when:
+    - report_izlenmeyecek | bool
+    - netbox_devices_skip_raw is defined
+    - netbox_devices_skip_raw | length > 0
 
 - name: Collect all device results from temporary files
   find:
@@ -120,6 +165,26 @@
   vars:
     netbox_platform: "{{ outer_platform_item }}"
   when: sync_platforms | bool
+
+- name: Add skipped platforms (izlenmeli=Hayır) to processing results
+  set_fact:
+    processing_results: >-
+      {%- set results = processing_results | default([]) | list -%}
+      {%- for platform in netbox_platforms_skip_raw | default([]) -%}
+      {%- set _ = results.append({
+        'hostname': platform.name | default(platform.display | default('N/A')),
+        'device_role': 'PLATFORM',
+        'status': 'atlandı',
+        'reason': 'İzlenmeyecek (NetBox izlenmeli=Hayır filtresi)',
+        'ip': (platform.custom_fields.ip_addresses | default('N/A')) if platform.custom_fields is defined else 'N/A'
+      }) -%}
+      {%- endfor -%}
+      {{ results }}
+  when:
+    - sync_platforms | bool
+    - report_izlenmeyecek | bool
+    - netbox_platforms_skip_raw is defined
+    - netbox_platforms_skip_raw | length > 0
 
 - name: Collect all platform results from temporary files
   find:
