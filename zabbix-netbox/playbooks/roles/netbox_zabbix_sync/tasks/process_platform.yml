@@ -18,16 +18,40 @@
     platform_manufacturer_name: "{{ netbox_platform.manufacturer.name | default('Unknown') if netbox_platform.manufacturer is defined and netbox_platform.manufacturer else 'Unknown' }}"
     platform_custom_fields: "{{ netbox_platform.custom_fields | default({}) }}"
 
+- name: Extract izlenmeli raw value on platform
+  set_fact:
+    platform_izlenmeli_raw: >-
+      {% set cf = platform_custom_fields | default({}) %}
+      {% if cf.izlenmeli is defined %}
+      {{ cf.izlenmeli }}
+      {% elif cf.monitor_edilmeli_mi is defined %}
+      {{ cf.monitor_edilmeli_mi }}
+      {% else %}
+      {{ None }}
+      {% endif %}
+
 - name: Check izlenmeli flag on platform
   set_fact:
     platform_izlenmeyecek: >-
-      {{
-        platform_custom_fields.izlenmeli is defined and
-        (
-          (platform_custom_fields.izlenmeli | string) | lower
-          in ['hayir', 'hayır', 'no', '0']
-        )
-      }}
+      {% set val = platform_izlenmeli_raw %}
+      {% if val is none %}
+      False
+      {% else %}
+      {% if val is sequence and not (val is string) and (val | length) > 0 %}
+      {% set choice = val[0] %}
+      {% else %}
+      {% set choice = val %}
+      {% endif %}
+      {% set txt = (choice | string) | lower %}
+      {{ txt in ['hayir', 'hayır', 'no', '0', 'false'] }}
+      {% endif %}
+
+- name: Debug izlenmeli evaluation on platform
+  debug:
+    msg: >
+      Platform {{ platform_name }} - izlenmeli_raw={{ platform_izlenmeli_raw | default('UNSET') }},
+      platform_izlenmeyecek={{ platform_izlenmeyecek | default(false) }}
+  when: report_izlenmeyecek | default(true) | bool
 
 - name: Record platform marked as not to be monitored
   set_fact:

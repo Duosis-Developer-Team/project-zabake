@@ -8,13 +8,41 @@
     zbx_scenario: "create"
   run_once: false
 
+- name: Extract izlenmeli raw value on device
+  set_fact:
+    device_izlenmeli_raw: >-
+      {% set cf = netbox_device.custom_fields | default({}) %}
+      {% if cf.izlenmeli is defined %}
+      {{ cf.izlenmeli }}
+      {% elif cf.monitor_edilmeli_mi is defined %}
+      {{ cf.monitor_edilmeli_mi }}
+      {% else %}
+      {{ None }}
+      {% endif %}
+
 - name: Check izlenmeli flag on device
   set_fact:
     device_izlenmeyecek: >-
-      {{
-        (netbox_device.custom_fields | default({})).izlenmeli is defined
-        and ((netbox_device.custom_fields.izlenmeli | string) | lower in ['hayir', 'hayır', 'no', '0'])
-      }}
+      {% set val = device_izlenmeli_raw %}
+      {% if val is none %}
+      False
+      {% else %}
+      {# NetBox choice list: izlenmeli: ["Hayır"] veya ["Evet"] gibi gelebilir #}
+      {% if val is sequence and not (val is string) and (val | length) > 0 %}
+      {% set choice = val[0] %}
+      {% else %}
+      {% set choice = val %}
+      {% endif %}
+      {% set txt = (choice | string) | lower %}
+      {{ txt in ['hayir', 'hayır', 'no', '0', 'false'] }}
+      {% endif %}
+
+- name: Debug izlenmeli evaluation on device
+  debug:
+    msg: >
+      Device {{ netbox_device.name }} - izlenmeli_raw={{ device_izlenmeli_raw | default('UNSET') }},
+      device_izlenmeyecek={{ device_izlenmeyecek | default(false) }}
+  when: report_izlenmeyecek | default(true) | bool
 
 - name: Record device marked as not to be monitored
   set_fact:
