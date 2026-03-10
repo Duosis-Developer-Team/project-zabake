@@ -87,25 +87,6 @@
   vars:
     netbox_device: "{{ outer_device_item }}"
 
-- name: Add skipped devices (izlenmeli=Hayır) to processing results
-  set_fact:
-    processing_results: >-
-      {%- set results = processing_results | default([]) | list -%}
-      {%- for device in netbox_devices_skip_raw | default([]) -%}
-      {%- set _ = results.append({
-        'hostname': device.name | default('N/A'),
-        'device_role': (device.role.name if device.role else 'N/A'),
-        'status': 'atlandı',
-        'reason': 'İzlenmeyecek (NetBox izlenmeli=Hayır filtresi)',
-        'ip': 'N/A'
-      }) -%}
-      {%- endfor -%}
-      {{ results }}
-  when:
-    - report_izlenmeyecek | bool
-    - netbox_devices_skip_raw is defined
-    - netbox_devices_skip_raw | length > 0
-
 - name: Collect all device results from temporary files
   find:
     paths: /tmp
@@ -166,26 +147,6 @@
     netbox_platform: "{{ outer_platform_item }}"
   when: sync_platforms | bool
 
-- name: Add skipped platforms (izlenmeli=Hayır) to processing results
-  set_fact:
-    processing_results: >-
-      {%- set results = processing_results | default([]) | list -%}
-      {%- for platform in netbox_platforms_skip_raw | default([]) -%}
-      {%- set _ = results.append({
-        'hostname': platform.name | default(platform.display | default('N/A')),
-        'device_role': 'PLATFORM',
-        'status': 'atlandı',
-        'reason': 'İzlenmeyecek (NetBox izlenmeli=Hayır filtresi)',
-        'ip': (platform.custom_fields.ip_addresses | default('N/A')) if platform.custom_fields is defined else 'N/A'
-      }) -%}
-      {%- endfor -%}
-      {{ results }}
-  when:
-    - sync_platforms | bool
-    - report_izlenmeyecek | bool
-    - netbox_platforms_skip_raw is defined
-    - netbox_platforms_skip_raw | length > 0
-
 - name: Collect all platform results from temporary files
   find:
     paths: /tmp
@@ -223,6 +184,49 @@
   when:
     - sync_platforms | bool
     - platform_result_files.files is defined
+
+- name: Add skipped devices (izlenmeli=Hayır) to processing results
+  set_fact:
+    processing_results: "{{ (processing_results | default([])) + (skipped_devices_report_list | default([])) }}"
+  vars:
+    skipped_devices_report_list: >-
+      {%- set out = [] -%}
+      {%- for d in netbox_devices_skip_raw | default([]) -%}
+      {%- set _ = out.append({
+        'hostname': d.name | default('N/A'),
+        'device_role': (d.role.name | default('N/A')) if (d.role is defined and d.role) else 'N/A',
+        'status': 'atlandı',
+        'reason': 'İzlenmeyecek (NetBox izlenmeli=Hayır filtresi)',
+        'ip': 'N/A'
+      }) -%}
+      {%- endfor -%}
+      {{ out }}
+  when:
+    - report_izlenmeyecek | bool
+    - netbox_devices_skip_raw is defined
+    - (netbox_devices_skip_raw | default([]) | length) > 0
+
+- name: Add skipped platforms (izlenmeli=Hayır) to processing results
+  set_fact:
+    processing_results: "{{ (processing_results | default([])) + (skipped_platforms_report_list | default([])) }}"
+  vars:
+    skipped_platforms_report_list: >-
+      {%- set out = [] -%}
+      {%- for p in netbox_platforms_skip_raw | default([]) -%}
+      {%- set _ = out.append({
+        'hostname': p.name | default(p.display | default('N/A')),
+        'device_role': 'PLATFORM',
+        'status': 'atlandı',
+        'reason': 'İzlenmeyecek (NetBox izlenmeli=Hayır filtresi)',
+        'ip': (p.custom_fields.ip_addresses | default('N/A')) if (p.custom_fields is defined) else 'N/A'
+      }) -%}
+      {%- endfor -%}
+      {{ out }}
+  when:
+    - sync_platforms | bool
+    - report_izlenmeyecek | bool
+    - netbox_platforms_skip_raw is defined
+    - (netbox_platforms_skip_raw | default([]) | length) > 0
 
 - name: Send notification email for failed devices
   include_tasks: send_notification_email.yml
