@@ -317,7 +317,7 @@ Ruckus Management Switch:
     host_groups: 
       - "Network Devices"
 Sophos Firewall:
-  - name: BLT - FortiGate by HTTP
+  - name: BLT - Sophos XG FW 18 SNMPv2
     type: snmpv2
     host_groups: 
       - "Network Devices"
