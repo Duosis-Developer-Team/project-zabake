@@ -59,10 +59,14 @@ DELL Storage:
     host_groups: 
       - "Storage Devices"
 IBM Storage:  
-  - name: BLT - IBM Storage Template
-    type: snmpv2
+  - name: BLT - IBM Storage
+    type: API
     host_groups: 
       - "Storage Devices"
+    macros:
+      "{$STORAGE_IP}": "{HOST.IP}"
+      "{$IBM_PASS}": "2u4Mzf7RJC"
+      "{$IBM_USER}": "zabbix"
 Lenovo Storage:
   - name: BLT - Lenovo Thinksystem by HTTP
     type: snmpv2
