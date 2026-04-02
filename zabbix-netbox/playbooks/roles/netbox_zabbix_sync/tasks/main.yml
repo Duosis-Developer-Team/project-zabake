@@ -197,7 +197,11 @@
         'device_role': (d.role.name | default('N/A')) if (d.role is defined and d.role) else 'N/A',
         'status': 'atlandı',
         'reason': 'İzlenmeyecek (NetBox izlenmeli=Hayır filtresi)',
-        'ip': 'N/A'
+        'ip': 'N/A',
+        'location': (d.location.name | default(d.site.name | default('N/A'), true)) if (d.location is defined and d.location) else ((d.site.name | default('N/A', true)) if (d.site is defined and d.site) else 'N/A'),
+        'site': (d.site.name | default('N/A')) if (d.site is defined and d.site) else 'N/A',
+        'tenant': (d.tenant.name | default('N/A')) if (d.tenant is defined and d.tenant) else 'N/A',
+        'ownership': "{% if d.custom_fields is defined and d.custom_fields.Sahiplik is defined %}{% set s = d.custom_fields.Sahiplik %}{% if s is sequence and s is not string and (s | length) > 0 %}{{ s[0] | string | trim }}{% elif s | string | trim != '' %}{{ s | string | trim }}{% else %}N/A{% endif %}{% else %}N/A{% endif %}"
       }) -%}
       {%- endfor -%}
       {{ out }}
@@ -218,7 +222,11 @@
         'device_role': 'PLATFORM',
         'status': 'atlandı',
         'reason': 'İzlenmeyecek (NetBox izlenmeli=Hayır filtresi)',
-        'ip': (p.custom_fields.ip_addresses | default('N/A')) if (p.custom_fields is defined) else 'N/A'
+        'ip': (p.custom_fields.ip_addresses | default('N/A')) if (p.custom_fields is defined) else 'N/A',
+        'location': (p.custom_fields.DC | default(p.custom_fields.Site | default('N/A', true), true)) if (p.custom_fields is defined) else 'N/A',
+        'site': (p.custom_fields.Site | default('N/A', true)) if (p.custom_fields is defined) else 'N/A',
+        'tenant': 'N/A',
+        'ownership': 'N/A'
       }) -%}
       {%- endfor -%}
       {{ out }}

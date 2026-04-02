@@ -59,6 +59,14 @@
       status: "atlandı"
       reason: "İzlenmeyecek olarak işaretli"
       ip: "{{ (netbox_device.primary_ip4.address.split('/') [0]) if (netbox_device.primary_ip4 is defined and netbox_device.primary_ip4 and netbox_device.primary_ip4.address is defined) else 'N/A' }}"
+      location: >-
+        {% if netbox_device.location is defined and netbox_device.location and netbox_device.location.name is defined and netbox_device.location.name %}{{ netbox_device.location.name }}{% elif netbox_device.site is defined and netbox_device.site and netbox_device.site.name is defined %}{{ netbox_device.site.name }}{% else %}N/A{% endif %}
+      site: "{{ netbox_device.site.name | default('N/A', true) if (netbox_device.site is defined and netbox_device.site) else 'N/A' }}"
+      tenant: "{{ netbox_device.tenant.name | default('N/A', true) if (netbox_device.tenant is defined and netbox_device.tenant) else 'N/A' }}"
+      ownership: >-
+        {% set cf = netbox_device.custom_fields | default({}) %}
+        {% set s = cf.Sahiplik | default('') %}
+        {% if s is sequence and s is not string and (s | length) > 0 %}{{ s[0] | string | trim }}{% elif s %}{{ s | string | trim }}{% else %}N/A{% endif %}
   when:
     - device_izlenmeyecek | default(false) | bool
     - report_izlenmeyecek | default(true) | bool
@@ -332,6 +340,14 @@
           if site.get('name'):
               return site['name']
           return ''
+      
+      def normalize_netbox_choice_field(value):
+          """NetBox choice / custom field: list or scalar to plain string."""
+          if value is None:
+              return ''
+          if isinstance(value, list) and len(value) > 0:
+              return str(value[0]).strip()
+          return str(value).strip()
       
       def extract_host_groups_from_config(device, config, device_type, templates, netbox_url, netbox_token, verify_ssl):
           """
@@ -734,6 +750,15 @@
           role_obj = device.get('role') or device.get('device_role')
           device_role = role_obj.get('name', '') if role_obj and isinstance(role_obj, dict) else ''
           
+          tenant_obj = device.get('tenant') or {}
+          tenant_name = (tenant_obj.get('name', '') or '').strip() if isinstance(tenant_obj, dict) else ''
+          
+          site_obj = device.get('site') or {}
+          site_name = (site_obj.get('name', '') or '').strip() if isinstance(site_obj, dict) else ''
+          
+          custom_fields_report = device.get('custom_fields') or {}
+          ownership = normalize_netbox_choice_field(custom_fields_report.get('Sahiplik'))
+          
           result = {
               'device_type': device_type,
               'device_role': device_role,
@@ -742,7 +767,10 @@
               'tags': tags_dict,
               'loki_tags': loki_tags_list,
               'location': location_name,
-              'dc_id': location_name if location_name else (device.get('site') or {}).get('name', '')
+              'dc_id': location_name if location_name else (device.get('site') or {}).get('name', ''),
+              'tenant': tenant_name,
+              'site': site_name,
+              'ownership': ownership,
           }
           
           print(json.dumps(result))
@@ -855,12 +883,20 @@
       status: "eklenemedi"
       reason: "Device type bulunamadı"
       ip: "{{ device_info.primary_ip | default('N/A') }}"
+      location: "{{ device_info.location | default('N/A', true) }}"
+      site: "{{ device_info.site | default('N/A', true) }}"
+      tenant: "{{ device_info.tenant | default('N/A', true) }}"
+      ownership: "{{ device_info.ownership | default('N/A', true) }}"
     current_device_result:
       hostname: "{{ netbox_device.name | default('N/A') }}"
       device_role: "{{ device_info.device_role | default('N/A') }}"
       status: "eklenemedi"
       reason: "Device type bulunamadı"
       ip: "{{ device_info.primary_ip | default('N/A') }}"
+      location: "{{ device_info.location | default('N/A', true) }}"
+      site: "{{ device_info.site | default('N/A', true) }}"
+      tenant: "{{ device_info.tenant | default('N/A', true) }}"
+      ownership: "{{ device_info.ownership | default('N/A', true) }}"
   when: device_info.device_type is none or device_info.device_type == ""
   run_once: false
 
@@ -872,12 +908,20 @@
       status: "eklenemedi"
       reason: "IP adresi bulunamadı"
       ip: "N/A"
+      location: "{{ device_info.location | default('N/A', true) }}"
+      site: "{{ device_info.site | default('N/A', true) }}"
+      tenant: "{{ device_info.tenant | default('N/A', true) }}"
+      ownership: "{{ device_info.ownership | default('N/A', true) }}"
     current_device_result:
       hostname: "{{ netbox_device.name | default('N/A') }}"
       device_role: "{{ device_info.device_role | default('N/A') }}"
       status: "eklenemedi"
       reason: "IP adresi bulunamadı"
       ip: "N/A"
+      location: "{{ device_info.location | default('N/A', true) }}"
+      site: "{{ device_info.site | default('N/A', true) }}"
+      tenant: "{{ device_info.tenant | default('N/A', true) }}"
+      ownership: "{{ device_info.ownership | default('N/A', true) }}"
   when: 
     - device_info.device_type is not none
     - device_info.device_type != ""
@@ -910,6 +954,10 @@
       HOST_GROUPS: "{{ device_info.host_groups }}"
       TEMPLATE_TYPE: ""
       MACROS: "{{ device_info.tags | to_json }}"
+      REPORT_LOCATION: "{{ device_info.location | default('') }}"
+      REPORT_SITE: "{{ device_info.site | default('') }}"
+      REPORT_TENANT: "{{ device_info.tenant | default('') }}"
+      REPORT_OWNERSHIP: "{{ device_info.ownership | default('') }}"
   when: 
     - device_info.device_type is not none
     - device_info.device_type != ""

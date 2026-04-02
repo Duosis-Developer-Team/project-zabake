@@ -375,3 +375,8 @@ def extract_tags(device):
 4. **Idempotency**: Playbook tekrar çalıştırıldığında güvenli olmalı
 5. **Backward Compatibility**: Mevcut çalışan özellikler korunmalı
 
+## Update: integration report and multi-template validation (netbox_zabbix_sync)
+
+- **Report / CSV / email**: `processing_results` rows include `location`, `site`, `tenant`, and `ownership` (from NetBox `get_location_name`, `site`, `tenant`, and `custom_fields.Sahiplik`). Implemented in `process_device.yml` (processor JSON + `zbx_record` `REPORT_*` keys), `zabbix_host_operations.yml` (`device_result`), `main.yml` (skipped devices/platforms), `process_platform.yml`, `send_notification_email.yml`, and `send_notification_email_smtp.py`.
+- **templates.yml**: Expected template names are validated against Zabbix `template.get` results; missing names are reported explicitly. Template rows are deduplicated by `templateid` before `host.create`. See `mappings/README_CONFIG.md` (Multiple Zabbix templates).
+

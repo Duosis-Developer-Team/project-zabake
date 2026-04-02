@@ -61,6 +61,10 @@
       status: "atlandı"
       reason: "İzlenmeyecek olarak işaretli"
       ip: "{{ platform_custom_fields.ip_addresses | default('N/A') }}"
+      location: "{{ platform_custom_fields.DC | default(platform_custom_fields.Site | default('N/A', true), true) }}"
+      site: "{{ platform_custom_fields.Site | default('N/A', true) }}"
+      tenant: "N/A"
+      ownership: "N/A"
   when:
     - platform_izlenmeyecek | default(false) | bool
     - report_izlenmeyecek | default(true) | bool
@@ -91,6 +95,10 @@
       status: "eklenemedi"
       reason: "Standart dışı site kodu: {{ platform_site_code | default('N/A') }}"
       ip: "{{ platform_ip | default('N/A') }}"
+      location: "{{ platform_site_code | default('N/A', true) }}"
+      site: "{{ platform_site_code | default('N/A', true) }}"
+      tenant: "N/A"
+      ownership: "N/A"
   when:
     - not platform_site_valid
     - report_izlenmeyecek | bool
@@ -103,6 +111,10 @@
       status: "eklenemedi"
       reason: "IP address is missing on platform"
       ip: "N/A"
+      location: "{{ platform_site_code | default(platform_custom_fields.DC | default('N/A', true), true) }}"
+      site: "{{ platform_site_code | default(platform_custom_fields.Site | default('N/A', true), true) }}"
+      tenant: "N/A"
+      ownership: "N/A"
   when: platform_ip is undefined or platform_ip is none or platform_ip | string == ""
 
 - name: Load platform mapping config
@@ -132,6 +144,10 @@
       status: "eklenemedi"
       reason: "No platform mapping found for manufacturer {{ platform_manufacturer_name }}"
       ip: "{{ platform_ip | default('N/A') }}"
+      location: "{{ platform_dc | default(platform_site_code | default('N/A', true), true) }}"
+      site: "{{ platform_site_code | default('N/A', true) }}"
+      tenant: "N/A"
+      ownership: "N/A"
   when: platform_mapping_entry is not defined or platform_mapping_entry is none
 
 - name: Resolve device_type and per-DC limit from mapping
@@ -163,6 +179,10 @@
       status: "eklenemedi"
       reason: "DC limit exceeded for {{ platform_device_type }} in {{ platform_site_code }}"
       ip: "{{ platform_ip | default('N/A') }}"
+      location: "{{ platform_dc | default(platform_site_code | default('N/A', true), true) }}"
+      site: "{{ platform_site_code | default('N/A', true) }}"
+      tenant: "N/A"
+      ownership: "N/A"
   when:
     - platform_limit_per_dc | int > 0
     - platform_dc_usage.get(platform_device_type, {}).get(platform_site_code, 0) | int > platform_limit_per_dc | int
@@ -179,6 +199,10 @@
       status: "eklenemedi"
       reason: "No templates found for device_type {{ platform_device_type }}"
       ip: "{{ platform_ip | default('N/A') }}"
+      location: "{{ platform_dc | default(platform_site_code | default('N/A', true), true) }}"
+      site: "{{ platform_site_code | default('N/A', true) }}"
+      tenant: "N/A"
+      ownership: "N/A"
   when: platform_templates | length == 0
 
 - name: Build base Zabbix tags for platform
@@ -218,6 +242,10 @@
       HOST_GROUPS: "{{ platform_host_groups }}"
       TEMPLATE_TYPE: ""
       MACROS: "{{ platform_tags | to_json }}"
+      REPORT_LOCATION: "{{ platform_dc | default(platform_site_code, true) | default('', true) }}"
+      REPORT_SITE: "{{ platform_site_code | default('', true) }}"
+      REPORT_TENANT: ""
+      REPORT_OWNERSHIP: ""
 
 - name: Ensure Zabbix auth token is available
   when: zabbix_auth is not defined

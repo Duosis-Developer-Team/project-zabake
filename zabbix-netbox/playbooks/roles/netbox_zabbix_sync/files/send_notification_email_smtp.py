@@ -29,6 +29,10 @@ def build_csv_attachment(processing_results) -> MIMEApplication:
             "Sıra No",
             "Sunucu Adı",
             "Device Role",
+            "Lokasyon",
+            "Site",
+            "Tenant",
+            "Sahiplik",
             "IP Adresi",
             "İşlem Durumu",
             "Açıklama/Hata Sebebi",
@@ -54,6 +58,10 @@ def build_csv_attachment(processing_results) -> MIMEApplication:
     for idx, result in enumerate(sorted_results, 1):
         hostname = result.get("hostname", "N/A")
         device_role = result.get("device_role", "N/A")
+        location = result.get("location", "N/A")
+        site = result.get("site", "N/A")
+        tenant = result.get("tenant", "N/A")
+        ownership = result.get("ownership", "N/A")
         ip_addr = result.get("ip", "N/A")
         status = str(result.get("status", "N/A")).upper()
         reason = result.get("reason", "-")
@@ -61,7 +69,19 @@ def build_csv_attachment(processing_results) -> MIMEApplication:
         status_tr = status_tr_map.get(status, status)
 
         writer.writerow(
-            [idx, hostname, device_role, ip_addr, status_tr, reason, timestamp]
+            [
+                idx,
+                hostname,
+                device_role,
+                location,
+                site,
+                tenant,
+                ownership,
+                ip_addr,
+                status_tr,
+                reason,
+                timestamp,
+            ]
         )
 
     csv_bytes = csv_buffer.getvalue().encode("utf-8-sig")
