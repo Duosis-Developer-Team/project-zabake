@@ -201,7 +201,7 @@
         'location': (d.location.name | default(d.site.name | default('N/A'), true)) if (d.location is defined and d.location) else ((d.site.name | default('N/A', true)) if (d.site is defined and d.site) else 'N/A'),
         'site': (d.site.name | default('N/A')) if (d.site is defined and d.site) else 'N/A',
         'tenant': (d.tenant.name | default('N/A')) if (d.tenant is defined and d.tenant) else 'N/A',
-        'ownership': "{% if d.custom_fields is defined and d.custom_fields.Sahiplik is defined %}{% set s = d.custom_fields.Sahiplik %}{% if s is sequence and s is not string and (s | length) > 0 %}{{ s[0] | string | trim }}{% elif s | string | trim != '' %}{{ s | string | trim }}{% else %}N/A{% endif %}{% else %}N/A{% endif %}"
+        'ownership': (d.custom_fields.Sahiplik[0] | string | trim) if (d.custom_fields is defined and d.custom_fields.Sahiplik is defined and d.custom_fields.Sahiplik is sequence and d.custom_fields.Sahiplik is not string and (d.custom_fields.Sahiplik | length) > 0) else (((d.custom_fields.Sahiplik | default('', true)) | string | trim) if (d.custom_fields is defined and d.custom_fields.Sahiplik is defined and (d.custom_fields.Sahiplik | string | trim | length) > 0) else 'N/A')
       }) -%}
       {%- endfor -%}
       {{ out }}

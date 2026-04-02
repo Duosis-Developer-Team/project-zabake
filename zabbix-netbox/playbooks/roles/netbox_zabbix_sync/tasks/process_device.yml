@@ -949,7 +949,7 @@
       DEVICE_TYPE: "{{ device_info.device_type }}"
       DEVICE_ROLE: "{{ device_info.device_role | default('N/A') }}"
       HOST_IP: "{{ device_info.primary_ip }}"
-      HOSTNAME: "{{ netbox_device.name }}"
+      HOSTNAME: "{{ netbox_device.name | default('') | replace('\t', ' ') | regex_replace('\\s+', ' ') | trim }}"
       DC_ID: "{{ device_info.location }}"
       HOST_GROUPS: "{{ device_info.host_groups }}"
       TEMPLATE_TYPE: ""

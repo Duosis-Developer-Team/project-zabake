@@ -43,6 +43,17 @@
   set_fact:
     zbx_templates: "{{ zbx_tpl_map.get(zbx_record.DEVICE_TYPE, []) }}"
 
+- name: Drop template rows with unconfigured placeholder name (templates.yml unknown until replaced)
+  set_fact:
+    zbx_templates: >-
+      {{
+        zbx_templates | default([])
+        | selectattr('name', 'defined')
+        | rejectattr('name', 'match', '^[Uu]nknown$')
+        | rejectattr('name', 'match', '^\\s*$')
+        | list
+      }}
+
 - name: Extract template names and types
   set_fact:
     zbx_template_names: "{{ zbx_templates | map(attribute='name') | list }}"
@@ -510,7 +521,7 @@
       hostname: "{{ zbx_record.HOSTNAME }}"
       device_role: "{{ zbx_record.DEVICE_ROLE | default('N/A') }}"
       status: "eklenemedi"
-      reason: "{{ zbx_create_resp.json.error.message | default('Bilinmeyen hata') }}"
+      reason: "{{ zbx_create_resp.json.error.message | default('Bilinmeyen hata') }}{{ (' — ' ~ (zbx_create_resp.json.error.data | string)) if (zbx_create_resp.json.error.data is defined and (zbx_create_resp.json.error.data | string | length) > 0) else '' }}"
       error_data: "{{ zbx_create_resp.json.error.data | default('') }}"
       error_code: "{{ zbx_create_resp.json.error.code | default('') }}"
       ip: "{{ zbx_record.HOST_IP }}"
