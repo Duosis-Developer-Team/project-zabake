@@ -417,7 +417,7 @@ Common paths you can use:
 - Top-level keys must match `device_type` values from `netbox_device_type_mapping.yml`.
 - Under each key, use a YAML list: one list item per template. Each item needs at least `name` (must match the Zabbix template name exactly) and `type` (must exist in `template_types.yml`, e.g. `snmpv2`).
 - The sync resolves every configured name via the Zabbix API before `host.create`. If any name is missing in Zabbix, validation fails with a message listing **Zabbix'te bulunamayan şablonlar**.
-- Duplicate template IDs returned by the API are deduplicated before host create.
+- Duplicate template IDs returned by the API are deduplicated before host create (requires Ansible `unique` filter with `attribute`; use Ansible **2.12+**).
 - If one template **links** another inside Zabbix, attaching both explicitly to the same host can trigger API errors on some versions. Prefer linking only the parent template, or adjust linked templates in Zabbix so they are not duplicated on the host.
 
 ## Support
