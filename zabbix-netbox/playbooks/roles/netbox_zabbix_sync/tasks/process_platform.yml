@@ -126,15 +126,12 @@
 - name: Find mapping for platform manufacturer
   set_fact:
     platform_mapping_entry: >-
-      {%- set mfg = platform_manufacturer_name | string -%}
-      {%- set entry = None -%}
-      {%- for item in (platform_mapping.mappings | default([])) -%}
-        {%- if item.manufacturer is defined and (item.manufacturer | string) | lower == mfg | lower -%}
-          {%- set entry = item -%}
-          {%- break -%}
-        {%- endif -%}
-      {%- endfor -%}
-      {{ entry }}
+      {{
+        (platform_mapping.mappings | default([])
+         | selectattr('manufacturer', 'defined')
+         | selectattr('manufacturer', 'match', '(?i)^' + (platform_manufacturer_name | string | regex_escape) + '$')
+         | list | first) | default(none, true)
+      }}
 
 - name: Record skipped platform when no mapping entry found
   set_fact:
