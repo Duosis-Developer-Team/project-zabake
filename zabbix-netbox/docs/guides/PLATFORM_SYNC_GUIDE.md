@@ -15,6 +15,7 @@ NetBox /api/dcim/platforms/
   fetch_all_platforms.yml
   ─ filters by cf_izlenmeli
   ─ filters by custom_fields.Zabbix (truthy)
+  ─ optional: location_filter substring match on custom_fields.Site (same playbook var as devices)
           │
           ▼
   process_platform.yml
@@ -64,6 +65,12 @@ ansible-playbook playbooks/netbox_zabbix_sync.yaml \
 ```
 
 When running in AWX/Tower, set `sync_platforms: true` in the **Extra Variables** field of the Job Template.
+
+---
+
+## Location filter for platforms
+
+The playbook variable `location_filter` (e.g. `DC13`) applies to **platform sync** as well as device sync. When set and non-empty, only platforms whose NetBox custom field **`Site`** contains the filter string (case-insensitive substring) are kept after the Zabbix flag filter. Examples: `DC13` matches `DC13-G12` and `DC13-G1-AHV-CLS`; it does not match `AZ11-CLS` or `DC14`.
 
 ---
 

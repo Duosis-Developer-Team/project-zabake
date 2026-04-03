@@ -354,7 +354,23 @@ Citrix LB:
       - "Network Devices"
 
 
-# Platform sync device_type mapping: netbox_platform_mapping.yml -> device_type: Nutanix
+# Platform sync device_type keys: netbox_platform_mapping.yml device_type must match these keys
+Nutanix:
+  - name: BLT - Nutanix
+    type: snmpv2
+    host_groups:
+      - "Storage Devices"
+
+VMware vSphere:
+  - name: BLT - VMware vSphere by HTTP
+    type: API
+    host_groups:
+      - "Virtual Infrastructure"
+    macros:
+      "{$VMWARE.URL}": "https://{HOST.IP}/sdk"
+      "{$VMWARE.USERNAME}": "zabbix"
+      "{$VMWARE.PASSWORD}": "changeme"
+
 Zerto:
   - name: BLT - Zerto by HTTP
     type: API

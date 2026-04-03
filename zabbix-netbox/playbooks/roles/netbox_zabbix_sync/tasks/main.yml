@@ -63,17 +63,6 @@
       Skip devices (Hayır) count: {{ netbox_devices_skip_count | default(0) }}
       ============================================
 
-- name: Summary of fetched platforms from Netbox (monitor vs skip)
-  debug:
-    msg: |
-      ============================================
-      NETBOX PLATFORMS FETCH SUMMARY
-      ============================================
-      Monitor platforms (Evet/null) count: {{ netbox_platforms_monitor_count | default(0) }}
-      Skip platforms (Hayır) count: {{ netbox_platforms_skip_count | default(0) }}
-      ============================================
-  when: sync_platforms | bool
-
 - name: End play early in only_fetch mode after fetching from Netbox
   meta: end_play
   when: only_fetch | bool
@@ -167,6 +156,17 @@
 
 - name: Fetch all platforms from Netbox API (with Zabbix and izlenmeli filtering)
   include_tasks: fetch_all_platforms.yml
+  when: sync_platforms | bool
+
+- name: Summary of fetched platforms from Netbox (monitor vs skip)
+  debug:
+    msg: |
+      ============================================
+      NETBOX PLATFORMS FETCH SUMMARY
+      ============================================
+      Monitor platforms (Evet/null) count: {{ netbox_platforms_monitor_count | default(0) }}
+      Skip platforms (Hayır) count: {{ netbox_platforms_skip_count | default(0) }}
+      ============================================
   when: sync_platforms | bool
 
 - name: Display platform count

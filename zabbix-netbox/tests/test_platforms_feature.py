@@ -132,3 +132,41 @@ def test_izlenmeli_filtering_logic():
     assert get_status(build_mock_platform(izlenmeli="hayır")) == "hayir"
     assert get_status(build_mock_platform(izlenmeli="no")) == "hayir"
 
+
+def filter_platforms_by_site_substring(platforms, location_filter: str):
+    """Mirror fetch_all_platforms.yml post-fetch location_filter on custom_fields['Site']."""
+    needle = location_filter.strip().lower()
+    if not needle:
+        return list(platforms)
+
+    def matches(p):
+        custom_fields = p.get("custom_fields") or {}
+        site_val = custom_fields.get("Site")
+        site_str = "" if site_val is None else str(site_val).strip().lower()
+        return needle in site_str
+
+    return [p for p in platforms if matches(p)]
+
+
+def test_platform_location_filter_site_substring():
+    dc13_g12 = build_mock_platform(platform_id=1, site="DC13-G12", dc="Equinix IL2")
+    az11 = build_mock_platform(platform_id=2, site="AZ11-CLS", dc="Azin Telecom")
+    dc14 = build_mock_platform(platform_id=3, site="DC14", dc="ANKARA KKB")
+    platforms = [dc13_g12, az11, dc14]
+
+    assert filter_platforms_by_site_substring(platforms, "") == platforms
+    assert [p["id"] for p in filter_platforms_by_site_substring(platforms, "DC13")] == [1]
+    assert [p["id"] for p in filter_platforms_by_site_substring(platforms, "dc13")] == [1]
+    assert [p["id"] for p in filter_platforms_by_site_substring(platforms, "AZ11")] == [2]
+
+
+def test_platform_mapping_yaml_has_mappings_key():
+    repo_root = Path(__file__).resolve().parent.parent
+    path = repo_root / "mappings" / "netbox_platform_mapping.yml"
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert "mappings" in data
+    assert isinstance(data["mappings"], list)
+    manufacturers = {m["manufacturer"] for m in data["mappings"] if isinstance(m, dict)}
+    assert "Nutanix" in manufacturers
+    assert "VMware" in manufacturers
+

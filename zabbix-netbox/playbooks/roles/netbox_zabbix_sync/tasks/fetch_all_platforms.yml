@@ -7,7 +7,6 @@
       import sys
       import requests
       from urllib3.exceptions import InsecureRequestWarning
-      from collections import defaultdict
       
       requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
       
@@ -15,6 +14,7 @@
       netbox_token = sys.argv[2]
       verify_ssl = sys.argv[3].lower() == "true"
       izlenmeli_mode = sys.argv[4] if len(sys.argv) > 4 else "monitor"
+      location_filter = (sys.argv[5] if len(sys.argv) > 5 else "").strip()
       
       session = requests.Session()
       session.headers.update(
@@ -110,6 +110,22 @@
       
           zabbix_platforms.append(platform)
       
+      if location_filter:
+          needle = location_filter.lower()
+      
+          def matches_location_filter(platform):
+              custom_fields = platform.get("custom_fields") or {}
+              site_val = custom_fields.get("Site")
+              site_str = "" if site_val is None else str(site_val).strip().lower()
+              return needle in site_str
+      
+          before_loc = len(zabbix_platforms)
+          zabbix_platforms = [p for p in zabbix_platforms if matches_location_filter(p)]
+          print(
+              f"DEBUG: location_filter='{location_filter}': {before_loc} -> {len(zabbix_platforms)} platforms",
+              file=sys.stderr,
+          )
+      
       result = {
           "platforms": zabbix_platforms,
           "platforms_count": len(zabbix_platforms),
@@ -133,6 +149,7 @@
     "{{ netbox_token }}"
     "{{ netbox_verify_ssl | string }}"
     "monitor"
+    "{{ location_filter | default('') | string }}"
   register: fetch_platforms_monitor_result
   changed_when: false
   delegate_to: localhost
@@ -144,6 +161,7 @@
     "{{ netbox_token }}"
     "{{ netbox_verify_ssl | string }}"
     "skip"
+    "{{ location_filter | default('') | string }}"
   register: fetch_platforms_skip_result
   changed_when: false
   delegate_to: localhost

@@ -5,19 +5,27 @@
 # - device_type:  Key in templates.yml that defines Zabbix templates
 # - limit_per_dc: Maximum number of platforms per DC for this device_type (0 or missing = no limit)
 
- mappings:
-#   - manufacturer: "Nutanix"
-#     device_type: "Nutanix"
-#     limit_per_dc: 1
+mappings:
+  # - manufacturer: "Nutanix"
+  #   device_type: "Nutanix"
+  #   limit_per_dc: 1
 
-   - manufacturer: "Zerto"
-     device_type: "Zerto"
-     limit_per_dc: 0
+  - manufacturer: "Acropolis"
+    device_type: "Nutanix"
+    limit_per_dc: 1
 
-   - manufacturer: "NetBackup"
-     device_type: "NetBackup"
-     limit_per_dc: 0
+  - manufacturer: "Zerto"
+    device_type: "Zerto"
+    limit_per_dc: 0
 
-   - manufacturer: "Veeam"
-     device_type: "Veeam"
-     limit_per_dc: 0
+  - manufacturer: "NetBackup"
+    device_type: "NetBackup"
+    limit_per_dc: 0
+
+  - manufacturer: "Veeam"
+    device_type: "Veeam"
+    limit_per_dc: 0
+
+  - manufacturer: "VMware"
+    device_type: "VMware vSphere"
+    limit_per_dc: 0
