@@ -102,7 +102,7 @@ QNAP Storage:
     host_groups: 
       - "Storage Devices"
 Synology Storage:
-  - name: BLT - Synology Storage Template
+  - name: BLT - Synology
     type: snmpv2
     host_groups: 
       - "Storage Devices"
@@ -302,7 +302,7 @@ Raritan Switch:
     host_groups: 
       - "Network Devices"
 Ruckus Management Switch:
-  - name: unknown
+  - name: BLT - SNMP Ruckus Zonedirector
     type: snmpv2
     host_groups: 
       - "Network Devices"
@@ -336,3 +336,16 @@ Citrix LB:
     type: snmpv2
     host_groups: 
       - "Network Devices"
+
+NetBackup:
+  - name: BLT - Nutanix
+    type: snmpv2
+    host_groups: 
+      - "Storage Devices"
+
+# Platform sync device_type mapping: netbox_platform_mapping.yml -> device_type: Nutanix
+Nutanix:
+  - name: BLT - Nutanix
+    type: snmpv2
+    host_groups:
+      - "Storage Devices"

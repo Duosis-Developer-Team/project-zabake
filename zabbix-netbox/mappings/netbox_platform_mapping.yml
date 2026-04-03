@@ -10,3 +10,6 @@
 #     device_type: "Nutanix"
 #     limit_per_dc: 1
 
+   - manufacturer: "Nutanix"
+     device_type: "Nutanix"
+     limit_per_dc: 1
