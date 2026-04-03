@@ -20,7 +20,8 @@ location_filter: ""  # Optional: Filter devices by location name (e.g., "DC11", 
 # Execution mode
 only_fetch: false  # When true, only fetch and log NetBox devices/platforms; skip Zabbix operations and email reporting
 
-# Platforms synchronization and reporting
+# Device and platform synchronization
+sync_devices: true             # When false, skip NetBox device fetch (unless only_fetch), device processing, and device result aggregation
 sync_platforms: false          # Enable NetBox platforms synchronization
 report_izlenmeyecek: true      # Include \"izlenmeyecek\" items in email/CSV report
 

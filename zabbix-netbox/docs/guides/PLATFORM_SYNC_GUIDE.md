@@ -42,7 +42,7 @@ NetBox /api/dcim/platforms/
 | `mappings/netbox_platform_mapping.yml` | Maps NetBox platform manufacturer → Zabbix device_type and per-DC limit |
 | `mappings/templates.yml` | Maps device_type → list of Zabbix templates to assign |
 | `mappings/template_types.yml` | Maps template type string (e.g. `snmpv2`) → Zabbix interface definition |
-| `playbooks/roles/netbox_zabbix_sync/defaults/main.yml` | Contains `sync_platforms: false` default |
+| `playbooks/roles/netbox_zabbix_sync/defaults/main.yml` | Contains `sync_devices: true`, `sync_platforms: false` defaults |
 | `playbooks/roles/netbox_zabbix_sync/tasks/fetch_all_platforms.yml` | Fetches platforms from NetBox API with pagination |
 | `playbooks/roles/netbox_zabbix_sync/tasks/process_platform.yml` | Processes each platform: validates, maps, builds Zabbix record |
 | `playbooks/roles/netbox_zabbix_sync/tasks/zabbix_host_operations.yml` | Shared task: creates or updates Zabbix host |
@@ -64,6 +64,23 @@ ansible-playbook playbooks/netbox_zabbix_sync.yaml \
 ```
 
 When running in AWX/Tower, set `sync_platforms: true` in the **Extra Variables** field of the Job Template.
+
+---
+
+## Platforms only (skip device sync)
+
+By default the role syncs **devices** (`sync_devices: true`) and optionally **platforms** (`sync_platforms: false`). To run **only** platform synchronization (no NetBox device API fetch, no `process_device`, no device CSV/email rows from devices):
+
+```yaml
+sync_devices: false
+sync_platforms: true
+```
+
+Requirements:
+
+- Zabbix API is still used (`fetch_all_zabbix_hosts`) so platform host create/update can resolve templates, groups, and the “host already exists” fallback.
+- `only_fetch: true` still pulls NetBox devices for inspection even if `sync_devices: false` (see `defaults/main.yml`).
+- If all of `sync_devices`, `sync_platforms`, and `only_fetch` are off, the role **fails** with a clear message.
 
 ---
 

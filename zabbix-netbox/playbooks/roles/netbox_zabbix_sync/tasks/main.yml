@@ -7,10 +7,23 @@
 
 - name: Fetch all devices from Netbox API (with pagination and mapping-based filtering)
   include_tasks: fetch_all_devices.yml
+  when: (sync_devices | bool) or (only_fetch | bool)
+
+- name: Set empty NetBox device lists when device fetch is skipped
+  set_fact:
+    netbox_devices_monitor_raw: []
+    netbox_devices_monitor_count: 0
+    netbox_devices_skip_raw: []
+    netbox_devices_skip_count: 0
+    netbox_devices_raw: []
+    netbox_devices_count: 0
+  when: not ((sync_devices | bool) or (only_fetch | bool))
 
 - name: Fetch all hosts from Zabbix API (for mapping and update detection)
   include_tasks: fetch_all_zabbix_hosts.yml
-  when: not only_fetch | bool
+  when:
+    - not only_fetch | bool
+    - (sync_devices | bool) or (sync_platforms | bool)
 
 - name: Set filtered devices (mapping-based filters already applied in Python script)
   set_fact:
@@ -29,6 +42,16 @@
 - name: Initialize processing results list
   set_fact:
     processing_results: []
+
+- name: Fail when no sync mode is enabled
+  fail:
+    msg: >-
+      No work selected: enable sync_devices and/or sync_platforms, or set only_fetch: true
+      for NetBox-only inspection.
+  when:
+    - not only_fetch | bool
+    - not (sync_devices | bool)
+    - not (sync_platforms | bool)
 
 - name: Summary of fetched devices from Netbox (monitor vs skip)
   debug:
@@ -57,7 +80,12 @@
 
 - name: Display device count
   debug:
-    msg: "Found {{ netbox_devices_final | length }} devices to process (limit: {{ 'unlimited' if device_limit | int == 0 else device_limit | int }}{% if location_filter and location_filter != '' %}, location filter: {{ location_filter }}{% endif %})"
+    msg: >-
+      {% if not (sync_devices | bool) %}
+      Device sync disabled (sync_devices=false); skipping device processing.
+      {% else %}
+      Found {{ netbox_devices_final | length }} devices to process (limit: {{ 'unlimited' if device_limit | int == 0 else device_limit | int }}{% if location_filter and location_filter != '' %}, location filter: {{ location_filter }}{% endif %})
+      {% endif %}
 
 - name: Display list of matching devices
   debug:
@@ -76,7 +104,9 @@
         - Primary IP: {{ device.primary_ip4.address | default('N/A') if device.primary_ip4 else 'N/A' }}
       {% endfor %}
       ============================================
-  when: netbox_devices_final | length > 0
+  when:
+    - sync_devices | bool
+    - netbox_devices_final | length > 0
 
 - name: Process each device
   include_tasks: process_device.yml
@@ -86,6 +116,7 @@
     label: "{{ outer_device_item.name | default('Unknown') }}"
   vars:
     netbox_device: "{{ outer_device_item }}"
+  when: sync_devices | bool
 
 - name: Collect all device results from temporary files
   find:
@@ -94,6 +125,7 @@
   register: result_files
   delegate_to: localhost
   run_once: true
+  when: sync_devices | bool
 
 - name: Load all device results
   set_fact:
@@ -108,12 +140,17 @@
       {{ results }}
   delegate_to: localhost
   run_once: true
-  when: result_files.files is defined and result_files.files | length > 0
+  when:
+    - sync_devices | bool
+    - result_files.files is defined
+    - result_files.files | length > 0
 
-- name: Set empty results if no files found
+- name: Set empty results if no device result files found
   set_fact:
     processing_results: []
-  when: result_files.files is not defined or result_files.files | length == 0
+  when:
+    - sync_devices | bool
+    - result_files.files is not defined or result_files.files | length == 0
   delegate_to: localhost
   run_once: true
 
@@ -124,7 +161,9 @@
   loop: "{{ result_files.files | default([]) }}"
   delegate_to: localhost
   run_once: true
-  when: result_files.files is defined
+  when:
+    - sync_devices | bool
+    - result_files.files is defined
 
 - name: Fetch all platforms from Netbox API (with Zabbix and izlenmeli filtering)
   include_tasks: fetch_all_platforms.yml
@@ -206,6 +245,7 @@
       {%- endfor -%}
       {{ out }}
   when:
+    - sync_devices | bool
     - report_izlenmeyecek | bool
     - netbox_devices_skip_raw is defined
     - (netbox_devices_skip_raw | default([]) | length) > 0

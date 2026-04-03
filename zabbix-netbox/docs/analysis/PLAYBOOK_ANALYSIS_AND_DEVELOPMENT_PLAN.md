@@ -25,9 +25,10 @@
    - `templates.yml`
    - `datacenters.yml`
    - `netbox_device_type_mapping.yml`
-3. `fetch_all_devices.yml` ile Netbox'tan device'ları çekme
+3. `fetch_all_devices.yml` ile Netbox'tan device'ları çekme (`sync_devices: true` veya `only_fetch: true` iken)
 4. Device limit uygulama
-5. Her device için `process_device.yml` çağrısı
+5. Her device için `process_device.yml` çağrısı (`sync_devices: true` iken)
+6. **Güncel:** `sync_devices: false` ile yalnızca platform senkronu (`sync_platforms: true`) çalıştırılabilir; Zabbix host listesi platform API yolu için hâlâ çekilir.
 
 **Eksikler**:
 - ❌ Zabbix'ten host'ları toplu çekme yok

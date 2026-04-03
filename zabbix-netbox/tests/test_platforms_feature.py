@@ -1,4 +1,15 @@
 import pytest
+from pathlib import Path
+
+import yaml
+
+
+def test_role_defaults_sync_flags():
+    repo_root = Path(__file__).resolve().parent.parent
+    defaults_path = repo_root / "playbooks" / "roles" / "netbox_zabbix_sync" / "defaults" / "main.yml"
+    data = yaml.safe_load(defaults_path.read_text(encoding="utf-8"))
+    assert data.get("sync_devices") is True
+    assert data.get("sync_platforms") is False
 
 
 def build_mock_platform(
