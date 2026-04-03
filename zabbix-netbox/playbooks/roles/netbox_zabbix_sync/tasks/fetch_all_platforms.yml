@@ -34,7 +34,7 @@
               base_url += "&cf_izlenmeli=Hayır"
 
           next_url = base_url
-          print(f\"DEBUG: Using NetBox platforms API URL ({izlenmeli_mode}): {base_url}\", file=sys.stderr)
+          print(f"DEBUG: Using NetBox platforms API URL ({izlenmeli_mode}): {base_url}", file=sys.stderr)
           while next_url:
               resp = session.get(next_url, verify=verify_ssl, timeout=30)
               resp.raise_for_status()
