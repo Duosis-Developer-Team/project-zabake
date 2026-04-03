@@ -10,6 +10,14 @@
 #     device_type: "Nutanix"
 #     limit_per_dc: 1
 
-   - manufacturer: "Nutanix"
-     device_type: "Nutanix"
-     limit_per_dc: 1
+   - manufacturer: "Zerto"
+     device_type: "Zerto"
+     limit_per_dc: 0
+
+   - manufacturer: "NetBackup"
+     device_type: "NetBackup"
+     limit_per_dc: 0
+
+   - manufacturer: "Veeam"
+     device_type: "Veeam"
+     limit_per_dc: 0

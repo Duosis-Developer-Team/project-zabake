@@ -353,15 +353,33 @@ Citrix LB:
     host_groups: 
       - "Network Devices"
 
-NetBackup:
-  - name: BLT - Nutanix
-    type: snmpv2
-    host_groups: 
-      - "Storage Devices"
 
 # Platform sync device_type mapping: netbox_platform_mapping.yml -> device_type: Nutanix
-Nutanix:
-  - name: BLT - Nutanix
-    type: snmpv2
+Zerto:
+  - name: BLT - Zerto by HTTP
+    type: API
     host_groups:
-      - "Storage Devices"
+      - "Backup & Replication"
+    macros:
+      "{$ZERTO_IP}": "{HOST.IP}"
+      "{$ZERTO_PASS}": "2u4Mzf7RJC"
+      "{$ZERTO_USER}": "zabbix"
+
+NetBackup:
+  - name: BLT - Netbackup by HTTP
+    type: API
+    host_groups:
+      - "Backup & Replication"
+    macros:
+      "{$NB_URL}": "{HOST.IP}"
+      "{$NBMASTER_TOKEN}": "A-EZXhAXHlSJtiMvubyWeum6pZ9-g_S8G8FA82l8wTqyD_ToOexe7aKK-q42UGEb"
+
+Veeam:
+  - name: BLT - Veeam Backup and Replication by HTTP
+    type: API
+    host_groups:
+      - "Backup & Replication"
+    macros:
+      "{$VEEAM.API.URL}": "https://{HOST.IP}:9419"
+      "{$VEEAM.USER}": "zabbix@blt.vc"
+      "{$VEEAM.PASSWORD}": "2u4Mzf7RJC"
