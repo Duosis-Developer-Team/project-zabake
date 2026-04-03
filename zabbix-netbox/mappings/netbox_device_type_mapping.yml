@@ -8,6 +8,7 @@ mappings:
     conditions:
       device_role: "HOST"
       manufacturer: "LENOVO"
+    hostname_suffix: " - BMC"
     priority: 1
 
   # Inspur devices
@@ -26,12 +27,14 @@ mappings:
       manufacturer: ["INSPUR", "Inspur"]
       model_contains: ["M5"]
       model_suffix: "M5"
+    hostname_suffix: " - BMC"
     priority: 1
 
   - device_type: "HPE IPMI"
     conditions:
       device_role: "HOST"
       manufacturer: ["HPE", "HP"]
+    hostname_suffix: " - BMC"
     priority: 1
 
   # Dell devices
@@ -39,6 +42,7 @@ mappings:
     conditions:
       device_role: "HOST"
       manufacturer: "DELL"
+    hostname_suffix: " - BMC"
     priority: 1
 
   # Supermicro devices
@@ -46,6 +50,7 @@ mappings:
     conditions:
       device_role: "HOST"
       manufacturer: "Supermicro"
+    hostname_suffix: " - BMC"
     priority: 1
 
   # Primera devices
