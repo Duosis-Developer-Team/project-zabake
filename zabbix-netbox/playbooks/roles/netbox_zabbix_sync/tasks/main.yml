@@ -154,7 +154,7 @@
     - sync_devices | bool
     - result_files.files is defined
 
-- name: Fetch all platforms from Netbox API (with Zabbix and izlenmeli filtering)
+- name: Fetch all platforms from Netbox API (izlenmeli and optional location filtering)
   include_tasks: fetch_all_platforms.yml
   when: sync_platforms | bool
 

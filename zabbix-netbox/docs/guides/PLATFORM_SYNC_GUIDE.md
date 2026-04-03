@@ -13,8 +13,8 @@ NetBox /api/dcim/platforms/
           │
           ▼  (sync_platforms: true)
   fetch_all_platforms.yml
-  ─ filters by cf_izlenmeli
-  ─ filters by custom_fields.Zabbix (truthy)
+  ─ filters by cf_izlenmeli at API (monitor: Evet+null; skip: Hayır)
+  ─ excludes platforms only when izlenmeli means do-not-monitor (Hayır / false); Zabbix CF is not used for inclusion
   ─ optional: location_filter substring match on custom_fields.Site (same playbook var as devices)
           │
           ▼
@@ -70,7 +70,7 @@ When running in AWX/Tower, set `sync_platforms: true` in the **Extra Variables**
 
 ## Location filter for platforms
 
-The playbook variable `location_filter` (e.g. `DC13`) applies to **platform sync** as well as device sync. When set and non-empty, only platforms whose NetBox custom field **`Site`** contains the filter string (case-insensitive substring) are kept after the Zabbix flag filter. Examples: `DC13` matches `DC13-G12` and `DC13-G1-AHV-CLS`; it does not match `AZ11-CLS` or `DC14`.
+The playbook variable `location_filter` (e.g. `DC13`) applies to **platform sync** as well as device sync. When set and non-empty, only platforms whose NetBox custom field **`Site`** contains the filter string (case-insensitive substring) are kept after the izlenmeli-based list is built. Examples: `DC13` matches `DC13-G12` and `DC13-G1-AHV-CLS`; it does not match `AZ11-CLS` or `DC14`.
 
 ---
 
@@ -101,8 +101,8 @@ For a platform to be successfully synced, the following must be set on the NetBo
 | `manufacturer` | FK | Yes | Must match a `manufacturer` entry in `netbox_platform_mapping.yml` (case-insensitive) |
 | `custom_fields.ip_addresses` | string | Yes | Primary IP address; used as Zabbix host IP |
 | `custom_fields.Site` or `custom_fields.DC` | string | Yes | Site/DC code matching pattern `(DC\|AZ\|ICT\|UZ)[0-9]+` (e.g. `DC11`, `AZ02`) |
-| `custom_fields.izlenmeli` | choice | No | Set to `Hayır` to skip the platform; `null` or `Evet` includes it |
-| `custom_fields.Zabbix` | boolean | Yes | Must be truthy; platforms without this set are excluded during fetch |
+| `custom_fields.izlenmeli` | choice / bool | No | `Hayır` or `false` skips the platform; `null`, `Evet`, or `true` includes it |
+| `custom_fields.Zabbix` | boolean | No | Not used for fetch inclusion (optional metadata only) |
 | `custom_fields.Port` | string | No | Stored as Zabbix tag |
 | `custom_fields.URL` | string | No | Stored as Zabbix tag |
 
@@ -207,7 +207,7 @@ The `device_type` value must match the key you added in `templates.yml` **exactl
 Confirm the following custom fields are populated on the platform in NetBox:
 - `ip_addresses`: the IP address for Zabbix monitoring
 - `Site` or `DC`: a valid site code (e.g. `DC11`)
-- `Zabbix`: set to `true`
+- `izlenmeli`: must not be `Hayır` / `false` if the platform should sync
 
 ### Step 5: Run the playbook with `sync_platforms=true`
 
@@ -309,10 +309,11 @@ When a platform is synced again after already existing in Zabbix:
 ### Platform not picked up during fetch
 
 **Causes:**
-- `custom_fields.Zabbix` is not set to `true` on the platform
-- `custom_fields.izlenmeli` is set to `Hayır`
+- `custom_fields.izlenmeli` is set to `Hayır` or boolean/string `false`
+- NetBox API monitor filter excludes rows that are not `Evet` or `null` for `izlenmeli` (if your NetBox stores another “yes” value, confirm it matches the API filter)
+- `location_filter` is set and `custom_fields.Site` does not contain that substring
 
-**Fix:** Set `Zabbix = true` and ensure `izlenmeli` is not `Hayır`.
+**Fix:** Set `izlenmeli` to `null`, `Evet`, or `true` for platforms that should sync; adjust `Site` or `location_filter` as needed.
 
 ---
 

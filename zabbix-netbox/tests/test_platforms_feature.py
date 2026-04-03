@@ -12,6 +12,34 @@ def test_role_defaults_sync_flags():
     assert data.get("sync_platforms") is False
 
 
+def get_izlenmeli_status(platform):
+    """Keep in sync with fetch_all_platforms.yml embedded script."""
+    custom_fields = platform.get("custom_fields") or {}
+    val = custom_fields.get("izlenmeli")
+    if val is None:
+        return "null"
+    if val is False:
+        return "hayir"
+    text = str(val).strip().lower()
+    if text == "false":
+        return "hayir"
+    if text in ["evet", "true", "yes", "1"]:
+        return "evet"
+    if text in ["hayir", "hayır", "no", "0"]:
+        return "hayir"
+    return "null"
+
+
+def select_platforms_for_mode(all_platforms, izlenmeli_mode="monitor"):
+    """Mirror fetch_all_platforms.yml loop (before location_filter)."""
+    out = []
+    for platform in all_platforms:
+        if izlenmeli_mode == "monitor" and get_izlenmeli_status(platform) == "hayir":
+            continue
+        out.append(platform)
+    return out
+
+
 def build_mock_platform(
     platform_id=1,
     name="Test Platform",
@@ -93,44 +121,34 @@ def test_dc_limit_per_dc():
 
 
 def test_izlenmeli_filtering_logic():
-    # Import the helper used in fetch_all_platforms.yml script logic
-    from textwrap import dedent
-    import runpy
-    import types
-    import os
-    import tempfile
+    assert get_izlenmeli_status(build_mock_platform(izlenmeli=None)) == "null"
+    assert get_izlenmeli_status(build_mock_platform(izlenmeli="evet")) == "evet"
+    assert get_izlenmeli_status(build_mock_platform(izlenmeli="Evet")) == "evet"
+    assert get_izlenmeli_status(build_mock_platform(izlenmeli="hayir")) == "hayir"
+    assert get_izlenmeli_status(build_mock_platform(izlenmeli="hayır")) == "hayir"
+    assert get_izlenmeli_status(build_mock_platform(izlenmeli="no")) == "hayir"
+    assert get_izlenmeli_status(build_mock_platform(izlenmeli=False)) == "hayir"
+    assert get_izlenmeli_status(build_mock_platform(izlenmeli="false")) == "hayir"
 
-    # We emulate only the izlenmeli evaluation function
-    code = dedent(
-        """
-        def get_izlenmeli_status(platform):
-            custom_fields = platform.get("custom_fields") or {}
-            val = custom_fields.get("izlenmeli")
-            if val is None:
-                return "null"
-            text = str(val).strip().lower()
-            if text in ["evet", "true", "yes", "1"]:
-                return "evet"
-            if text in ["hayir", "hayır", "no", "0"]:
-                return "hayir"
-            return "null"
-        """
-    )
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        module_path = os.path.join(tmpdir, "izlenmeli_helper.py")
-        with open(module_path, "w", encoding="utf-8") as f:
-            f.write(code)
+def test_monitor_list_includes_platform_when_zabbix_cf_false_if_izlenmeli_ok():
+    p = build_mock_platform(platform_id=99, zabbix=False, izlenmeli=None)
+    selected = select_platforms_for_mode([p], "monitor")
+    assert len(selected) == 1 and selected[0]["id"] == 99
 
-        mod_globals = runpy.run_path(module_path)
-        get_status = mod_globals["get_izlenmeli_status"]
 
-    assert get_status(build_mock_platform(izlenmeli=None)) == "null"
-    assert get_status(build_mock_platform(izlenmeli="evet")) == "evet"
-    assert get_status(build_mock_platform(izlenmeli="Evet")) == "evet"
-    assert get_status(build_mock_platform(izlenmeli="hayir")) == "hayir"
-    assert get_status(build_mock_platform(izlenmeli="hayır")) == "hayir"
-    assert get_status(build_mock_platform(izlenmeli="no")) == "hayir"
+def test_monitor_list_excludes_only_hayir_not_zabbix():
+    ok = build_mock_platform(platform_id=1, zabbix=False, izlenmeli=None)
+    skip = build_mock_platform(platform_id=2, zabbix=True, izlenmeli="hayir")
+    selected = select_platforms_for_mode([ok, skip], "monitor")
+    assert [p["id"] for p in selected] == [1]
+
+
+def test_skip_mode_does_not_drop_hayir_rows():
+    """Skip API returns only Hayır; loop must not filter them out."""
+    p = build_mock_platform(platform_id=1, zabbix=False, izlenmeli="hayir")
+    selected = select_platforms_for_mode([p], "skip")
+    assert len(selected) == 1
 
 
 def filter_platforms_by_site_substring(platforms, location_filter: str):

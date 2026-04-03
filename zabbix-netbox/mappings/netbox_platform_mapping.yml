@@ -6,9 +6,9 @@
 # - limit_per_dc: Maximum number of platforms per DC for this device_type (0 or missing = no limit)
 
 mappings:
-  # - manufacturer: "Nutanix"
-  #   device_type: "Nutanix"
-  #   limit_per_dc: 1
+  - manufacturer: "Nutanix"
+    device_type: "Nutanix"
+    limit_per_dc: 1
 
   - manufacturer: "Acropolis"
     device_type: "Nutanix"
