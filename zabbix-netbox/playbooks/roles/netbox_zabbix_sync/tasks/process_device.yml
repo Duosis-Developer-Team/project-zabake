@@ -180,28 +180,25 @@
           
           return False
       
-      def determine_device_type(device, device_type_mapping):
-          """Determine device type from YAML mapping"""
+      def find_matching_mapping(device, device_type_mapping):
+          """Return the first matching mapping dict from YAML, or None."""
           mappings = device_type_mapping.get('mappings', [])
-          
-          # Sort by priority (lower priority number = higher priority)
           sorted_mappings = sorted(mappings, key=lambda x: x.get('priority', 999))
-          
           for mapping in sorted_mappings:
               conditions = mapping.get('conditions', {})
-              device_type = mapping.get('device_type')
-              
-              # Check all conditions
               all_match = True
               for condition_key, condition_value in conditions.items():
                   if not check_condition(device, condition_key, condition_value):
                       all_match = False
                       break
-              
               if all_match:
-                  return device_type
-          
+                  return mapping
           return None
+      
+      def determine_device_type(device, device_type_mapping):
+          """Determine device type from YAML mapping"""
+          m = find_matching_mapping(device, device_type_mapping)
+          return m.get('device_type') if m else None
       
       def get_primary_ip(device, netbox_url, netbox_token, verify_ssl):
           primary_ip4 = device.get('primary_ip4')
@@ -702,6 +699,8 @@
           with open(device_type_mapping_file, 'r') as f:
               device_type_mapping = json.load(f)
           
+          matching_mapping = find_matching_mapping(device, device_type_mapping)
+          
           # Load YAML configs (optional)
           host_groups_config = None
           tags_config = None
@@ -717,13 +716,14 @@
               templates_data = load_yaml_config(templates_file)
               if templates_data:
                   # templates.yml format: device_type -> list of templates
-                  # We need to convert this for the specific device_type
-                  device_type_temp = determine_device_type(device, device_type_mapping)
+                  device_type_temp = matching_mapping.get('device_type') if matching_mapping else None
                   if device_type_temp and device_type_temp in templates_data:
                       templates = templates_data[device_type_temp]
           
-          # Determine device type
-          device_type = determine_device_type(device, device_type_mapping)
+          # Determine device type and optional hostname customization from the same mapping
+          device_type = matching_mapping.get('device_type') if matching_mapping else None
+          hostname_prefix = (matching_mapping.get('hostname_prefix') or '') if matching_mapping else ''
+          hostname_suffix = (matching_mapping.get('hostname_suffix') or '') if matching_mapping else ''
           location_name = get_location_name(device, netbox_url, netbox_token, verify_ssl)
           
           # Extract host groups using config or fallback
@@ -771,6 +771,8 @@
               'tenant': tenant_name,
               'site': site_name,
               'ownership': ownership,
+              'hostname_prefix': hostname_prefix,
+              'hostname_suffix': hostname_suffix,
           }
           
           print(json.dumps(result))
@@ -831,6 +833,16 @@
   set_fact:
     device_info: "{{ device_processing_result.stdout | from_json }}"
 
+- name: Compute Zabbix hostname base (normalized NetBox name)
+  set_fact:
+    zabbix_hostname_base: >-
+      {{ netbox_device.name | default('') | replace('\t', ' ') | regex_replace('\\s+', ' ') | trim }}
+
+- name: Compute final Zabbix hostname (mapping prefix/suffix)
+  set_fact:
+    zabbix_hostname_final: >-
+      {{ ((device_info.hostname_prefix | default('', true) | string) ~ zabbix_hostname_base ~ (device_info.hostname_suffix | default('', true) | string)) | trim }}
+
 - name: Check if host exists in Zabbix by Loki_ID
   set_fact:
     zbx_existing_host: "{{ zabbix_hosts_by_loki_id.get(device_info.tags.Loki_ID | string) }}"
@@ -846,7 +858,7 @@
 
 - name: Fallback to hostname matching if Loki_ID not found
   set_fact:
-    zbx_existing_host: "{{ zabbix_hosts_by_hostname.get(netbox_device.name) }}"
+    zbx_existing_host: "{{ zabbix_hosts_by_hostname.get(zabbix_hostname_final) }}"
   when:
     - zbx_existing_host is not defined or zbx_existing_host == {} or zbx_existing_host.hostid is not defined
     - zabbix_hosts_by_hostname is defined
@@ -854,8 +866,8 @@
     - device_info.device_type != ""
     - device_info.primary_ip is not none
     - device_info.primary_ip != ""
-    - zabbix_hosts_by_hostname.get(netbox_device.name) is not none
-    - zabbix_hosts_by_hostname.get(netbox_device.name) != None
+    - zabbix_hosts_by_hostname.get(zabbix_hostname_final) is not none
+    - zabbix_hosts_by_hostname.get(zabbix_hostname_final) != None
 
 - name: Determine scenario (create or update)
   set_fact:
@@ -903,7 +915,7 @@
 - name: Record skipped device (no IP)
   set_fact:
     device_result:
-      hostname: "{{ netbox_device.name | default('N/A') }}"
+      hostname: "{{ zabbix_hostname_final | default(netbox_device.name | default('N/A')) }}"
       device_role: "{{ device_info.device_role | default('N/A') }}"
       status: "eklenemedi"
       reason: "IP adresi bulunamadı"
@@ -913,7 +925,7 @@
       tenant: "{{ device_info.tenant | default('N/A', true) }}"
       ownership: "{{ device_info.ownership | default('N/A', true) }}"
     current_device_result:
-      hostname: "{{ netbox_device.name | default('N/A') }}"
+      hostname: "{{ zabbix_hostname_final | default(netbox_device.name | default('N/A')) }}"
       device_role: "{{ device_info.device_role | default('N/A') }}"
       status: "eklenemedi"
       reason: "IP adresi bulunamadı"
@@ -949,7 +961,7 @@
       DEVICE_TYPE: "{{ device_info.device_type }}"
       DEVICE_ROLE: "{{ device_info.device_role | default('N/A') }}"
       HOST_IP: "{{ device_info.primary_ip }}"
-      HOSTNAME: "{{ netbox_device.name | default('') | replace('\t', ' ') | regex_replace('\\s+', ' ') | trim }}"
+      HOSTNAME: "{{ zabbix_hostname_final }}"
       DC_ID: "{{ device_info.location }}"
       HOST_GROUPS: "{{ device_info.host_groups }}"
       TEMPLATE_TYPE: ""

@@ -11,10 +11,14 @@ mappings:
       device_role: "HOST"  # veya ["HOST", "OTHER"]
       manufacturer: "LENOVO"  # veya ["LENOVO", "HPE"]
       model_contains: ["ICT", "XCC"]  # Model içinde bu stringler var mı?
-      model_suffix: "M6"  # Model bu suffix ile bitiyor mu?
+      model_suffix: "M6"  # Model bu suffix ile bitiyor mu? (koşul alanı)
       name_contains: ["ILO"]  # Device name içinde bu stringler var mı?
+    hostname_prefix: "BMC-"   # opsiyonel: Zabbix host adının önüne eklenir
+    hostname_suffix: " - BMC"  # opsiyonel: normalize edilmiş NetBox adının sonuna eklenir
     priority: 1  # Düşük sayı = yüksek öncelik
 ```
+
+`hostname_prefix` ve `hostname_suffix`, **`conditions` ile aynı seviyede** (mapping kökünde) tanımlanır; `model_suffix` ise yalnızca eşleştirme koşuludur (cihaz modelinin sonu), Zabbix adını değiştirmez.
 
 ## Koşul Tipleri
 
@@ -56,6 +60,21 @@ Device name'inde belirtilen stringlerin olup olmadığını kontrol eder. Liste 
 ```yaml
 name_contains: ["ILO"]
 ```
+
+## Zabbix host adı özelleştirme (hostname_prefix / hostname_suffix)
+
+Eşleşen mapping için Zabbix’te kullanılan host adı şu şekilde üretilir:
+
+`hostname_prefix` + *(normalize edilmiş NetBox device adı)* + `hostname_suffix`
+
+- NetBox adı, tab ve fazla boşluklar temizlenerek normalize edilir (mevcut playbook davranışı ile aynı).
+- Ayırıcı tire veya boşluk **otomatik eklenmez**; istediğiniz metni `hostname_suffix` / `hostname_prefix` içinde tam yazın (ör. `" - BMC"`, `"-BMC"`).
+- Alanlar opsiyoneldir; tanımlanmazsa Zabbix host adı yalnızca normalize NetBox adıdır.
+
+### Operasyon notları
+
+- **Loki_ID** ile eşleşen mevcut hostlar, host adı değiştiyse `host.update` ile güncellenir.
+- Loki_ID yoksa fallback eşleştirme Zabbix `host` alanına göre yapılır. Host hâlâ **eski** NetBox adıyla duruyorsa ve siz mapping’e suffix eklediyseniz, ilk senkronizasyonda fallback eşleşmeyebilir; gerekirse önce Loki_ID senkronu veya manuel rename uygulayın.
 
 ## Priority (Öncelik)
 

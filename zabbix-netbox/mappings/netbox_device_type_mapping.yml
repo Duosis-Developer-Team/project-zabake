@@ -17,6 +17,7 @@ mappings:
       manufacturer: ["INSPUR", "Inspur"]
       model_contains: ["M6"]
       model_suffix: "M6"
+    hostname_suffix: " - BMC"
     priority: 1
 
   - device_type: "Inspur M5"
