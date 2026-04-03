@@ -215,17 +215,25 @@ HPE Switch:
     type: snmpv2
     host_groups: 
       - "Network Devices"
-# Huawei: only VRP at host level. Link BGP (BLT - Template SNMP Device Huawei BGP) under VRP in Zabbix
-# as a linked template to avoid duplicate item keys (e.g. icmpping) on one host.
+# Huawei VRP: second template adds BGP monitoring. If Zabbix reports duplicate item keys (e.g. icmpping),
+# remove the BGP list item here and link BLT - Template SNMP Device Huawei BGP under VRP in Zabbix only.
 Huawei Backbone Switch:
   - name: BLT - Huawei VRP SNMP
     type: snmpv2
-    host_groups: 
+    host_groups:
+      - "Network Devices"
+  - name: BLT - Template SNMP Device Huawei BGP
+    type: snmpv2
+    host_groups:
       - "Network Devices"
 Huawei Firewall:
   - name: BLT - Huawei VRP SNMP
     type: snmpv2
-    host_groups: 
+    host_groups:
+      - "Network Devices"
+  - name: BLT - Template SNMP Device Huawei BGP
+    type: snmpv2
+    host_groups:
       - "Network Devices"
 Huawei Operator Switch:
   - name: unknown
@@ -235,12 +243,20 @@ Huawei Operator Switch:
 Huawei Management Switch:
   - name: BLT - Huawei VRP SNMP
     type: snmpv2
-    host_groups: 
+    host_groups:
+      - "Network Devices"
+  - name: BLT - Template SNMP Device Huawei BGP
+    type: snmpv2
+    host_groups:
       - "Network Devices"
 Huawei Router:
   - name: BLT - Huawei VRP SNMP
     type: snmpv2
-    host_groups: 
+    host_groups:
+      - "Network Devices"
+  - name: BLT - Template SNMP Device Huawei BGP
+    type: snmpv2
+    host_groups:
       - "Network Devices"
 Huawei Switch:
   - name: unknown
