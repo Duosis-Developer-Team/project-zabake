@@ -4,6 +4,10 @@
     platform_result: {}
     current_platform_result: {}
     platform_info: {}
+    platform_mapping_entry: null
+    platform_device_type: null
+    platform_limit_per_dc: 0
+    zbx_record: {}
   run_once: false
 
 - name: Initialize platform DC usage map
@@ -125,13 +129,7 @@
 
 - name: Find mapping for platform manufacturer
   set_fact:
-    platform_mapping_entry: >-
-      {{
-        (platform_mapping.mappings | default([])
-         | selectattr('manufacturer', 'defined')
-         | selectattr('manufacturer', 'match', '(?i)^' + (platform_manufacturer_name | string | regex_escape) + '$')
-         | list | first) | default(none, true)
-      }}
+    platform_mapping_entry: "{{ (platform_mapping.mappings | default([]) | selectattr('manufacturer', 'defined') | selectattr('manufacturer', 'match', '(?i)^' + (platform_manufacturer_name | string | regex_escape) + '$') | list | first) | default(none, true) }}"
 
 - name: Record skipped platform when no mapping entry found
   set_fact:
@@ -145,104 +143,107 @@
       site: "{{ platform_site_code | default('N/A', true) }}"
       tenant: "N/A"
       ownership: "N/A"
-  when: platform_mapping_entry is not defined or platform_mapping_entry is none
+  when: platform_mapping_entry is not mapping
 
-- name: Resolve device_type and per-DC limit from mapping
-  set_fact:
-    platform_device_type: "{{ platform_mapping_entry.device_type }}"
-    platform_limit_per_dc: "{{ platform_mapping_entry.limit_per_dc | default(0) | int }}"
+- name: Apply NetBox platform mapping to Zabbix configuration
+  when: platform_mapping_entry is mapping
+  block:
+    - name: Resolve device_type and per-DC limit from mapping
+      set_fact:
+        platform_device_type: "{{ platform_mapping_entry.device_type }}"
+        platform_limit_per_dc: "{{ platform_mapping_entry.limit_per_dc | default(0) | int }}"
 
-- name: Apply per-DC limit for platform
-  vars:
-    _dc_code: "{{ platform_site_code }}"
-    _usage_for_type: "{{ platform_dc_usage.get(platform_device_type, {}) }}"
-    _current_count: "{{ _usage_for_type.get(_dc_code, 0) }}"
-  set_fact:
-    platform_dc_usage: >-
-      {%- set usage = platform_dc_usage | default({}) | combine({}, recursive=True) -%}
-      {%- set by_type = usage.get(platform_device_type, {}) -%}
-      {%- set new_count = (_current_count | int) + 1 -%}
-      {%- set _ = by_type.update({_dc_code: new_count}) -%}
-      {%- set _ = usage.update({platform_device_type: by_type}) -%}
-      {{ usage }}
-  when:
-    - platform_limit_per_dc | int == 0 or _current_count | int < platform_limit_per_dc | int
+    - name: Apply per-DC limit for platform
+      vars:
+        _dc_code: "{{ platform_site_code }}"
+        _usage_for_type: "{{ platform_dc_usage.get(platform_device_type, {}) }}"
+        _current_count: "{{ _usage_for_type.get(_dc_code, 0) }}"
+      set_fact:
+        platform_dc_usage: >-
+          {%- set usage = platform_dc_usage | default({}) | combine({}, recursive=True) -%}
+          {%- set by_type = usage.get(platform_device_type, {}) -%}
+          {%- set new_count = (_current_count | int) + 1 -%}
+          {%- set _ = by_type.update({_dc_code: new_count}) -%}
+          {%- set _ = usage.update({platform_device_type: by_type}) -%}
+          {{ usage }}
+      when:
+        - platform_limit_per_dc | int == 0 or _current_count | int < platform_limit_per_dc | int
 
-- name: Record skipped platform when per-DC limit exceeded
-  set_fact:
-    current_platform_result:
-      hostname: "{{ platform_name }}"
-      device_role: "PLATFORM"
-      status: "eklenemedi"
-      reason: "DC limit exceeded for {{ platform_device_type }} in {{ platform_site_code }}"
-      ip: "{{ platform_ip | default('N/A') }}"
-      location: "{{ platform_dc | default(platform_site_code | default('N/A', true), true) }}"
-      site: "{{ platform_site_code | default('N/A', true) }}"
-      tenant: "N/A"
-      ownership: "N/A"
-  when:
-    - platform_limit_per_dc | int > 0
-    - platform_dc_usage.get(platform_device_type, {}).get(platform_site_code, 0) | int > platform_limit_per_dc | int
+    - name: Record skipped platform when per-DC limit exceeded
+      set_fact:
+        current_platform_result:
+          hostname: "{{ platform_name }}"
+          device_role: "PLATFORM"
+          status: "eklenemedi"
+          reason: "DC limit exceeded for {{ platform_device_type }} in {{ platform_site_code }}"
+          ip: "{{ platform_ip | default('N/A') }}"
+          location: "{{ platform_dc | default(platform_site_code | default('N/A', true), true) }}"
+          site: "{{ platform_site_code | default('N/A', true) }}"
+          tenant: "N/A"
+          ownership: "N/A"
+      when:
+        - platform_limit_per_dc | int > 0
+        - platform_dc_usage.get(platform_device_type, {}).get(platform_site_code, 0) | int > platform_limit_per_dc | int
 
-- name: Select templates for platform from templates map
-  set_fact:
-    platform_templates: "{{ (templates_map[platform_device_type] | default([])) }}"
+    - name: Select templates for platform from templates map
+      set_fact:
+        platform_templates: "{{ (templates_map[platform_device_type] | default([])) }}"
 
-- name: Record skipped platform when no templates found for device_type
-  set_fact:
-    current_platform_result:
-      hostname: "{{ platform_name }}"
-      device_role: "PLATFORM"
-      status: "eklenemedi"
-      reason: "No templates found for device_type {{ platform_device_type }}"
-      ip: "{{ platform_ip | default('N/A') }}"
-      location: "{{ platform_dc | default(platform_site_code | default('N/A', true), true) }}"
-      site: "{{ platform_site_code | default('N/A', true) }}"
-      tenant: "N/A"
-      ownership: "N/A"
-  when: platform_templates | length == 0
+    - name: Record skipped platform when no templates found for device_type
+      set_fact:
+        current_platform_result:
+          hostname: "{{ platform_name }}"
+          device_role: "PLATFORM"
+          status: "eklenemedi"
+          reason: "No templates found for device_type {{ platform_device_type }}"
+          ip: "{{ platform_ip | default('N/A') }}"
+          location: "{{ platform_dc | default(platform_site_code | default('N/A', true), true) }}"
+          site: "{{ platform_site_code | default('N/A', true) }}"
+          tenant: "N/A"
+          ownership: "N/A"
+      when: platform_templates | length == 0
 
-- name: Build base Zabbix tags for platform
-  set_fact:
-    platform_tags:
-      IP: "{{ platform_ip }}"
-      Port: "{{ platform_port | string }}"
-      URL: "{{ platform_url | string }}"
-      Site: "{{ platform_site_code | string }}"
-      DC: "{{ platform_dc | string }}"
-      Manufacturer: "{{ platform_manufacturer_name }}"
-      Created: "{{ netbox_platform.created | default('') }}"
-      Last_Updated: "{{ netbox_platform.last_updated | default('') }}"
-      Loki_Platform_ID: "{{ platform_id | string }}"
-      Loki_ID: "P_{{ platform_id | string }}"
+    - name: Build base Zabbix tags for platform
+      set_fact:
+        platform_tags:
+          IP: "{{ platform_ip }}"
+          Port: "{{ platform_port | string }}"
+          URL: "{{ platform_url | string }}"
+          Site: "{{ platform_site_code | string }}"
+          DC: "{{ platform_dc | string }}"
+          Manufacturer: "{{ platform_manufacturer_name }}"
+          Created: "{{ netbox_platform.created | default('') }}"
+          Last_Updated: "{{ netbox_platform.last_updated | default('') }}"
+          Loki_Platform_ID: "{{ platform_id | string }}"
+          Loki_ID: "P_{{ platform_id | string }}"
 
-- name: Determine platform host groups from templates
-  set_fact:
-    platform_host_groups: >-
-      {{
-        platform_templates
-        | map(attribute='host_groups')
-        | list
-        | flatten
-        | unique
-        | join(',')
-      }}
+    - name: Determine platform host groups from templates
+      set_fact:
+        platform_host_groups: >-
+          {{
+            platform_templates
+            | map(attribute='host_groups')
+            | list
+            | flatten
+            | unique
+            | join(',')
+          }}
 
-- name: Create Zabbix record for platform
-  set_fact:
-    zbx_record:
-      DEVICE_TYPE: "{{ platform_device_type }}"
-      DEVICE_ROLE: "PLATFORM"
-      HOST_IP: "{{ platform_ip }}"
-      HOSTNAME: "{{ platform_name }}"
-      DC_ID: "{{ platform_site_code }}"
-      HOST_GROUPS: "{{ platform_host_groups }}"
-      TEMPLATE_TYPE: ""
-      MACROS: "{{ platform_tags | to_json }}"
-      REPORT_LOCATION: "{{ platform_dc | default(platform_site_code, true) | default('', true) }}"
-      REPORT_SITE: "{{ platform_site_code | default('', true) }}"
-      REPORT_TENANT: ""
-      REPORT_OWNERSHIP: ""
+    - name: Create Zabbix record for platform
+      set_fact:
+        zbx_record:
+          DEVICE_TYPE: "{{ platform_device_type }}"
+          DEVICE_ROLE: "PLATFORM"
+          HOST_IP: "{{ platform_ip }}"
+          HOSTNAME: "{{ platform_name }}"
+          DC_ID: "{{ platform_site_code }}"
+          HOST_GROUPS: "{{ platform_host_groups }}"
+          TEMPLATE_TYPE: ""
+          MACROS: "{{ platform_tags | to_json }}"
+          REPORT_LOCATION: "{{ platform_dc | default(platform_site_code, true) | default('', true) }}"
+          REPORT_SITE: "{{ platform_site_code | default('', true) }}"
+          REPORT_TENANT: ""
+          REPORT_OWNERSHIP: ""
 
 - name: Ensure Zabbix auth token is available
   when: zabbix_auth is not defined
@@ -277,6 +278,7 @@
     _zabbix_auth_for_platform: "{{ zabbix_auth }}"
   when:
     - zbx_record is defined
+    - zbx_record.DEVICE_TYPE is defined
     - zabbix_auth is defined
 
 - name: Process platform with Zabbix host operations
@@ -292,6 +294,7 @@
     zbx_scenario: "create"
   when:
     - _zbx_record_for_platform is defined
+    - _zbx_record_for_platform.DEVICE_TYPE is defined
     - _zabbix_auth_for_platform is defined
 
 - name: Collect platform result from zabbix host operations (if processed)
