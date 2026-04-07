@@ -3,7 +3,8 @@
 #
 # - manufacturer: NetBox platform.manufacturer.name (case-insensitive match)
 # - device_type:  Key in templates.yml that defines Zabbix templates
-# - limit_per_dc: Maximum number of platforms per DC for this device_type (0 or missing = no limit)
+# - limit_per_dc: Max platforms per logical DC for this device_type (0 or missing = no limit).
+#   Counting uses the first (DC|AZ|ICT|UZ)[0-9]+ match from Site/DC (e.g. DC13-G12 -> DC13), not the full Site string.
 
 mappings:
   - manufacturer: "Nutanix"
@@ -18,7 +19,7 @@ mappings:
     device_type: "Zerto"
     limit_per_dc: 0
 
-  - manufacturer: "NetBackup"
+  - manufacturer: "Netbackup"
     device_type: "NetBackup"
     limit_per_dc: 0
 
@@ -30,7 +31,7 @@ mappings:
     device_type: "VMware"
     limit_per_dc: 1
 
-  - manufacturer: "IBM"
-    device_type: "IBM HMC"
+  - manufacturer: "IBM HMC"
+    device_type: "IBM Virtualization"
     limit_per_dc: 1
 

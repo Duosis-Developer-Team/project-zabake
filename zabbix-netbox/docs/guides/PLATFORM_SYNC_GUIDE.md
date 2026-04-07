@@ -134,7 +134,7 @@ mappings:
 |-------|------|----------|-------------|
 | `manufacturer` | string | Yes | Must match `platform.manufacturer.name` in NetBox (case-insensitive) |
 | `device_type` | string | Yes | Must exactly match a top-level key in `templates.yml` |
-| `limit_per_dc` | integer | No | Maximum platforms of this type per DC code. `0` or omitted = no limit |
+| `limit_per_dc` | integer | No | Maximum platforms of this type per **normalized** DC code (first `(DC|AZ|ICT|UZ)[0-9]+` from Site/DC). `0` or omitted = no limit |
 
 > **Important:** The `device_type` value must have a corresponding top-level key in `templates.yml`, otherwise the platform will fail with: `No templates found for device_type <value>`.
 
@@ -225,17 +225,19 @@ ansible-playbook playbooks/netbox_zabbix_sync.yaml \
 
 ## Per-DC Limit (`limit_per_dc`)
 
-The `limit_per_dc` field controls how many platforms of a given `device_type` are allowed per DC code within a single playbook run.
+The `limit_per_dc` field controls how many platforms of a given `device_type` are allowed per **logical DC code** within a single playbook run.
 
 | Value | Behavior |
 |-------|----------|
 | `0` | No limit — all platforms are synced |
-| `1` | Only the first platform of this type in each DC is synced |
-| `N` | At most N platforms per DC per run |
+| `1` | Only the first platform of this type per logical DC is synced |
+| `N` | At most N platforms per logical DC per run |
 
-**How it works:** Platforms are processed in the order returned by the NetBox API. Once the limit is reached for a DC+device_type combination, subsequent platforms receive status `eklenemedi` with reason `DC limit exceeded`.
+**DC bucket (what “per DC” means):** The playbook takes `custom_fields.Site` or `custom_fields.DC` (same as `platform_site_code` / Zabbix `DC_ID`) and derives a **normalized** key by matching the first `(DC|AZ|ICT|UZ)[0-9]+` substring (case-insensitive), then uppercasing it. Examples: `DC13-G12`, `DC13-G13`, and `dc13-FC1-CLS` all map to **`DC13`** for counting. `DC_ID` and tags still use the full Site/DC string from NetBox.
 
-**Example use case:** For Nutanix clusters, you typically want one Zabbix host per DC (representing the cluster endpoint), so `limit_per_dc: 1` prevents duplicates.
+**How it works:** Platforms are processed in the order returned by the NetBox API. The usage counter is keyed by `(device_type, normalized DC)`. When `limit_per_dc` is already reached for that pair, the platform is not sent to Zabbix and receives status `eklenemedi` with reason `DC limit exceeded for <device_type> in <normalized DC> (site: <full site>)`.
+
+**Example use case:** For Nutanix clusters, you typically want one Zabbix host per DC (representing the cluster endpoint), so `limit_per_dc: 1` keeps a single sync per `DC13`-style code even if NetBox lists many rows with different `Site` suffixes under the same DC.
 
 ---
 
@@ -319,7 +321,7 @@ When a platform is synced again after already existing in Zabbix:
 
 ### "DC limit exceeded for X in DC11"
 
-**Cause:** More platforms of a given type exist in NetBox for a DC than `limit_per_dc` allows.
+**Cause:** More platforms of a given `device_type` exist in NetBox for the same **normalized** DC code than `limit_per_dc` allows (see [Per-DC Limit](#per-dc-limit-limit_per_dc)).
 
 **Fix:** Either increase `limit_per_dc` in `netbox_platform_mapping.yml`, or set `limit_per_dc: 0` to remove the limit.
 

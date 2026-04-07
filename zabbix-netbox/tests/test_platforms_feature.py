@@ -76,6 +76,76 @@ def extract_site_valid(site: str) -> bool:
     return re.search(r"(DC|AZ|ICT|UZ)[0-9]+", site, re.IGNORECASE) is not None
 
 
+def normalize_dc_limit_bucket(site_code: str) -> str:
+    """Mirror process_platform.yml: first (DC|AZ|ICT|UZ)[0-9]+ match, uppercased; else full string."""
+    import re
+
+    if site_code is None:
+        return ""
+    s = str(site_code).strip()
+    if not s:
+        return ""
+    m = re.search(r"(DC|AZ|ICT|UZ)[0-9]+", s, re.IGNORECASE)
+    if m:
+        return m.group(0).upper()
+    return s
+
+
+def test_normalize_dc_limit_bucket():
+    assert normalize_dc_limit_bucket("DC13-G12") == "DC13"
+    assert normalize_dc_limit_bucket("dc13-FC1-CLS") == "DC13"
+    assert normalize_dc_limit_bucket("AZ11-CLS") == "AZ11"
+    assert normalize_dc_limit_bucket("ICT21-HALL") == "ICT21"
+    assert normalize_dc_limit_bucket("UZ11") == "UZ11"
+    assert normalize_dc_limit_bucket("") == ""
+
+
+def test_limit_per_dc_simulation_uses_normalized_bucket():
+    """Same logical DC with different Site suffixes shares one counter (matches Ansible)."""
+    platforms = [
+        build_mock_platform(platform_id=1, site="DC13-G12"),
+        build_mock_platform(platform_id=2, site="DC13-G13"),
+        build_mock_platform(platform_id=3, site="DC14"),
+    ]
+    limit = 1
+    usage = {}
+    allowed_ids = []
+    device_type = "Nutanix"
+    for p in platforms:
+        cf = p.get("custom_fields") or {}
+        site = cf.get("Site") or cf.get("DC") or ""
+        bucket = normalize_dc_limit_bucket(site)
+        by_type = usage.setdefault(device_type, {})
+        cur = by_type.get(bucket, 0)
+        if limit > 0 and cur >= limit:
+            continue
+        by_type[bucket] = cur + 1
+        allowed_ids.append(p["id"])
+    assert allowed_ids == [1, 3]
+
+
+def test_limit_per_dc_zero_allows_all_in_same_bucket():
+    platforms = [
+        build_mock_platform(platform_id=1, site="DC13-G12"),
+        build_mock_platform(platform_id=2, site="DC13-G13"),
+    ]
+    limit = 0
+    usage = {}
+    allowed_ids = []
+    device_type = "Nutanix"
+    for p in platforms:
+        cf = p.get("custom_fields") or {}
+        site = cf.get("Site") or cf.get("DC") or ""
+        bucket = normalize_dc_limit_bucket(site)
+        by_type = usage.setdefault(device_type, {})
+        cur = by_type.get(bucket, 0)
+        if limit > 0 and cur >= limit:
+            continue
+        by_type[bucket] = cur + 1
+        allowed_ids.append(p["id"])
+    assert allowed_ids == [1, 2]
+
+
 def extract_dc_limit(platforms, limit, dc_key="DC"):
     from collections import defaultdict
 
