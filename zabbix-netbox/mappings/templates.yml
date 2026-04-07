@@ -393,7 +393,7 @@ Veeam:
       "{$VEEAM.USER}": "zabbix@blt.vc"
       "{$VEEAM.PASSWORD}": "2u4Mzf7RJC"
 
-VMware vSphere:
+VMware:
   - name: BLT - Intel Virtualization
     type: API
     host_groups:
