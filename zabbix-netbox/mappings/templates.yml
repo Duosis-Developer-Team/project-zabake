@@ -356,20 +356,13 @@ Citrix LB:
 
 # Platform sync device_type keys: netbox_platform_mapping.yml device_type must match these keys
 Nutanix:
-  - name: BLT - Nutanix
-    type: snmpv2
-    host_groups:
-      - "Storage Devices"
-
-VMware vSphere:
-  - name: BLT - VMware vSphere by HTTP
-    type: API
+  - name: BLT - Template SNMP Nutanix Cluster
+    type: snmpv3
     host_groups:
       - "Virtual Infrastructure"
     macros:
-      "{$VMWARE.URL}": "https://{HOST.IP}/sdk"
-      "{$VMWARE.USERNAME}": "zabbix"
-      "{$VMWARE.PASSWORD}": "changeme"
+      "{$NUTANIX.USER}": "zabbix@blt.vc"
+      "{$NUTANIX.PASSWORD}": "2u4Mzf7RJC"
 
 Zerto:
   - name: BLT - Zerto by HTTP
@@ -399,3 +392,38 @@ Veeam:
       "{$VEEAM.API.URL}": "https://{HOST.IP}:9419"
       "{$VEEAM.USER}": "zabbix@blt.vc"
       "{$VEEAM.PASSWORD}": "2u4Mzf7RJC"
+
+VMware vSphere:
+  - name: BLT - Intel Virtualization
+    type: API
+    host_groups:
+      - "Virtual Infrastructure"
+    macros:
+      "{$VMWARE.URL}": "https://{HOST.IP}/sdk"
+      "{$VMWARE.USERNAME}": "zabbix@blt.vc"
+      "{$VMWARE.PASSWORD}": "2u4Mzf7RJC"
+
+IBM Virtualization:
+  - name: BLT - IBM HMC Discovery Template
+    type: API
+    host_groups:
+      - "Virtual Infrastructure"
+    macros:
+      "{$HMC.HOST}": "{HOST.IP}"
+      "{$HMC.NAME}": "{HOST.NAME}"
+      "{$HMC.PASSWORD}": "2u4Mzf7RJC"
+      "{$HMC.USER}": "zabbix"
+      "{$SCRIPT.PATH}": "/ZabbixCustomMonitoring/IBM/HMC"
+
+Acropolis:
+  - name: BLT - Acropolis-SNMP-Template v3
+    type: snmpv3
+    host_groups:
+      - "Virtual Infrastructure"
+    macros:
+      "{$ACROPOLIS_IP}": "{HOST.IP}"
+      "{$ACROPOLIS_TOKEN}": "emFiYml4QGJsdC52YzoydTRNemY3UkpD"
+      "{$NUTANIX.USER}": "zabbix@blt.vc"
+      "{$NUTANIX.PASSWORD}": "2u4Mzf7RJC"
+      "{$NUTANIX.PRISM.ELEMENT.IP}": "{HOST.IP}"
+      "{$NUTANIX.PRISM.ELEMENT.PORT}": "9440"

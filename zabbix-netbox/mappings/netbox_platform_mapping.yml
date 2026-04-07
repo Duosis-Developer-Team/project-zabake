@@ -11,7 +11,7 @@ mappings:
     limit_per_dc: 1
 
   - manufacturer: "Acropolis"
-    device_type: "Nutanix"
+    device_type: "Acropolis"
     limit_per_dc: 1
 
   - manufacturer: "Zerto"
@@ -27,5 +27,10 @@ mappings:
     limit_per_dc: 0
 
   - manufacturer: "VMware"
-    device_type: "VMware vSphere"
-    limit_per_dc: 0
+    device_type: "VMware"
+    limit_per_dc: 1
+
+  - manufacturer: "IBM"
+    device_type: "IBM HMC"
+    limit_per_dc: 1
+

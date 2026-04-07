@@ -19,12 +19,12 @@ snmpv3:
     details:
       version: 3   # default SNMP v3
       bulk: 1
-      securityname: "readonly"
+      securityname: "zabbix"
       securitylevel: 2         # 0=noAuthNoPriv, 1=authNoPriv, 2=authPriv
       authprotocol: 1          # 0=MD5, 1=SHA1
-      authpassphrase: "U357a3D9Tw3928aV"
+      authpassphrase: "44446749c76fb49994bce606f384028bc1bde1a3d4c679811ed408f5c60cb439"
       privprotocol: 1          # 0=DES, 1=DES (depending on Zabbix version mapping); use DES
-      privpassphrase: "ZFlK0O44y412!!"
+      privpassphrase: "44446749c76fb49994bce606f384028bc1bde1a3d4c679811ed408f5c60cb439"
       max_repetitions: 10
 
 agent:
