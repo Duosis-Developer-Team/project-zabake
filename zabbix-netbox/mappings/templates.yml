@@ -161,10 +161,14 @@ Cisco Router:
     host_groups: 
       - "Network Devices"
 Cisco SAN Switch:
-  - name: unknown
-    type: snmpv2
+  - name: BLT - IBM SAN Switch by HTTP
+    type: API
     host_groups: 
       - "Network Devices"
+    macros:
+      "{$SAN_URL}": "{HOST.IP}"
+      "{$SAN_PASS}": "O7!QB0r*p3T5G"
+      "{$SAN_USER}": "zabbix"
 Cisco Managemet Switch:
   - name: BLT - Cisco IOS SNMP
     type: snmpv2
@@ -211,10 +215,14 @@ HPE Management Switch:
     host_groups: 
       - "Network Devices"
 HPE SAN Switch:
-  - name: unknown
+  - name: BLT - IBM SAN Switch by HTTP
     type: API
     host_groups: 
       - "Network Devices"
+    macros:
+      "{$SAN_URL}": "{HOST.IP}"
+      "{$SAN_PASS}": "O7!QB0r*p3T5G"
+      "{$SAN_USER}": "zabbix"
 HPE Switch:
   - name: unknown
     type: snmpv2
@@ -272,10 +280,14 @@ Labris Firewall:
     host_groups: 
       - "Network Devices"
 Lenovo SAN Switch:
-  - name: unknown
-    type: snmpv2
+  - name: BLT - IBM SAN Switch by HTTP
+    type: API
     host_groups: 
       - "Network Devices"
+    macros:
+      "{$SAN_URL}": "{HOST.IP}"
+      "{$SAN_PASS}": "O7!QB0r*p3T5G"
+      "{$SAN_USER}": "zabbix"
 Mellanox Switch:
   - name: BLT - Mellanox SNMP
     type: snmpv2
