@@ -264,8 +264,8 @@ Each platform synced to Zabbix receives the following tags:
 
 When a platform is synced again after already existing in Zabbix:
 
-1. The playbook always uses `zbx_scenario: create` for platforms.
-2. If the `host.create` API call returns an "already exists" error, the playbook falls back to `zbx_scenario: update`.
+1. Before `host.create`, the playbook resolves the Zabbix host by tag `Loki_ID` (`P_<netbox_platform_id>`) using `zabbix_hosts_by_loki_id`, then falls back to hostname via `zabbix_hosts_by_hostname`. If a host is found, `zbx_scenario` is `update`; otherwise `create`.
+2. If `host.create` still runs and fails with a duplicate-host error, the playbook falls back to `zbx_scenario: update`. Zabbix often returns `error.message: Invalid params.` with the real text in `error.data` (e.g. `Host with the same name "..." already exists.`); both `message` and `data` are checked for `already exists`.
 3. The update modifies: IP address, hostname, interface, macros, `monitored_by`, and `proxy_groupid`.
 4. Tags are **not** updated on existing hosts — they are only written during creation.
 5. Templates are **not** updated on existing hosts — only set during creation.

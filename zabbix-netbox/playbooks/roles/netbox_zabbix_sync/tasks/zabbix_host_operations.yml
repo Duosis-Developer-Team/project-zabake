@@ -550,8 +550,10 @@
   when:
     - zbx_scenario == 'create'
     - zbx_create_resp.json.error is defined
-    - zbx_create_resp.json.error.message is search('already exists')
     - zabbix_hosts_by_hostname is defined
+    - >-
+      (zbx_create_resp.json.error.message | default('')) is search('already exists')
+      or (zbx_create_resp.json.error.data | default('') | string) is search('already exists')
 
 - name: Validate required parameters before update
   set_fact:

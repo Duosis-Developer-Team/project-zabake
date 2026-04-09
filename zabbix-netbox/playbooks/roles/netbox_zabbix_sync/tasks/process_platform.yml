@@ -10,6 +10,8 @@
     platform_dc_limit_bucket: ""
     platform_dc_limit_exceeded: false
     zbx_record: {}
+    zbx_existing_host: {}
+    zbx_scenario: "create"
   run_once: false
 
 - name: Initialize platform DC usage map
@@ -297,10 +299,38 @@
       delegate_to: localhost
       run_once: true
 
+- name: Resolve existing Zabbix host for platform by Loki_ID
+  set_fact:
+    zbx_existing_host: "{{ zabbix_hosts_by_loki_id.get('P_' ~ (platform_id | string)) }}"
+  when:
+    - zbx_record is defined
+    - zbx_record.DEVICE_TYPE is defined
+    - zabbix_hosts_by_loki_id is defined
+    - zabbix_hosts_by_loki_id.get('P_' ~ (platform_id | string)) is not none
+
+- name: Fallback to hostname matching if Loki_ID not found (platform)
+  set_fact:
+    zbx_existing_host: "{{ zabbix_hosts_by_hostname.get(platform_name) }}"
+  when:
+    - zbx_record is defined
+    - zbx_record.DEVICE_TYPE is defined
+    - zabbix_hosts_by_hostname is defined
+    - zbx_existing_host is not defined or zbx_existing_host == {} or zbx_existing_host.hostid is not defined
+    - zabbix_hosts_by_hostname.get(platform_name) is not none
+
+- name: Determine scenario for platform (create or update)
+  set_fact:
+    zbx_scenario: "{{ 'update' if (zbx_existing_host is defined and zbx_existing_host is not none and zbx_existing_host != None and zbx_existing_host.hostid is defined) else 'create' }}"
+  when:
+    - zbx_record is defined
+    - zbx_record.DEVICE_TYPE is defined
+
 - name: Set variables for platform role
   set_fact:
     _zbx_record_for_platform: "{{ zbx_record }}"
     _zabbix_auth_for_platform: "{{ zabbix_auth }}"
+    _zbx_existing_host_for_platform: "{{ zbx_existing_host | default({}) }}"
+    _zbx_scenario_for_platform: "{{ zbx_scenario | default('create') }}"
   when:
     - zbx_record is defined
     - zbx_record.DEVICE_TYPE is defined
@@ -315,8 +345,8 @@
     zabbix_password: "{{ zabbix_password }}"
     zabbix_validate_certs: "{{ zabbix_validate_certs }}"
     zabbix_auth: "{{ _zabbix_auth_for_platform }}"
-    zbx_existing_host: "{{ omit }}"
-    zbx_scenario: "create"
+    zbx_existing_host: "{{ _zbx_existing_host_for_platform }}"
+    zbx_scenario: "{{ _zbx_scenario_for_platform }}"
   when:
     - _zbx_record_for_platform is defined
     - _zbx_record_for_platform.DEVICE_TYPE is defined
