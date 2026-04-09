@@ -3,7 +3,7 @@
 # host_groups field is optional and will be added to the host groups from Netbox
 Lenovo IPMI:
   - name: BLT - Lenovo ICT XCC Monitoring
-    type: snmpv3
+    type: snmpv2
     host_groups: 
       - "Physical Hosts"
 Inspur M6:
@@ -222,16 +222,8 @@ Huawei Backbone Switch:
     type: snmpv2
     host_groups:
       - "Network Devices"
-  - name: BLT - Template SNMP Device Huawei BGP
-    type: snmpv2
-    host_groups:
-      - "Network Devices"
 Huawei Firewall:
   - name: BLT - Huawei VRP SNMP
-    type: snmpv2
-    host_groups:
-      - "Network Devices"
-  - name: BLT - Template SNMP Device Huawei BGP
     type: snmpv2
     host_groups:
       - "Network Devices"
@@ -245,16 +237,8 @@ Huawei Management Switch:
     type: snmpv2
     host_groups:
       - "Network Devices"
-  - name: BLT - Template SNMP Device Huawei BGP
-    type: snmpv2
-    host_groups:
-      - "Network Devices"
 Huawei Router:
   - name: BLT - Huawei VRP SNMP
-    type: snmpv2
-    host_groups:
-      - "Network Devices"
-  - name: BLT - Template SNMP Device Huawei BGP
     type: snmpv2
     host_groups:
       - "Network Devices"
