@@ -7,13 +7,13 @@
 #   Counting uses the first (DC|AZ|ICT|UZ)[0-9]+ match from Site/DC (e.g. DC13-G12 -> DC13), not the full Site string.
 
 mappings:
-  - manufacturer: "Nutanix"
-    device_type: "Nutanix"
-    limit_per_dc: 1
+#  - manufacturer: "Nutanix"
+#    device_type: "Nutanix"
+#    limit_per_dc: 1
 
-  - manufacturer: "Acropolis"
-    device_type: "Acropolis"
-    limit_per_dc: 1
+#  - manufacturer: "Acropolis"
+#    device_type: "Acropolis"
+#    limit_per_dc: 1
 
   - manufacturer: "Zerto"
     device_type: "Zerto"
@@ -27,11 +27,11 @@ mappings:
     device_type: "Veeam"
     limit_per_dc: 0
 
-  - manufacturer: "VMware"
-    device_type: "VMware"
-    limit_per_dc: 1
+#  - manufacturer: "VMware"
+#    device_type: "VMware"
+#    limit_per_dc: 1
 
-  - manufacturer: "IBM HMC"
-    device_type: "IBM Virtualization"
-    limit_per_dc: 1
+#  - manufacturer: "IBM HMC"
+#    device_type: "IBM Virtualization"
+#    limit_per_dc: 1
 
