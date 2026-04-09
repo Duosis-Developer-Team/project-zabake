@@ -178,6 +178,12 @@ mappings:
       manufacturer: "CISCO"
     priority: 1
 
+  - device_type: "Cisco Leaf Switch"
+    conditions:
+      device_role: "Leaf Switch"
+      manufacturer: "CISCO"
+    priority: 1
+
   - device_type: "Cisco Router"
     conditions:
       device_role: "Router"

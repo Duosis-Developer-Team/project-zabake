@@ -150,6 +150,11 @@ Cisco Switch:
     type: snmpv2
     host_groups: 
       - "Network Devices"
+Cisco Leaf Switch:
+  - name: BLT - Cisco Catalyst 3750V2-48TS SNMP
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
 Cisco Router:
   - name: unknown
     type: snmpv2
