@@ -3,7 +3,7 @@
 # host_groups field is optional and will be added to the host groups from Netbox
 Lenovo IPMI:
   - name: BLT - Lenovo ICT XCC Monitoring
-    type: snmpv3
+    type: snmpv2
     host_groups: 
       - "Physical Hosts"
 Inspur M6:
@@ -102,7 +102,7 @@ QNAP Storage:
     host_groups: 
       - "Storage Devices"
 Synology Storage:
-  - name: BLT - Synology Storage Template
+  - name: BLT - Synology
     type: snmpv2
     host_groups: 
       - "Storage Devices"
@@ -215,23 +215,17 @@ HPE Switch:
     type: snmpv2
     host_groups: 
       - "Network Devices"
+# Huawei VRP: second template adds BGP monitoring. If Zabbix reports duplicate item keys (e.g. icmpping),
+# remove the BGP list item here and link BLT - Template SNMP Device Huawei BGP under VRP in Zabbix only.
 Huawei Backbone Switch:
   - name: BLT - Huawei VRP SNMP
     type: snmpv2
-    host_groups: 
-      - "Network Devices"
-  - name: BLT - Template SNMP Device Huawei BGP
-    type: snmpv2
-    host_groups: 
+    host_groups:
       - "Network Devices"
 Huawei Firewall:
   - name: BLT - Huawei VRP SNMP
     type: snmpv2
-    host_groups: 
-      - "Network Devices"
-  - name: BLT - Template SNMP Device Huawei BGP
-    type: snmpv2
-    host_groups: 
+    host_groups:
       - "Network Devices"
 Huawei Operator Switch:
   - name: unknown
@@ -241,20 +235,12 @@ Huawei Operator Switch:
 Huawei Management Switch:
   - name: BLT - Huawei VRP SNMP
     type: snmpv2
-    host_groups: 
-      - "Network Devices"
-  - name: BLT - Template SNMP Device Huawei BGP
-    type: snmpv2
-    host_groups: 
+    host_groups:
       - "Network Devices"
 Huawei Router:
   - name: BLT - Huawei VRP SNMP
     type: snmpv2
-    host_groups: 
-      - "Network Devices"
-  - name: BLT - Template SNMP Device Huawei BGP
-    type: snmpv2
-    host_groups: 
+    host_groups:
       - "Network Devices"
 Huawei Switch:
   - name: unknown
@@ -316,7 +302,7 @@ Raritan Switch:
     host_groups: 
       - "Network Devices"
 Ruckus Management Switch:
-  - name: unknown
+  - name: BLT - SNMP Ruckus Zonedirector
     type: snmpv2
     host_groups: 
       - "Network Devices"
@@ -350,3 +336,78 @@ Citrix LB:
     type: snmpv2
     host_groups: 
       - "Network Devices"
+
+
+# Platform sync device_type keys: netbox_platform_mapping.yml device_type must match these keys
+Nutanix:
+  - name: BLT - Template SNMP Nutanix Cluster
+    type: snmpv3
+    host_groups:
+      - "Virtual Infrastructure"
+    macros:
+      "{$NUTANIX.USER}": "zabbix@blt.vc"
+      "{$NUTANIX.PASSWORD}": "2u4Mzf7RJC"
+
+Zerto:
+  - name: BLT - Zerto by HTTP
+    type: API
+    host_groups:
+      - "Backup & Replication"
+    macros:
+      "{$ZERTO_IP}": "{HOST.IP}"
+      "{$ZERTO_PASS}": "2u4Mzf7RJC"
+      "{$ZERTO_USER}": "zabbix"
+
+NetBackup:
+  - name: BLT - Netbackup by HTTP
+    type: API
+    host_groups:
+      - "Backup & Replication"
+    macros:
+      "{$NB_URL}": "{HOST.IP}"
+      "{$NBMASTER_TOKEN}": "A-EZXhAXHlSJtiMvubyWeum6pZ9-g_S8G8FA82l8wTqyD_ToOexe7aKK-q42UGEb"
+
+Veeam:
+  - name: BLT - Veeam Backup and Replication by HTTP
+    type: API
+    host_groups:
+      - "Backup & Replication"
+    macros:
+      "{$VEEAM.API.URL}": "https://{HOST.IP}:9419"
+      "{$VEEAM.USER}": "zabbix@blt.vc"
+      "{$VEEAM.PASSWORD}": "2u4Mzf7RJC"
+
+VMware:
+  - name: BLT - Intel Virtualization
+    type: API
+    host_groups:
+      - "Virtual Infrastructure"
+    macros:
+      "{$VMWARE.URL}": "https://{HOST.IP}/sdk"
+      "{$VMWARE.USERNAME}": "zabbix@blt.vc"
+      "{$VMWARE.PASSWORD}": "2u4Mzf7RJC"
+
+IBM Virtualization:
+  - name: BLT - IBM HMC Discovery Template
+    type: API
+    host_groups:
+      - "Virtual Infrastructure"
+    macros:
+      "{$HMC.HOST}": "{HOST.IP}"
+      "{$HMC.NAME}": "{HOST.NAME}"
+      "{$HMC.PASSWORD}": "2u4Mzf7RJC"
+      "{$HMC.USER}": "zabbix"
+      "{$SCRIPT.PATH}": "/ZabbixCustomMonitoring/IBM/HMC"
+
+Acropolis:
+  - name: BLT - Acropolis-SNMP-Template v3
+    type: snmpv3
+    host_groups:
+      - "Virtual Infrastructure"
+    macros:
+      "{$ACROPOLIS_IP}": "{HOST.IP}"
+      "{$ACROPOLIS_TOKEN}": "emFiYml4QGJsdC52YzoydTRNemY3UkpD"
+      "{$NUTANIX.USER}": "zabbix@blt.vc"
+      "{$NUTANIX.PASSWORD}": "2u4Mzf7RJC"
+      "{$NUTANIX.PRISM.ELEMENT.IP}": "{HOST.IP}"
+      "{$NUTANIX.PRISM.ELEMENT.PORT}": "9440"

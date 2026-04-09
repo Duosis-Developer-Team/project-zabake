@@ -7,7 +7,6 @@
       import sys
       import requests
       from urllib3.exceptions import InsecureRequestWarning
-      from collections import defaultdict
       
       requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
       
@@ -15,6 +14,7 @@
       netbox_token = sys.argv[2]
       verify_ssl = sys.argv[3].lower() == "true"
       izlenmeli_mode = sys.argv[4] if len(sys.argv) > 4 else "monitor"
+      location_filter = (sys.argv[5] if len(sys.argv) > 5 else "").strip()
       
       session = requests.Session()
       session.headers.update(
@@ -34,7 +34,7 @@
               base_url += "&cf_izlenmeli=Hayır"
 
           next_url = base_url
-          print(f\"DEBUG: Using NetBox platforms API URL ({izlenmeli_mode}): {base_url}\", file=sys.stderr)
+          print(f"DEBUG: Using NetBox platforms API URL ({izlenmeli_mode}): {base_url}", file=sys.stderr)
           while next_url:
               resp = session.get(next_url, verify=verify_ssl, timeout=30)
               resp.raise_for_status()
@@ -55,25 +55,22 @@
           site = custom_fields.get("Site") or custom_fields.get("DC") or ""
           return site or ""
       
-      def is_zabbix_enabled(platform):
-          """
-          Only include platforms where custom_fields['Zabbix'] is truthy.
-          """
-          custom_fields = platform.get("custom_fields") or {}
-          value = custom_fields.get("Zabbix")
-          return bool(value)
-      
       def get_izlenmeli_status(platform):
           """
           Returns one of: 'evet', 'hayir', 'null'
-          - null or evet  => platform can be monitored
-          - hayir         => should be skipped (reported optionally)
+          - null or evet  => platform can be monitored (included in monitor list)
+          - hayir         => do not monitor (excluded from monitor list)
+          Boolean False and string 'false' are treated as hayir.
           """
           custom_fields = platform.get("custom_fields") or {}
           val = custom_fields.get("izlenmeli")
           if val is None:
               return "null"
+          if val is False:
+              return "hayir"
           text = str(val).strip().lower()
+          if text == "false":
+              return "hayir"
           if text in ["evet", "true", "yes", "1"]:
               return "evet"
           if text in ["hayir", "hayır", "no", "0"]:
@@ -94,13 +91,12 @@
       
       all_platforms = fetch_all_platforms()
       
-      zabbix_platforms = []
+      output_platforms = []
       izlenmeyecek_platforms = []
       invalid_site_platforms = []
       
       for platform in all_platforms:
-          if not is_zabbix_enabled(platform):
-              # Skip if Zabbix flag is not enabled
+          if izlenmeli_mode == "monitor" and get_izlenmeli_status(platform) == "hayir":
               continue
       
           site = get_site_code(platform)
@@ -108,11 +104,27 @@
               invalid_site_platforms.append(platform)
               # We still keep the platform for potential processing; reporting is separate
       
-          zabbix_platforms.append(platform)
+          output_platforms.append(platform)
+      
+      if location_filter:
+          needle = location_filter.lower()
+      
+          def matches_location_filter(platform):
+              custom_fields = platform.get("custom_fields") or {}
+              site_val = custom_fields.get("Site")
+              site_str = "" if site_val is None else str(site_val).strip().lower()
+              return needle in site_str
+      
+          before_loc = len(output_platforms)
+          output_platforms = [p for p in output_platforms if matches_location_filter(p)]
+          print(
+              f"DEBUG: location_filter='{location_filter}': {before_loc} -> {len(output_platforms)} platforms",
+              file=sys.stderr,
+          )
       
       result = {
-          "platforms": zabbix_platforms,
-          "platforms_count": len(zabbix_platforms),
+          "platforms": output_platforms,
+          "platforms_count": len(output_platforms),
           "izlenmeyecek_platforms": izlenmeyecek_platforms,
           "izlenmeyecek_count": len(izlenmeyecek_platforms),
           "invalid_site_platforms": invalid_site_platforms,
@@ -133,6 +145,7 @@
     "{{ netbox_token }}"
     "{{ netbox_verify_ssl | string }}"
     "monitor"
+    "{{ location_filter | default('') | string }}"
   register: fetch_platforms_monitor_result
   changed_when: false
   delegate_to: localhost
@@ -144,6 +157,7 @@
     "{{ netbox_token }}"
     "{{ netbox_verify_ssl | string }}"
     "skip"
+    "{{ location_filter | default('') | string }}"
   register: fetch_platforms_skip_result
   changed_when: false
   delegate_to: localhost

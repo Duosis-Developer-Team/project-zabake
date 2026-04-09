@@ -25,9 +25,10 @@
    - `templates.yml`
    - `datacenters.yml`
    - `netbox_device_type_mapping.yml`
-3. `fetch_all_devices.yml` ile Netbox'tan device'ları çekme
+3. `fetch_all_devices.yml` ile Netbox'tan device'ları çekme (`sync_devices: true` veya `only_fetch: true` iken)
 4. Device limit uygulama
-5. Her device için `process_device.yml` çağrısı
+5. Her device için `process_device.yml` çağrısı (`sync_devices: true` iken)
+6. **Güncel:** `sync_devices: false` ile yalnızca platform senkronu (`sync_platforms: true`) çalıştırılabilir; Zabbix host listesi platform API yolu için hâlâ çekilir.
 
 **Eksikler**:
 - ❌ Zabbix'ten host'ları toplu çekme yok
@@ -374,4 +375,15 @@ def extract_tags(device):
 3. **Fallback**: Loki_ID yoksa hostname ile eşleştirme yapılacak
 4. **Idempotency**: Playbook tekrar çalıştırıldığında güvenli olmalı
 5. **Backward Compatibility**: Mevcut çalışan özellikler korunmalı
+
+## Update: integration report and multi-template validation (netbox_zabbix_sync)
+
+- **Report / CSV / email**: `processing_results` rows include `location`, `site`, `tenant`, and `ownership` (from NetBox `get_location_name`, `site`, `tenant`, and `custom_fields.Sahiplik`). Implemented in `process_device.yml` (processor JSON + `zbx_record` `REPORT_*` keys), `zabbix_host_operations.yml` (`device_result`), `main.yml` (skipped devices/platforms), `process_platform.yml`, `send_notification_email.yml`, and `send_notification_email_smtp.py`.
+- **templates.yml**: Expected template names are validated against Zabbix `template.get` results; missing names are reported explicitly. Template rows are deduplicated by `templateid` before `host.create`. See `mappings/README_CONFIG.md` (Multiple Zabbix templates).
+
+## Update: mapping-based Zabbix hostname (hostname_prefix / hostname_suffix)
+
+- **`netbox_device_type_mapping.yml`**: Optional root-level keys `hostname_prefix` and `hostname_suffix` on each mapping entry. Final Zabbix host name = prefix + normalized NetBox `name` + suffix (see `docs/mappings/README_NETBOX_DEVICE_TYPE_MAPPING.md`).
+- **`process_device.yml`**: Embedded processor exposes `find_matching_mapping()`, adds `hostname_prefix` / `hostname_suffix` to JSON output; Ansible computes `zabbix_hostname_final` and uses it for `zbx_record.HOSTNAME` and hostname fallback lookup against `zabbix_hosts_by_hostname`.
+- **Tests**: `tests/test_device_type_mapping.py` covers matching and hostname fields.
 

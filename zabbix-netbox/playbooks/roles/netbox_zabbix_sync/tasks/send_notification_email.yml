@@ -46,6 +46,10 @@
             <tr>
               <th>Sunucu Adı</th>
               <th>Device Role</th>
+              <th>Lokasyon</th>
+              <th>Site</th>
+              <th>Tenant</th>
+              <th>Sahiplik</th>
               <th>IP Adresi</th>
               <th>İşlem Durumu</th>
               <th>Hata Sebebi</th>
@@ -56,6 +60,10 @@
             <tr>
               <td>{{ result.hostname | default('N/A') }}</td>
               <td>{{ result.device_role | default('N/A') }}</td>
+              <td>{{ result.location | default('N/A') }}</td>
+              <td>{{ result.site | default('N/A') }}</td>
+              <td>{{ result.tenant | default('N/A') }}</td>
+              <td>{{ result.ownership | default('N/A') }}</td>
               <td>{{ result.ip | default('N/A') }}</td>
               <td class="status-eklenemedi">EKLENEMEDI</td>
               <td>{{ result.reason | default('-') }}</td>
@@ -79,6 +87,10 @@
             <tr>
               <th>Sunucu / Platform Adı</th>
               <th>Device Role</th>
+              <th>Lokasyon</th>
+              <th>Site</th>
+              <th>Tenant</th>
+              <th>Sahiplik</th>
               <th>IP Adresi</th>
               <th>İşlem Durumu</th>
               <th>Açıklama</th>
@@ -89,6 +101,10 @@
             <tr>
               <td>{{ result.hostname | default('N/A') }}</td>
               <td>{{ result.device_role | default('N/A') }}</td>
+              <td>{{ result.location | default('N/A') }}</td>
+              <td>{{ result.site | default('N/A') }}</td>
+              <td>{{ result.tenant | default('N/A') }}</td>
+              <td>{{ result.ownership | default('N/A') }}</td>
               <td>{{ result.ip | default('N/A') }}</td>
               <td>ATLANDI</td>
               <td>{{ result.reason | default('İzlenmeyecek olarak işaretli') }}</td>
@@ -132,6 +148,11 @@
       {%- for result in failed_list %}
       
       Sunucu: {{ result.hostname | default('N/A') }}
+      Rol: {{ result.device_role | default('N/A') }}
+      Lokasyon: {{ result.location | default('N/A') }}
+      Site: {{ result.site | default('N/A') }}
+      Tenant: {{ result.tenant | default('N/A') }}
+      Sahiplik: {{ result.ownership | default('N/A') }}
       IP: {{ result.ip | default('N/A') }}
       Durum: EKLENEMEDI
       Hata Sebebi: {{ result.reason | default('-') }}
@@ -152,6 +173,10 @@
 
       Ad: {{ result.hostname | default('N/A') }}
       Rol: {{ result.device_role | default('N/A') }}
+      Lokasyon: {{ result.location | default('N/A') }}
+      Site: {{ result.site | default('N/A') }}
+      Tenant: {{ result.tenant | default('N/A') }}
+      Sahiplik: {{ result.ownership | default('N/A') }}
       IP: {{ result.ip | default('N/A') }}
       Açıklama: {{ result.reason | default('İzlenmeyecek olarak işaretli') }}
       {%- endfor -%}

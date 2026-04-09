@@ -213,17 +213,33 @@
   debug:
     msg: "Template response: {{ zbx_tpl_get_resp.json.result | default([]) }}"
 
+- name: Deduplicate template rows by templateid
+  set_fact:
+    zbx_tpl_unique_templates: "{{ zbx_tpl_get_resp.json.result | default([]) | unique(attribute='templateid') }}"
+
 - name: Init template id list
   set_fact:
     zbx_template_id_list: []
 
 - name: Append each templateid as dict
   set_fact:
-    zbx_template_id_list: "{{ zbx_template_id_list + [ { 'templateid': template_item } ] }}"
-  loop: "{{ zbx_tpl_get_resp.json.result | default([]) | map(attribute='templateid') | list }}"
+    zbx_template_id_list: "{{ zbx_template_id_list + [ { 'templateid': template_item.templateid } ] }}"
+  loop: "{{ zbx_tpl_unique_templates | default([]) }}"
   loop_control:
     loop_var: template_item
-  when: zbx_tpl_get_resp.json.result is defined and zbx_tpl_get_resp.json.result | length > 0
+  when: zbx_tpl_unique_templates | default([]) | length > 0
+
+- name: Unique template names expected from mapping
+  set_fact:
+    zbx_template_names_expected: "{{ zbx_template_names | unique | list }}"
+
+- name: Template names returned by Zabbix API
+  set_fact:
+    zbx_templates_found_names: "{{ zbx_tpl_get_resp.json.result | default([]) | map(attribute='name') | list | unique | list }}"
+
+- name: Template names missing in Zabbix
+  set_fact:
+    zbx_templates_missing_names: "{{ zbx_template_names_expected | difference(zbx_templates_found_names) }}"
 
 - name: Warn if no templates found
   debug:
@@ -372,13 +388,20 @@
     - zbx_scenario == 'create'
     - zbx_record.HOST_IP is not defined or zbx_record.HOST_IP == ""
 
-- name: Check if template is missing
+- name: Check if template is missing or not all names resolved in Zabbix
   set_fact:
     _missing_params: "{{ _missing_params + ['template'] }}"
-    _validation_errors: "{{ _validation_errors + ['Template bulunamadı'] }}"
+    _validation_errors: "{{ _validation_errors + [_template_validation_msg] }}"
+  vars:
+    _template_validation_msg: >-
+      {% if zbx_templates_missing_names | default([]) | length > 0 -%}
+      Zabbix'te bulunamayan şablonlar: {{ zbx_templates_missing_names | join(', ') }}
+      {%- else -%}
+      Template bulunamadı (Zabbix'te eşleşen şablon yok)
+      {%- endif %}
   when:
     - zbx_scenario == 'create'
-    - zbx_template_id_list | default([]) | length == 0
+    - (zbx_template_id_list | default([]) | length == 0) or (zbx_templates_missing_names | default([]) | length > 0)
 
 - name: Check if proxy group is missing (when DC_ID is provided)
   vars:
@@ -400,6 +423,10 @@
       status: "eklenemedi"
       reason: "{{ _validation_errors | join(', ') }}"
       ip: "{{ zbx_record.HOST_IP | default('N/A') }}"
+      location: "{{ zbx_record.REPORT_LOCATION | default('N/A', true) }}"
+      site: "{{ zbx_record.REPORT_SITE | default('N/A', true) }}"
+      tenant: "{{ zbx_record.REPORT_TENANT | default('N/A', true) }}"
+      ownership: "{{ zbx_record.REPORT_OWNERSHIP | default('N/A', true) }}"
   when:
     - zbx_scenario == 'create'
     - _missing_params | default([]) | length > 0
@@ -467,6 +494,10 @@
       status: "eklendi"
       reason: ""
       ip: "{{ zbx_record.HOST_IP }}"
+      location: "{{ zbx_record.REPORT_LOCATION | default('N/A', true) }}"
+      site: "{{ zbx_record.REPORT_SITE | default('N/A', true) }}"
+      tenant: "{{ zbx_record.REPORT_TENANT | default('N/A', true) }}"
+      ownership: "{{ zbx_record.REPORT_OWNERSHIP | default('N/A', true) }}"
   when:
     - zbx_scenario == 'create'
     - _missing_params | default([]) | length == 0
@@ -479,10 +510,14 @@
       hostname: "{{ zbx_record.HOSTNAME }}"
       device_role: "{{ zbx_record.DEVICE_ROLE | default('N/A') }}"
       status: "eklenemedi"
-      reason: "{{ zbx_create_resp.json.error.message | default('Bilinmeyen hata') }}"
+      reason: "{{ zbx_create_resp.json.error.message | default('Bilinmeyen hata') }}{{ (' — ' ~ (zbx_create_resp.json.error.data | string)) if (zbx_create_resp.json.error.data is defined and (zbx_create_resp.json.error.data | string | length) > 0) else '' }}"
       error_data: "{{ zbx_create_resp.json.error.data | default('') }}"
       error_code: "{{ zbx_create_resp.json.error.code | default('') }}"
       ip: "{{ zbx_record.HOST_IP }}"
+      location: "{{ zbx_record.REPORT_LOCATION | default('N/A', true) }}"
+      site: "{{ zbx_record.REPORT_SITE | default('N/A', true) }}"
+      tenant: "{{ zbx_record.REPORT_TENANT | default('N/A', true) }}"
+      ownership: "{{ zbx_record.REPORT_OWNERSHIP | default('N/A', true) }}"
   when:
     - zbx_scenario == 'create'
     - _missing_params | default([]) | length == 0
@@ -537,6 +572,10 @@
       status: "eklenemedi"
       reason: "{{ 'Proxy group bulunamadı (DC_ID: ' + zbx_dc_number + ')' if (zbx_dc_number is defined and zbx_dc_number != '' and (zbx_proxy_group_id is not defined or zbx_proxy_group_id == '')) else 'Gerekli parametreler eksik: ' + (_missing_params | default([]) | join(', ')) }}"
       ip: "{{ zbx_record.HOST_IP | default('N/A') }}"
+      location: "{{ zbx_record.REPORT_LOCATION | default('N/A', true) }}"
+      site: "{{ zbx_record.REPORT_SITE | default('N/A', true) }}"
+      tenant: "{{ zbx_record.REPORT_TENANT | default('N/A', true) }}"
+      ownership: "{{ zbx_record.REPORT_OWNERSHIP | default('N/A', true) }}"
   when:
     - zbx_scenario == 'update'
     - zbx_existing_host.hostid is defined
@@ -740,6 +779,10 @@
       status: "güncel"
       reason: "Değişiklik yok, güncelleme yapılmadı"
       ip: "{{ zbx_record.HOST_IP }}"
+      location: "{{ zbx_record.REPORT_LOCATION | default('N/A', true) }}"
+      site: "{{ zbx_record.REPORT_SITE | default('N/A', true) }}"
+      tenant: "{{ zbx_record.REPORT_TENANT | default('N/A', true) }}"
+      ownership: "{{ zbx_record.REPORT_OWNERSHIP | default('N/A', true) }}"
   when:
     - zbx_scenario == 'update'
     - zbx_existing_host.hostid is defined
@@ -792,6 +835,10 @@
       status: "güncellendi"
       reason: "{{ _updated_fields | default('Bilinmeyen değişiklikler') }}"
       ip: "{{ zbx_record.HOST_IP }}"
+      location: "{{ zbx_record.REPORT_LOCATION | default('N/A', true) }}"
+      site: "{{ zbx_record.REPORT_SITE | default('N/A', true) }}"
+      tenant: "{{ zbx_record.REPORT_TENANT | default('N/A', true) }}"
+      ownership: "{{ zbx_record.REPORT_OWNERSHIP | default('N/A', true) }}"
   when:
     - zbx_scenario == 'update'
     - _needs_update is defined
@@ -811,6 +858,10 @@
       error_data: "{{ zbx_update_resp.json.error.data | default('') }}"
       error_code: "{{ zbx_update_resp.json.error.code | default('') }}"
       ip: "{{ zbx_record.HOST_IP }}"
+      location: "{{ zbx_record.REPORT_LOCATION | default('N/A', true) }}"
+      site: "{{ zbx_record.REPORT_SITE | default('N/A', true) }}"
+      tenant: "{{ zbx_record.REPORT_TENANT | default('N/A', true) }}"
+      ownership: "{{ zbx_record.REPORT_OWNERSHIP | default('N/A', true) }}"
   when:
     - zbx_scenario == 'update'
     - _needs_update is defined

@@ -7,10 +7,23 @@
 
 - name: Fetch all devices from Netbox API (with pagination and mapping-based filtering)
   include_tasks: fetch_all_devices.yml
+  when: (sync_devices | bool) or (only_fetch | bool)
+
+- name: Set empty NetBox device lists when device fetch is skipped
+  set_fact:
+    netbox_devices_monitor_raw: []
+    netbox_devices_monitor_count: 0
+    netbox_devices_skip_raw: []
+    netbox_devices_skip_count: 0
+    netbox_devices_raw: []
+    netbox_devices_count: 0
+  when: not ((sync_devices | bool) or (only_fetch | bool))
 
 - name: Fetch all hosts from Zabbix API (for mapping and update detection)
   include_tasks: fetch_all_zabbix_hosts.yml
-  when: not only_fetch | bool
+  when:
+    - not only_fetch | bool
+    - (sync_devices | bool) or (sync_platforms | bool)
 
 - name: Set filtered devices (mapping-based filters already applied in Python script)
   set_fact:
@@ -30,6 +43,16 @@
   set_fact:
     processing_results: []
 
+- name: Fail when no sync mode is enabled
+  fail:
+    msg: >-
+      No work selected: enable sync_devices and/or sync_platforms, or set only_fetch: true
+      for NetBox-only inspection.
+  when:
+    - not only_fetch | bool
+    - not (sync_devices | bool)
+    - not (sync_platforms | bool)
+
 - name: Summary of fetched devices from Netbox (monitor vs skip)
   debug:
     msg: |
@@ -40,24 +63,18 @@
       Skip devices (Hayır) count: {{ netbox_devices_skip_count | default(0) }}
       ============================================
 
-- name: Summary of fetched platforms from Netbox (monitor vs skip)
-  debug:
-    msg: |
-      ============================================
-      NETBOX PLATFORMS FETCH SUMMARY
-      ============================================
-      Monitor platforms (Evet/null) count: {{ netbox_platforms_monitor_count | default(0) }}
-      Skip platforms (Hayır) count: {{ netbox_platforms_skip_count | default(0) }}
-      ============================================
-  when: sync_platforms | bool
-
 - name: End play early in only_fetch mode after fetching from Netbox
   meta: end_play
   when: only_fetch | bool
 
 - name: Display device count
   debug:
-    msg: "Found {{ netbox_devices_final | length }} devices to process (limit: {{ 'unlimited' if device_limit | int == 0 else device_limit | int }}{% if location_filter and location_filter != '' %}, location filter: {{ location_filter }}{% endif %})"
+    msg: >-
+      {% if not (sync_devices | bool) %}
+      Device sync disabled (sync_devices=false); skipping device processing.
+      {% else %}
+      Found {{ netbox_devices_final | length }} devices to process (limit: {{ 'unlimited' if device_limit | int == 0 else device_limit | int }}{% if location_filter and location_filter != '' %}, location filter: {{ location_filter }}{% endif %})
+      {% endif %}
 
 - name: Display list of matching devices
   debug:
@@ -76,7 +93,9 @@
         - Primary IP: {{ device.primary_ip4.address | default('N/A') if device.primary_ip4 else 'N/A' }}
       {% endfor %}
       ============================================
-  when: netbox_devices_final | length > 0
+  when:
+    - sync_devices | bool
+    - netbox_devices_final | length > 0
 
 - name: Process each device
   include_tasks: process_device.yml
@@ -86,6 +105,7 @@
     label: "{{ outer_device_item.name | default('Unknown') }}"
   vars:
     netbox_device: "{{ outer_device_item }}"
+  when: sync_devices | bool
 
 - name: Collect all device results from temporary files
   find:
@@ -94,6 +114,7 @@
   register: result_files
   delegate_to: localhost
   run_once: true
+  when: sync_devices | bool
 
 - name: Load all device results
   set_fact:
@@ -108,12 +129,17 @@
       {{ results }}
   delegate_to: localhost
   run_once: true
-  when: result_files.files is defined and result_files.files | length > 0
+  when:
+    - sync_devices | bool
+    - result_files.files is defined
+    - result_files.files | length > 0
 
-- name: Set empty results if no files found
+- name: Set empty results if no device result files found
   set_fact:
     processing_results: []
-  when: result_files.files is not defined or result_files.files | length == 0
+  when:
+    - sync_devices | bool
+    - result_files.files is not defined or result_files.files | length == 0
   delegate_to: localhost
   run_once: true
 
@@ -124,10 +150,23 @@
   loop: "{{ result_files.files | default([]) }}"
   delegate_to: localhost
   run_once: true
-  when: result_files.files is defined
+  when:
+    - sync_devices | bool
+    - result_files.files is defined
 
-- name: Fetch all platforms from Netbox API (with Zabbix and izlenmeli filtering)
+- name: Fetch all platforms from Netbox API (izlenmeli and optional location filtering)
   include_tasks: fetch_all_platforms.yml
+  when: sync_platforms | bool
+
+- name: Summary of fetched platforms from Netbox (monitor vs skip)
+  debug:
+    msg: |
+      ============================================
+      NETBOX PLATFORMS FETCH SUMMARY
+      ============================================
+      Monitor platforms (Evet/null) count: {{ netbox_platforms_monitor_count | default(0) }}
+      Skip platforms (Hayır) count: {{ netbox_platforms_skip_count | default(0) }}
+      ============================================
   when: sync_platforms | bool
 
 - name: Display platform count
@@ -197,11 +236,16 @@
         'device_role': (d.role.name | default('N/A')) if (d.role is defined and d.role) else 'N/A',
         'status': 'atlandı',
         'reason': 'İzlenmeyecek (NetBox izlenmeli=Hayır filtresi)',
-        'ip': 'N/A'
+        'ip': 'N/A',
+        'location': (d.location.name | default(d.site.name | default('N/A'), true)) if (d.location is defined and d.location) else ((d.site.name | default('N/A', true)) if (d.site is defined and d.site) else 'N/A'),
+        'site': (d.site.name | default('N/A')) if (d.site is defined and d.site) else 'N/A',
+        'tenant': (d.tenant.name | default('N/A')) if (d.tenant is defined and d.tenant) else 'N/A',
+        'ownership': (d.custom_fields.Sahiplik[0] | string | trim) if (d.custom_fields is defined and d.custom_fields.Sahiplik is defined and d.custom_fields.Sahiplik is sequence and d.custom_fields.Sahiplik is not string and (d.custom_fields.Sahiplik | length) > 0) else (((d.custom_fields.Sahiplik | default('', true)) | string | trim) if (d.custom_fields is defined and d.custom_fields.Sahiplik is defined and (d.custom_fields.Sahiplik | string | trim | length) > 0) else 'N/A')
       }) -%}
       {%- endfor -%}
       {{ out }}
   when:
+    - sync_devices | bool
     - report_izlenmeyecek | bool
     - netbox_devices_skip_raw is defined
     - (netbox_devices_skip_raw | default([]) | length) > 0
@@ -218,7 +262,11 @@
         'device_role': 'PLATFORM',
         'status': 'atlandı',
         'reason': 'İzlenmeyecek (NetBox izlenmeli=Hayır filtresi)',
-        'ip': (p.custom_fields.ip_addresses | default('N/A')) if (p.custom_fields is defined) else 'N/A'
+        'ip': (p.custom_fields.ip_addresses | default('N/A')) if (p.custom_fields is defined) else 'N/A',
+        'location': (p.custom_fields.DC | default(p.custom_fields.Site | default('N/A', true), true)) if (p.custom_fields is defined) else 'N/A',
+        'site': (p.custom_fields.Site | default('N/A', true)) if (p.custom_fields is defined) else 'N/A',
+        'tenant': 'N/A',
+        'ownership': 'N/A'
       }) -%}
       {%- endfor -%}
       {{ out }}

@@ -412,6 +412,16 @@ Common paths you can use:
 - `tags` - Array of tags
 - `custom_fields.FIELD_NAME` - Custom field value
 
+## Multiple Zabbix templates (`templates.yml`)
+
+- Top-level keys must match `device_type` values from `netbox_device_type_mapping.yml`.
+- Under each key, use a YAML list: one list item per template. Each item needs at least `name` (must match the Zabbix template name exactly) and `type` (must exist in `template_types.yml`, e.g. `snmpv2`).
+- You may use `name: unknown` as a **reminder placeholder** in YAML; it is still passed to `template.get` like any other name. If no template in Zabbix has that exact name, resolution fails with **Zabbix'te bulunamayan şablonlar** (or similar validation). Replace `unknown` with the real Zabbix template name when ready.
+- Blank `name` values should be avoided; prefer a comment or a dedicated field if you add a future `enabled`-style flag.
+- The sync resolves every configured name via the Zabbix API before `host.create`. If any name is missing in Zabbix, validation fails with a message listing **Zabbix'te bulunamayan şablonlar**.
+- Duplicate template IDs returned by the API are deduplicated before host create (requires Ansible `unique` filter with `attribute`; use Ansible **2.12+**).
+- If one template **links** another inside Zabbix, attaching both explicitly to the same host can trigger API errors on some versions. Prefer linking only the parent template, or adjust linked templates in Zabbix so they are not duplicated on the host.
+
 ## Support
 
 For issues or questions:
