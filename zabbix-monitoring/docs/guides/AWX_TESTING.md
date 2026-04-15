@@ -30,7 +30,7 @@ Bu kılavuz, Zabbix Monitoring Integration'ı Ansible AWX üzerinden nasıl test
    - Job Type: `Run`
    - Inventory: Oluşturduğunuz inventory
    - Project: Oluşturduğunuz project
-   - Playbook: `playbooks/zabbix_monitoring_check.yaml`
+   - Playbook: `playbooks/zabbix_tag_based_monitoring.yaml`
    - Credentials: Gerekli credentials (varsa)
 
 ## 📝 AWX Variables Yapılandırması
@@ -208,14 +208,10 @@ zabbix_password: "your_password"
 mail_recipients:
   - "test@example.com"
 
-# Tüm adımları çalıştır
-step_collect_data: true
-step_analyze_templates: true
-step_detect_connectivity: true
-step_analyze_data: true
-step_check_master_items: true
-step_generate_report: true
-step_send_notifications: true  # Email gönder
+# SMTP (varsayılanlar genelde yeterli)
+mail_smtp_host: "10.34.8.191"
+mail_smtp_port: 587
+mail_from: "infrareport@alert.bulutistan.com"
 
 # Debug
 debug_enabled: true
@@ -223,9 +219,9 @@ log_level: "INFO"
 ```
 
 **Beklenen Sonuç:**
-- Tüm adımlar başarıyla tamamlanır
+- Tag-based connectivity analizi tamamlanır
 - Email gönderilir
-- Email'de HTML rapor bulunur
+- Email'de HTML rapor ve `zabbix_connectivity_raporu.csv` eki bulunur
 
 ### Senaryo 4: Sınırlı Veri Testi
 
@@ -420,13 +416,9 @@ zabbix_password: "your_password"
 mail_recipients:
   - "test@example.com"
 
-step_collect_data: true
-step_analyze_templates: true
-step_detect_connectivity: true
-step_analyze_data: true
-step_check_master_items: true
-step_generate_report: true
-step_send_notifications: true
+mail_smtp_host: "10.34.8.191"
+mail_smtp_port: 587
+mail_from: "infrareport@alert.bulutistan.com"
 
 debug_enabled: true
 log_level: "INFO"
@@ -434,8 +426,9 @@ log_level: "INFO"
 
 **Kontrol:**
 - Email gönderildi mi?
-- Email içeriği doğru mu?
+- Email konusu doğru mu? (`Zabbix Connectivity Raporu - ...`)
 - HTML rapor email'de var mı?
+- `zabbix_connectivity_raporu.csv` eki email'de var mı?
 
 ## 🔍 Debug Output Dosyaları
 

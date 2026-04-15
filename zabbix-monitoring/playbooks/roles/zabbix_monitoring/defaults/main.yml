@@ -31,14 +31,21 @@ host_groups: ""
 send_email: true
 
 # SMTP settings (Set in AWX Extra Variables)
-smtp_server: "localhost"  # Override in AWX
-smtp_port: 25
-smtp_username: ""  # Optional
-smtp_password: ""  # Optional, use AWX Credentials
+# Variable names are aligned with the zabbix-netbox module standard
+mail_smtp_host: "10.34.8.191"
+mail_smtp_port: 587
+mail_smtp_username: ""  # Optional - leave empty to skip authentication
+mail_smtp_password: ""  # Optional, use AWX Credentials
 
-# Email addresses (Set in AWX Extra Variables)
-email_from: "zabbix-monitoring@example.com"
-email_to: "admin@example.com"
+# Sender address
+mail_from: "infrareport@alert.bulutistan.com"
+
+# Recipients (list format required)
+# Must be provided as playbook input: ["user1@example.com", "user2@example.com"]
+mail_recipients: []
+
+# Temporary directory for email files (HTML, text, JSON)
+zabbix_monitoring_tmp_dir: "/tmp/zabbix_monitoring"
 
 # ========================================
 # Debug and Logging Settings

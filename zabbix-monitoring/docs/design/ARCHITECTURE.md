@@ -130,7 +130,41 @@ Analysis Results
 - Format conversion
 - Output management
 
-### 4. Utilities
+### 4. Email Notification
+
+**Amaç**: Connectivity analiz sonuçlarını e-posta ile raporlama
+
+**Dosya**: `roles/zabbix_monitoring/files/send_notification_email_smtp.py`
+
+**Akış**:
+```
+Ansible set_fact (HTML / plain text / subject)
+        │
+        ▼
+/tmp/zabbix_monitoring/
+  ├── analysis_results.json   ← connectivity_analysis verisi
+  ├── email_body.html         ← HTML rapor
+  └── email_body.txt          ← düz metin yedek
+        │
+        ▼
+python3 send_notification_email_smtp.py
+  --html-file ... --text-file ... --results-file ...
+        │
+        ▼
+SMTP → MIMEMultipart(mixed)
+  ├── alternative: HTML + plain text
+  └── attachment: zabbix_connectivity_raporu.csv
+```
+
+**Neden dosya tabanlı yaklaşım?**
+E-posta içeriği `shell` heredoc içine doğrudan gömüldüğünde yüzlerce host olduğunda `ARG_MAX` sınırı aşılır ve özel karakterler heredoc interpolasyonunu bozar. İçeriği önce geçici dosyalara yazarak (`copy` modülü) sonra Python scriptine dosya yolu argümanı olarak göndermek bu sorunları ortadan kaldırır.
+
+**Değişken isimleri** (`defaults/main.yml` ve AWX extra vars):
+- `mail_smtp_host`, `mail_smtp_port`, `mail_smtp_username`, `mail_smtp_password`
+- `mail_from`, `mail_recipients` (liste)
+- `zabbix_monitoring_tmp_dir` (default: `/tmp/zabbix_monitoring`)
+
+### 5. Utilities
 
 **Amaç**: Ortak yardımcı fonksiyonlar
 

@@ -1,232 +1,285 @@
 ---
 # Send email notification for tag-based connectivity analysis
 
-- name: "Check if analysis data is available"
+- name: Check if analysis data is available
   set_fact:
     analysis: "{{ connectivity_analysis }}"
   when: connectivity_analysis is defined
 
-- name: "Build email content for problematic items"
+- name: Calculate connectivity statistics
   set_fact:
-    problematic_items_table: |
-      {% set items = analysis.problematic_items | default([]) %}
-      {% if items | length > 0 %}
-      <h2>WARNING: Connection Problems Detected</h2>
-      <p>The following items have connectivity scores below {{ analysis.summary.threshold_percentage }}%:</p>
-      <table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%;">
-        <thead>
-          <tr style="background-color: #f2f2f2;">
-            <th>Host</th>
-            <th>Host Status</th>
-            <th>Item</th>
-            <th>Score</th>
-            <th>Item Status</th>
-          </tr>
-        </thead>
-        <tbody>
-        {% for item in items %}
-          <tr style="background-color: {% if item.host_status == 'all_critical' %}#ffcccc{% elif item.host_status == 'partial' %}#ffe4b3{% else %}#ffffff{% endif %};">
-            <td>{{ item.host_name | default(item.hostname) }}</td>
-            <td style="text-align: center;">
-              {% if item.host_status == 'all_critical' %}
-              <span style="color: red; font-weight: bold;">ALL CRITICAL</span>
-              {% elif item.host_status == 'partial' %}
-              <span style="color: orange; font-weight: bold;">PARTIAL</span>
-              {% else %}
-              <span style="color: green;">ALL OK</span>
-              {% endif %}
-            </td>
-            <td>{{ item.item_name }}</td>
-            <td style="text-align: center;">
-              {% if item.status == 'no_data' %}
-              <span style="color: gray;">N/A</span>
-              {% else %}
-              {{ item.percentage }}%
-              {% endif %}
-            </td>
-            <td style="text-align: center;">
-              {% if item.status == 'critical' %}
-              <span style="color: red; font-weight: bold;">CRITICAL</span>
-              {% elif item.status == 'warning' %}
-              <span style="color: orange; font-weight: bold;">WARNING</span>
-              {% elif item.status == 'healthy' %}
-              <span style="color: green;">HEALTHY</span>
-              {% elif item.status == 'no_data' %}
-              <span style="color: gray; font-weight: bold;">NO DATA</span>
-              {% else %}
-              <span style="color: gray;">{{ item.status | upper }}</span>
-              {% endif %}
-            </td>
-          </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-      <p style="color: green;">SUCCESS: All connection items are healthy (above {{ analysis.summary.threshold_percentage }}% threshold).</p>
-      {% endif %}
+    stat_total_hosts: "{{ analysis.summary.total_hosts_analyzed | default(0) | int }}"
+    stat_hosts_with_issues: "{{ analysis.summary.hosts_with_issues | default(0) | int }}"
+    stat_hosts_without_issues: "{{ analysis.summary.hosts_without_issues | default(0) | int }}"
+    stat_hosts_without_items: "{{ analysis.summary.hosts_without_connection_items | default(0) | int }}"
+    stat_total_items: "{{ analysis.summary.total_items_analyzed | default(0) | int }}"
+    stat_items_below_threshold: "{{ analysis.summary.items_below_threshold | default(0) | int }}"
+    stat_threshold: "{{ analysis.summary.threshold_percentage | default(70.0) }}"
+    stat_timestamp: "{{ analysis.summary.analysis_timestamp | default('') }}"
   when: connectivity_analysis is defined
 
-- name: "Build email content for hosts without connection items"
+- name: Generate email HTML content
   set_fact:
-    hosts_without_items_section: |
-      {% set hosts = analysis.hosts_without_connection_items | default([]) %}
-      {% if hosts | length > 0 %}
-      <h2>INFO: Hosts Without Connection Items</h2>
-      <p>The following hosts do not have any items with 'connection status' tag:</p>
-      <table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%;">
-        <thead>
-          <tr style="background-color: #f2f2f2;">
-            <th>Host ID</th>
-            <th>Hostname</th>
-            <th>Display Name</th>
-          </tr>
-        </thead>
-        <tbody>
-        {% for host in hosts %}
-          <tr>
-            <td>{{ host.hostid }}</td>
-            <td>{{ host.hostname }}</td>
-            <td>{{ host.host_name | default(host.hostname) }}</td>
-          </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-      {% endif %}
-  when: connectivity_analysis is defined
-
-- name: "Build email summary"
-  set_fact:
-    email_summary: |
-      <h2>SUMMARY:</h2>
-      <ul>
-        <li><strong>Total Hosts Analyzed:</strong> {{ analysis.summary.total_hosts_analyzed }}</li>
-        <li><strong>Hosts with Issues:</strong> {{ analysis.summary.hosts_with_issues }}</li>
-        <li><strong>Hosts without Issues:</strong> {{ analysis.summary.hosts_without_issues }}</li>
-        <li><strong>Hosts without Connection Items:</strong> {{ analysis.summary.hosts_without_connection_items }}</li>
-        <li><strong>Total Items Analyzed:</strong> {{ analysis.summary.total_items_analyzed }}</li>
-        <li><strong>Items Below Threshold:</strong> {{ analysis.summary.items_below_threshold }}</li>
-        <li><strong>Threshold Percentage:</strong> {{ analysis.summary.threshold_percentage }}%</li>
-        <li><strong>Analysis Timestamp:</strong> {{ analysis.summary.analysis_timestamp }}</li>
-      </ul>
-  when: connectivity_analysis is defined
-
-- name: "Build complete email body"
-  set_fact:
-    email_body: |
+    email_body: >-
       <html>
       <head>
         <style>
           body { font-family: Arial, sans-serif; }
           table { border-collapse: collapse; width: 100%; margin: 20px 0; }
-          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-          th { background-color: #4CAF50; color: white; }
+          th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+          th { background-color: #f44336; color: white; }
+          tr:nth-child(even) { background-color: #f2f2f2; }
+          .status-critical { color: #f44336; font-weight: bold; }
+          .status-warning { color: #ff9800; font-weight: bold; }
+          .status-no-data { color: #9e9e9e; font-weight: bold; }
+          .summary { margin: 20px 0; padding: 15px; background-color: #f9f9f9; border-left: 4px solid #4CAF50; }
+          .summary-warning { border-left-color: #f44336; }
+          .section-header { margin-top: 30px; padding: 10px; background-color: #ffebee; border-left: 4px solid #f44336; }
+          .section-header-info { margin-top: 30px; padding: 10px; background-color: #e3f2fd; border-left: 4px solid #2196F3; }
+          .info-box { padding: 10px; background-color: #e3f2fd; border-left: 4px solid #2196F3; margin: 20px 0; }
         </style>
       </head>
       <body>
-        <h1>Zabbix Connectivity Report</h1>
-        {{ email_summary }}
-        {{ problematic_items_table }}
-        {{ hosts_without_items_section }}
-        <hr>
-        <p style="color: #999; font-size: 11px; opacity: 0.7;">
+        <h2>Zabbix Connectivity Raporu</h2>
+        <div class="summary {%- if stat_hosts_with_issues | int > 0 %} summary-warning{%- endif %}">
+          <h3>Özet</h3>
+          <p><strong>Toplam Host:</strong> {{ stat_total_hosts }}</p>
+          <p><strong>Sorunsuz Host:</strong> {{ stat_hosts_without_issues }}</p>
+          <p><strong>Sorunlu Host:</strong> {{ stat_hosts_with_issues }}</p>
+          <p><strong>Bağlantı İtemi Olmayan Host:</strong> {{ stat_hosts_without_items }}</p>
+          <p><strong>Toplam Item:</strong> {{ stat_total_items }}</p>
+          <p><strong>Eşik Altı Item:</strong> {{ stat_items_below_threshold }}</p>
+          <p><strong>Eşik Değeri:</strong> {{ stat_threshold }}%</p>
+          {%- if stat_timestamp %}<p><strong>Analiz Zamanı:</strong> {{ stat_timestamp }}</p>{%- endif %}
+        </div>
+
+        {%- set failed_list = analysis.problematic_items | default([]) | selectattr('status', 'ne', 'healthy') | list -%}
+        {%- if failed_list | length > 0 -%}
+        <div class="section-header"><h3>HATA: Sorunlu Bağlantı İtemleri ({{ failed_list | length }})</h3></div>
+        <table>
+          <thead>
+            <tr>
+              <th>Host Adı</th>
+              <th>İtem Adı</th>
+              <th>Bağlantı Skoru</th>
+              <th>İtem Durumu</th>
+              <th>Host Durumu</th>
+            </tr>
+          </thead>
+          <tbody>
+            {%- for item in failed_list -%}
+            <tr>
+              <td>{{ item.host_name | default(item.hostname) | default('N/A') }}</td>
+              <td>{{ item.item_name | default('N/A') }}</td>
+              <td style="text-align: center;">
+                {%- if item.status == 'no_data' -%}
+                <span class="status-no-data">N/A</span>
+                {%- else -%}
+                {{ item.percentage }}%
+                {%- endif -%}
+              </td>
+              <td style="text-align: center;">
+                {%- if item.status == 'critical' -%}
+                <span class="status-critical">KRİTİK</span>
+                {%- elif item.status == 'warning' -%}
+                <span class="status-warning">UYARI</span>
+                {%- elif item.status == 'no_data' -%}
+                <span class="status-no-data">VERİ YOK</span>
+                {%- else -%}
+                {{ item.status | upper }}
+                {%- endif -%}
+              </td>
+              <td style="text-align: center;">
+                {%- if item.host_status == 'all_critical' -%}
+                <span class="status-critical">TAMAMEN KRİTİK</span>
+                {%- elif item.host_status == 'partial' -%}
+                <span class="status-warning">KISMİ SORUN</span>
+                {%- else -%}
+                {{ item.host_status | upper }}
+                {%- endif -%}
+              </td>
+            </tr>
+            {%- endfor -%}
+          </tbody>
+        </table>
+        {%- else -%}
+        <div class="info-box">
+          <h3>Tüm Bağlantı İtemleri Sağlıklı</h3>
+          <p>Hiçbir sorun tespit edilmedi. Tüm itemler eşik değerinin ({{ stat_threshold }}%) üzerinde.</p>
+        </div>
+        {%- endif -%}
+
+        {%- set no_item_hosts = analysis.hosts_without_connection_items | default([]) -%}
+        {%- if no_item_hosts | length > 0 -%}
+        <div class="section-header-info"><h3>Bağlantı İtemi Olmayan Hostlar ({{ no_item_hosts | length }})</h3></div>
+        <table>
+          <thead>
+            <tr>
+              <th>Host ID</th>
+              <th>Hostname</th>
+              <th>Görünen Ad</th>
+            </tr>
+          </thead>
+          <tbody>
+            {%- for host in no_item_hosts -%}
+            <tr>
+              <td>{{ host.hostid | default('N/A') }}</td>
+              <td>{{ host.hostname | default('N/A') }}</td>
+              <td>{{ host.host_name | default(host.hostname) | default('N/A') }}</td>
+            </tr>
+            {%- endfor -%}
+          </tbody>
+        </table>
+        {%- endif -%}
+
+        <div class="info-box">
+          <p><strong>Detaylı Rapor:</strong> Tüm verilerin detaylı bilgileri ekteki <code>zabbix_connectivity_raporu.csv</code> dosyasında yer almaktadır.</p>
+        </div>
+
+        <p style="margin-top: 30px; color: #999; font-size: 11px; opacity: 0.7;">
           Bu rapor otomatik olarak HMDL Automation tarafından oluşturulmuştur.
         </p>
       </body>
       </html>
   when: connectivity_analysis is defined
 
-- name: "Generate email subject"
+- name: Generate email plain text content
+  set_fact:
+    email_text_body: >-
+      ZABBIX CONNECTİVİTY RAPORU
+      ===========================
+
+      ÖZET:
+      -----
+      Toplam Host: {{ stat_total_hosts }}
+      Sorunsuz Host: {{ stat_hosts_without_issues }}
+      Sorunlu Host: {{ stat_hosts_with_issues }}
+      Bağlantı İtemi Olmayan Host: {{ stat_hosts_without_items }}
+      Toplam Item: {{ stat_total_items }}
+      Eşik Altı Item: {{ stat_items_below_threshold }}
+      Eşik Değeri: {{ stat_threshold }}%
+      {%- if stat_timestamp %}
+      Analiz Zamanı: {{ stat_timestamp }}
+      {%- endif %}
+
+      {%- set failed_list = analysis.problematic_items | default([]) | selectattr('status', 'ne', 'healthy') | list -%}
+      {%- if failed_list | length > 0 %}
+
+      SORUNLU BAĞLANTI İTEMLERİ ({{ failed_list | length }}):
+      ------------------------------------------
+      {%- for item in failed_list %}
+
+      Host: {{ item.host_name | default(item.hostname) | default('N/A') }}
+      İtem: {{ item.item_name | default('N/A') }}
+      Skor: {%- if item.status == 'no_data' %} N/A{%- else %} {{ item.percentage }}%{%- endif %}
+      İtem Durumu: {{ item.status | upper }}
+      Host Durumu: {{ item.host_status | upper }}
+      {%- endfor -%}
+      {%- else %}
+
+      TÜM BAĞLANTI İTEMLERİ SAĞLIKLI
+      ------------------------------------------
+      Hiçbir sorun tespit edilmedi. Eşik: {{ stat_threshold }}%
+      {%- endif %}
+
+      {%- set no_item_hosts = analysis.hosts_without_connection_items | default([]) -%}
+      {%- if no_item_hosts | length > 0 %}
+
+      BAĞLANTI İTEMİ OLMAYAN HOSTLAR ({{ no_item_hosts | length }}):
+      ------------------------------------------
+      {%- for host in no_item_hosts %}
+      {{ host.host_name | default(host.hostname) | default('N/A') }}
+      {%- endfor -%}
+      {%- endif %}
+
+
+      DETAYLI RAPOR:
+      ------------------------------------------
+      Tüm verilerin detaylı bilgileri ekteki "zabbix_connectivity_raporu.csv" dosyasında yer almaktadır.
+
+      ---
+      Bu rapor otomatik olarak HMDL Automation tarafından oluşturulmuştur.
+  when: connectivity_analysis is defined
+
+- name: Generate email subject
   set_fact:
     email_subject: >-
-      {%- if analysis.summary.hosts_with_issues > 0 -%}
-      Zabbix Connectivity Report - {{ analysis.summary.hosts_with_issues }} Host(s) with Issues
+      {%- if stat_hosts_with_issues | int > 0 -%}
+      Zabbix Connectivity Raporu - {{ stat_hosts_with_issues }} Host Sorunu Var
       {%- else -%}
-      Zabbix Connectivity Report - All Hosts Healthy
+      Zabbix Connectivity Raporu - Tüm Hostlar Sağlıklı ({{ stat_total_hosts }} Host Analiz Edildi)
       {%- endif -%}
   when: connectivity_analysis is defined
 
-- name: "Prepare email recipients"
+- name: Prepare email recipients as comma-separated string
   set_fact:
-    mail_recipients_str: "{{ email_to if email_to is string else email_to | join(',') }}"
+    mail_recipients_str: "{{ mail_recipients | join(',') }}"
   when: connectivity_analysis is defined
 
-- name: "Send notification email using Python SMTP"
-  shell: |
-    python3 << 'PYTHON_SCRIPT'
-    import smtplib
-    from email.mime.text import MIMEText
-    from email.mime.multipart import MIMEMultipart
-    import sys
-    
-    # Email configuration
-    smtp_host = "{{ smtp_server }}"
-    smtp_port = {{ smtp_port }}
-    smtp_user = "{{ smtp_username | default('') }}"
-    smtp_pass = "{{ smtp_password | default('') }}"
-    from_addr = "{{ email_from }}"
-    recipients_str = "{{ mail_recipients_str }}"
-    subject = "{{ email_subject }}"
-    
-    # Parse recipients
-    to_addrs_list = [addr.strip() for addr in recipients_str.split(',') if addr.strip()]
-    to_addrs_str = ', '.join(to_addrs_list)
-    
-    # Create message
-    msg = MIMEMultipart('alternative')
-    msg['Subject'] = subject
-    msg['From'] = from_addr
-    msg['To'] = to_addrs_str
-    
-    # Plain text version (basic)
-    text_content = """
-    Zabbix Connectivity Report
-    ====================================
-    
-    This is an HTML email. Please view it in an HTML-capable email client.
-    
-    Summary:
-    - Total Hosts Analyzed: {{ analysis.summary.total_hosts_analyzed }}
-    - Hosts with Issues: {{ analysis.summary.hosts_with_issues }}
-    - Items Below Threshold: {{ analysis.summary.items_below_threshold }}
-    
-    Please view this email in HTML format for detailed information.
-    """
-    
-    # HTML version
-    html_content = r"""{{ email_body }}"""
-    
-    # Attach both versions
-    part1 = MIMEText(text_content, 'plain', 'utf-8')
-    part2 = MIMEText(html_content, 'html', 'utf-8')
-    msg.attach(part1)
-    msg.attach(part2)
-    
-    # Send email
-    try:
-        server = smtplib.SMTP(smtp_host, smtp_port, timeout=30)
-        if smtp_user and smtp_pass:
-            server.login(smtp_user, smtp_pass)
-        server.sendmail(from_addr, to_addrs_list, msg.as_string())
-        server.quit()
-        print("SUCCESS: Email sent successfully to: " + to_addrs_str)
-        sys.exit(0)
-    except Exception as e:
-        print(f"ERROR: Failed to send email: {e}")
-        sys.exit(1)
-    PYTHON_SCRIPT
-  args:
-    executable: /bin/bash
-  when: 
+- name: Convert analysis results to JSON for Python script
+  set_fact:
+    analysis_results_json: "{{ connectivity_analysis | to_json }}"
+  when: connectivity_analysis is defined
+
+- name: Ensure temporary directory for email data exists
+  file:
+    path: "{{ zabbix_monitoring_tmp_dir | default('/tmp/zabbix_monitoring') }}"
+    state: directory
+    mode: '0700'
+  delegate_to: localhost
+  run_once: true
+  when: connectivity_analysis is defined
+
+- name: Write analysis results JSON to temporary file
+  copy:
+    content: "{{ analysis_results_json }}"
+    dest: "{{ zabbix_monitoring_tmp_dir | default('/tmp/zabbix_monitoring') }}/analysis_results.json"
+    mode: '0600'
+  delegate_to: localhost
+  run_once: true
+  when: connectivity_analysis is defined
+
+- name: Write email HTML content to temporary file
+  copy:
+    content: "{{ email_body }}"
+    dest: "{{ zabbix_monitoring_tmp_dir | default('/tmp/zabbix_monitoring') }}/email_body.html"
+    mode: '0600'
+  delegate_to: localhost
+  run_once: true
+  when: connectivity_analysis is defined
+
+- name: Write email plain text content to temporary file
+  copy:
+    content: "{{ email_text_body }}"
+    dest: "{{ zabbix_monitoring_tmp_dir | default('/tmp/zabbix_monitoring') }}/email_body.txt"
+    mode: '0600'
+  delegate_to: localhost
+  run_once: true
+  when: connectivity_analysis is defined
+
+- name: Send notification email with CSV attachment using Python SMTP
+  command: >
+    python3 {{ role_path }}/files/send_notification_email_smtp.py
+    --smtp-host {{ mail_smtp_host }}
+    --smtp-port {{ mail_smtp_port }}
+    --smtp-user {{ mail_smtp_username | default('') }}
+    --smtp-pass {{ mail_smtp_password | default('') }}
+    --from-addr {{ mail_from }}
+    --recipients "{{ mail_recipients_str }}"
+    --subject "{{ email_subject }}"
+    --results-file "{{ zabbix_monitoring_tmp_dir | default('/tmp/zabbix_monitoring') }}/analysis_results.json"
+    --html-file "{{ zabbix_monitoring_tmp_dir | default('/tmp/zabbix_monitoring') }}/email_body.html"
+    --text-file "{{ zabbix_monitoring_tmp_dir | default('/tmp/zabbix_monitoring') }}/email_body.txt"
+  when:
     - connectivity_analysis is defined
-    - send_email | default(true) | bool
-    - email_to is defined
-    - email_to | length > 0
+    - mail_recipients is defined
+    - mail_recipients | length > 0
   delegate_to: localhost
   run_once: true
   ignore_errors: true
-  register: email_send_result
+  register: mail_send_result
 
-- name: "Display email notification status"
+- name: Display email notification status
   debug:
     msg: |
       ============================================
@@ -234,25 +287,34 @@
       ============================================
       {% if connectivity_analysis is defined %}
       ANALYSIS SUMMARY:
-      - Total Hosts: {{ analysis.summary.total_hosts_analyzed }}
-      - Hosts with Issues: {{ analysis.summary.hosts_with_issues }}
-      - Hosts without Issues: {{ analysis.summary.hosts_without_issues }}
-      - Hosts without Connection Items: {{ analysis.summary.hosts_without_connection_items }}
-      - Total Items Analyzed: {{ analysis.summary.total_items_analyzed }}
-      - Items Below Threshold: {{ analysis.summary.items_below_threshold }}
-      
-      {% if email_send_result is defined and email_send_result.rc is defined %}
-      {% if email_send_result.rc == 0 %}
-      SUCCESS: Email sent successfully to: {{ email_to if email_to is string else email_to | join(', ') }}
-      Method: Python SMTP
+      - Total Hosts: {{ stat_total_hosts }}
+      - Hosts with Issues: {{ stat_hosts_with_issues }}
+      - Hosts without Issues: {{ stat_hosts_without_issues }}
+      - Hosts without Connection Items: {{ stat_hosts_without_items }}
+      - Total Items Analyzed: {{ stat_total_items }}
+      - Items Below Threshold: {{ stat_items_below_threshold }}
+      - Threshold: {{ stat_threshold }}%
+      {% if stat_hosts_with_issues | int > 0 %}
+      WARNING: {{ stat_hosts_with_issues }} host(s) have connectivity issues
+      {% else %}
+      SUCCESS: All hosts are healthy
+      {% endif %}
+      {% if mail_recipients is defined and mail_recipients | length > 0 %}
+      {% if mail_send_result is defined and mail_send_result.rc is defined %}
+      {% if mail_send_result.rc == 0 %}
+      SUCCESS: Email sent successfully to: {{ mail_recipients | join(', ') }}
+      Method: Python SMTP with CSV attachment
       {% else %}
       ERROR: Email sending failed
-      Error: {{ email_send_result.stdout | default('Unknown error') }}
+      Details: {{ mail_send_result.stdout | default('Unknown error') }}
       {% endif %}
-      {% elif email_send_result is skipped %}
+      {% elif mail_send_result is skipped %}
       INFO: Email sending skipped
       {% else %}
       INFO: Email status undefined
+      {% endif %}
+      {% else %}
+      INFO: Email not sent - mail_recipients not defined or empty
       {% endif %}
       {% else %}
       INFO: Analysis results not found

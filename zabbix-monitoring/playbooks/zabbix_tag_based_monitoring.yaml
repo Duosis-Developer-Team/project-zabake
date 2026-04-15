@@ -1,53 +1,65 @@
 ---
-# Zabbix Tag-Based Connectivity Monitoring Playbook
-# This playbook performs tag-based connectivity monitoring for Zabbix hosts
-# 
-# Required AWX Extra Variables:
-#   - zabbix_url: Zabbix API URL
-#   - zabbix_user: Zabbix username
-#   - zabbix_password: Zabbix password (use AWX Credentials)
-#   - smtp_server: SMTP server address
-#   - email_to: Recipient email address(es)
-#
-# Optional AWX Extra Variables:
-#   - connection_tag: Tag name (default: "connection status")
-#   - history_limit: Number of values to analyze (default: 10)
-#   - threshold_percentage: Minimum % (default: 70.0)
-#   - host_groups: Filter by host groups (default: "" = all)
-#   - smtp_port: SMTP port (default: 25)
-#   - email_from: Sender email (default: zabbix-monitoring@example.com)
-
-- name: "Zabbix Tag-Based Connectivity Monitoring"
+- name: Zabbix Tag-Based Connectivity Monitoring
   hosts: localhost
   gather_facts: yes
-  
-  # All variables should come from AWX Extra Variables or defaults/main.yml
-  # No environment variable lookups - AWX manages variables
-  
-  tasks:
-    - name: "Validate required variables"
-      assert:
-        that:
-          - zabbix_url is defined and zabbix_url | length > 0
-          - zabbix_user is defined and zabbix_user | length > 0
-          - zabbix_password is defined and zabbix_password | length > 0
-        fail_msg: "Zabbix connection parameters (ZABBIX_URL, ZABBIX_USER, ZABBIX_PASSWORD) must be set"
-    
-    - name: "Run tag-based connectivity check"
-      include_role:
-        name: zabbix_monitoring
-        tasks_from: tag_based_connectivity_check.yml
-    
-    - name: "Send email notification"
-      include_role:
-        name: zabbix_monitoring
-        tasks_from: send_tag_based_notification_email.yml
-      when: send_email | default(true) | bool
-    
-    - name: "Display completion message"
-      debug:
-        msg: |
-          ========================================
-          Tag-Based Connectivity Check Completed
-          ========================================
-          Status: Success
+  vars:
+    # Zabbix credentials (required)
+    _zabbix_url: "{{ zabbix_url | default('') }}"
+    _zabbix_user: "{{ zabbix_user | default('') }}"
+    _zabbix_password: "{{ zabbix_password | default('') }}"
+
+    # Tag-based connectivity settings (optional)
+    _connection_tag: "{{ connection_tag | default('connection status') }}"
+    _history_limit: "{{ history_limit | default(10) }}"
+    _threshold_percentage: "{{ threshold_percentage | default(70.0) }}"
+    _host_groups: "{{ host_groups | default('') }}"
+
+    # Email notification settings (optional)
+    _mail_recipients: "{{ mail_recipients | default([]) }}"
+
+  # All variables come from AWX Extra Variables or defaults/main.yml
+  # Required AWX Extra Variables:
+  #   - zabbix_url: Zabbix API URL (e.g. https://zabbix.example.com/api_jsonrpc.php)
+  #   - zabbix_user: Zabbix username
+  #   - zabbix_password: Zabbix password (use AWX Credentials)
+  #
+  # Optional AWX Extra Variables:
+  #   - connection_tag: Tag name (default: "connection status")
+  #   - history_limit: Number of values to analyze (default: 10)
+  #   - threshold_percentage: Minimum percentage (default: 70.0)
+  #   - host_groups: Filter by host groups (default: "" = all)
+  #   - send_email: Whether to send email (default: true)
+  #   - mail_recipients: List of recipient emails (default: [])
+  #   - mail_smtp_host: SMTP server (default: 10.34.8.191)
+  #   - mail_smtp_port: SMTP port (default: 587)
+  #   - mail_from: Sender address (default: infrareport@alert.bulutistan.com)
+  #   - mail_smtp_username: SMTP username (default: "")
+  #   - mail_smtp_password: SMTP password (default: "")
+
+  pre_tasks:
+    - name: Validate zabbix_url
+      fail:
+        msg: "zabbix_url is required"
+      when: _zabbix_url | length == 0
+
+    - name: Validate zabbix_user
+      fail:
+        msg: "zabbix_user is required"
+      when: _zabbix_user | length == 0
+
+    - name: Validate zabbix_password
+      fail:
+        msg: "zabbix_password is required"
+      when: _zabbix_password | length == 0
+
+  roles:
+    - role: zabbix_monitoring
+      vars:
+        zabbix_url: "{{ _zabbix_url }}"
+        zabbix_user: "{{ _zabbix_user }}"
+        zabbix_password: "{{ _zabbix_password }}"
+        connection_tag: "{{ _connection_tag }}"
+        history_limit: "{{ _history_limit }}"
+        threshold_percentage: "{{ _threshold_percentage }}"
+        host_groups: "{{ _host_groups }}"
+        mail_recipients: "{{ _mail_recipients }}"

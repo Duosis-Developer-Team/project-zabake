@@ -1,140 +1,142 @@
-# Email Notification Kullanım Kılavuzu
+# Email Notification Guide
 
-## Özet
+## Overview
 
-Zabbix Monitoring Integration playbook'u, monitoring kontrolü tamamlandıktan sonra otomatik olarak e-posta bildirimi gönderir.
+The `zabbix_tag_based_monitoring.yaml` playbook sends an email notification after the connectivity analysis completes. The email includes an HTML report, a plain-text fallback, and a **CSV attachment** (`zabbix_connectivity_raporu.csv`) with the full per-item breakdown.
 
-## SMTP Konfigürasyonu
+Email sending is handled by a dedicated Python script (`roles/zabbix_monitoring/files/send_notification_email_smtp.py`) that receives file paths as arguments — not inline content. This prevents `ARG_MAX` and special-character issues that occur when large HTML bodies are interpolated into shell scripts.
 
-Varsayılan SMTP ayarları:
-- **SMTP Sunucu**: `10.34.8.191`
-- **SMTP Port**: `587`
-- **Gönderen Adres**: `infrareport@alert.bulutistan.com`
-- **User Authentication**: `False` (kullanıcı adı/şifre kullanılmaz)
-- **TLS**: `False` (TLS kullanılmaz)
+## SMTP Configuration
 
-**Not**: SMTP ayarları varsayılan olarak yukarıdaki değerlere sabitlenmiştir. Değiştirilmesi gerekirse `defaults/main.yml` dosyasından güncellenebilir.
+Default SMTP settings (configured in `defaults/main.yml`):
 
-## Kullanım
+| Variable | Default | Description |
+|---|---|---|
+| `mail_smtp_host` | `10.34.8.191` | SMTP server address |
+| `mail_smtp_port` | `587` | SMTP port |
+| `mail_from` | `infrareport@alert.bulutistan.com` | Sender address |
+| `mail_smtp_username` | `""` | SMTP username (empty = no auth) |
+| `mail_smtp_password` | `""` | SMTP password (use AWX Credentials) |
+| `mail_recipients` | `[]` | Recipient list — must be provided as input |
 
-### Temel Kullanım (E-posta ile)
+## Usage
+
+### Basic Usage (with email notification)
 
 ```bash
-ansible-playbook playbooks/zabbix_monitoring_check.yaml \
+ansible-playbook playbooks/zabbix_tag_based_monitoring.yaml \
   -e "zabbix_url=https://zabbix.example.com/api_jsonrpc.php" \
   -e "zabbix_user=admin" \
   -e "zabbix_password=password" \
-  -e "mail_recipients=['user1@example.com','user2@example.com']"
+  -e '{"mail_recipients": ["user1@example.com", "user2@example.com"]}'
 ```
 
-### Tek Alıcı ile
+### Single recipient
 
 ```bash
-ansible-playbook playbooks/zabbix_monitoring_check.yaml \
+ansible-playbook playbooks/zabbix_tag_based_monitoring.yaml \
   -e "zabbix_url=https://zabbix.example.com/api_jsonrpc.php" \
   -e "zabbix_user=admin" \
   -e "zabbix_password=password" \
-  -e "mail_recipients=['admin@bulutistan.com']"
+  -e '{"mail_recipients": ["admin@bulutistan.com"]}'
 ```
 
-### E-posta Olmadan Çalıştırma
+### Run without email
 
-E-posta gönderilmesini istemiyorsanız, `mail_recipients` parametresini atlayın:
+Omit `mail_recipients` or pass an empty list:
 
 ```bash
-ansible-playbook playbooks/zabbix_monitoring_check.yaml \
+ansible-playbook playbooks/zabbix_tag_based_monitoring.yaml \
   -e "zabbix_url=https://zabbix.example.com/api_jsonrpc.php" \
   -e "zabbix_user=admin" \
   -e "zabbix_password=password"
 ```
 
-## E-posta İçeriği
-
-E-posta şu bilgileri içerir:
-
-### Özet Bölümü
-- Toplam host sayısı
-- Connectivity'ye sahip host sayısı
-- Connectivity sorunu olan host sayısı
-- Ortalama connectivity skoru
-- Toplam/aktif/inaktif item sayıları
-
-### Durum Bilgisi
-- Tüm host'lar sağlıklı mı?
-- Sorun tespit edildi mi?
-
-### Sorunlu Host'lar (Varsa)
-- Hostname
-- Connectivity skoru
-- Item durumları
-- Sorun detayları
-
-## E-posta Gönderme Koşulları
-
-E-posta **her zaman** gönderilir (başarılı veya başarısız fark etmez), ancak şu koşullar sağlanmalıdır:
-1. `mail_recipients` parametresi tanımlı ve boş değil
-2. Analiz sonuçları başarıyla oluşturulmuş olmalı
-
-## SMTP Ayarlarını Özelleştirme
-
-Varsayılan SMTP ayarlarını değiştirmek için:
+### Override SMTP settings
 
 ```bash
-ansible-playbook playbooks/zabbix_monitoring_check.yaml \
+ansible-playbook playbooks/zabbix_tag_based_monitoring.yaml \
   -e "zabbix_url=https://zabbix.example.com/api_jsonrpc.php" \
   -e "zabbix_user=admin" \
   -e "zabbix_password=password" \
-  -e "mail_recipients=['user@example.com']" \
+  -e '{"mail_recipients": ["user@example.com"]}' \
   -e "mail_smtp_host=10.34.8.191" \
   -e "mail_smtp_port=587" \
-  -e "mail_from=infrareport@alert.bulutistan.com" \
-  -e "mail_smtp_use_tls=false"
+  -e "mail_from=infrareport@alert.bulutistan.com"
 ```
 
-## Örnek E-posta Çıktısı
+## Email Content
 
-```
-Zabbix Monitoring Connectivity Report
+The notification includes:
 
-ÖZET:
------
-Toplam Host: 100
-Connectivity'ye Sahip Host: 95
-Connectivity Sorunu Olan Host: 5
-Ortalama Connectivity Skoru: 0.92
-Toplam Item: 500
-Aktif Item: 475
-İnaktif Item: 25
+### Summary section
+- Total hosts analyzed
+- Hosts with issues / without issues
+- Hosts without connection items
+- Total items analyzed / items below threshold
+- Threshold percentage
+- Analysis timestamp
 
-⚠️  CONNECTIVITY SORUNLARI TESPİT EDİLDİ
-Bazı host'larda connectivity sorunları tespit edildi.
-```
+### Problematic connection items (if any)
+HTML table with columns: Host Name, Item Name, Connectivity Score (%), Item Status, Host Status.
 
-## Notlar
+### Hosts without connection items (if any)
+Hosts that have no items tagged with `connection status`.
 
-- E-posta HTML formatında gönderilir (tablo formatında)
-- Plain text versiyonu da eklenir
-- E-posta gönderimi her zaman yapılır (başarılı/başarısız fark etmez)
-- `mail_recipients` parametresi zorunlu değildir (opsiyonel)
-- Raporlar sadece email olarak gönderilir, lokal dosya sistemi veya remote storage kullanılmaz
+### CSV attachment — `zabbix_connectivity_raporu.csv`
+Full per-item breakdown sorted by severity:
 
-## AWX'te Kullanım
+| Column | Description |
+|---|---|
+| Sıra No | Row number |
+| Host Adı | Zabbix hostname |
+| İtem Adı | Item name |
+| Bağlantı Skoru (%) | Connectivity percentage (N/A for no-data items) |
+| İtem Durumu | KRİTİK / UYARI / VERİ YOK / BAĞLANTI İTEMİ YOK |
+| Host Durumu | TAMAMEN KRİTİK / KISMİ SORUN / TAMAM |
+| Zaman Damgası | Report generation time |
 
-AWX'te email gönderimi için:
+## Email sending conditions
 
-1. Job Template'de `mail_recipients` extra variable'ını tanımlayın
-2. SMTP ayarları varsayılan değerlerle çalışır
-3. Email her job çalıştırmasında gönderilir
+Email is sent when **all** of the following are true:
+1. `mail_recipients` is defined and non-empty (list)
+2. `connectivity_analysis` data was successfully produced by the check
 
-Örnek AWX extra_vars:
+## AWX Usage
+
+In AWX Job Template extra variables:
+
 ```yaml
 mail_recipients:
   - "admin@example.com"
   - "team@example.com"
 ```
 
-## 🔗 İlgili Dokümanlar
+SMTP settings use `defaults/main.yml` values unless overridden in extra vars.
+
+## Architecture
+
+```
+set_fact (HTML, text, subject)
+         │
+         ▼
+/tmp/zabbix_monitoring/
+   ├── analysis_results.json
+   ├── email_body.html
+   └── email_body.txt
+         │
+         ▼
+python3 files/send_notification_email_smtp.py
+   --html-file ... --text-file ... --results-file ...
+         │
+         ▼
+SMTP → HTML + plain text + zabbix_connectivity_raporu.csv
+```
+
+The temporary directory path is configurable via `zabbix_monitoring_tmp_dir` (default: `/tmp/zabbix_monitoring`).
+
+## Related Documents
 
 - [Usage Guide](USAGE.md)
-- [AWX Setup Guide](AWX_SETUP.md)
-- [Development Plan](../development/DEVELOPMENT_PLAN.md)
+- [AWX Testing Guide](AWX_TESTING.md)
+- [Architecture](../design/ARCHITECTURE.md)

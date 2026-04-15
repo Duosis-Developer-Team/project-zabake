@@ -364,6 +364,8 @@ Nutanix:
     macros:
       "{$NUTANIX.USER}": "zabbix@blt.vc"
       "{$NUTANIX.PASSWORD}": "2u4Mzf7RJC"
+      "{$NUTANIX.PRISM.ELEMENT.IP}": "{HOST.IP}"
+      "{$NUTANIX.PRISM.ELEMENT.PORT}": "9440"
 
 Zerto:
   - name: BLT - Zerto by HTTP
