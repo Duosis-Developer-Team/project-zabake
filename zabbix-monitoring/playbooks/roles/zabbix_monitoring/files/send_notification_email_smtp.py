@@ -20,6 +20,17 @@ def load_json_file(path: Path):
     return json.loads(text)
 
 
+def _host_metadata_columns(row: dict) -> list:
+    """Report columns from analysis JSON (location, contact, tenant, interface_ip, proxy_group_name)."""
+    return [
+        row.get("location", "") or "",
+        row.get("contact", "") or "",
+        row.get("tenant", "") or "",
+        row.get("interface_ip", "") or "",
+        row.get("proxy_group_name", "") or "",
+    ]
+
+
 def build_csv_attachment(analysis_results: dict) -> MIMEApplication:
     csv_buffer = io.StringIO()
     writer = csv.writer(csv_buffer, quoting=csv.QUOTE_ALL)
@@ -28,6 +39,11 @@ def build_csv_attachment(analysis_results: dict) -> MIMEApplication:
         [
             "Sıra No",
             "Host Adı",
+            "Location",
+            "Contact",
+            "Tenant",
+            "Arayüz IP",
+            "Proxy Grubu",
             "İtem Adı",
             "Bağlantı Skoru (%)",
             "İtem Durumu",
@@ -69,10 +85,12 @@ def build_csv_attachment(analysis_results: dict) -> MIMEApplication:
         status_tr = item_status_tr_map.get(status, status.upper())
         host_status_tr = host_status_tr_map.get(host_status, host_status.upper())
 
+        meta = _host_metadata_columns(item)
         writer.writerow(
             [
                 row_idx,
                 host_name,
+                *meta,
                 item_name,
                 score_display,
                 status_tr,
@@ -85,10 +103,12 @@ def build_csv_attachment(analysis_results: dict) -> MIMEApplication:
     hosts_without_items = analysis_results.get("hosts_without_connection_items", [])
     for host in hosts_without_items:
         host_name = host.get("host_name") or host.get("hostname", "N/A")
+        meta = _host_metadata_columns(host)
         writer.writerow(
             [
                 row_idx,
                 host_name,
+                *meta,
                 "—",
                 "N/A",
                 "BAĞLANTI İTEMİ YOK",

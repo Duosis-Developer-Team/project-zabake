@@ -289,6 +289,12 @@ def tag_based_connectivity_check(args):
         host_ids = [h["hostid"] for h in hosts]
         logger.info(f"Collected {len(hosts)} hosts")
         
+        from utils.host_metadata import collect_unique_proxy_group_ids, build_host_metadata_map
+        
+        proxy_group_ids = collect_unique_proxy_group_ids(hosts)
+        proxy_id_to_name = collector.get_proxy_groups_by_ids(proxy_group_ids)
+        host_metadata_by_id = build_host_metadata_map(hosts, proxy_id_to_name)
+        
         # Step 2: Get items by connection status tag
         logger.info("Step 2: Collecting items by 'connection status' tag")
         connection_tag = args.connection_tag if hasattr(args, 'connection_tag') else "connection status"
@@ -367,7 +373,8 @@ def tag_based_connectivity_check(args):
         analysis_result = data_analyzer.analyze_tag_based_connectivity(
             detection_result=detection_result,
             history_data=history_data,
-            threshold_percentage=threshold
+            threshold_percentage=threshold,
+            host_metadata_by_id=host_metadata_by_id,
         )
         
         # Save analysis

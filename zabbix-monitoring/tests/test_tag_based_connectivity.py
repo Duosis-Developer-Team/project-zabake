@@ -420,6 +420,72 @@ class TestIntegration:
         assert len(analysis_result["hosts_without_connection_items"]) == 1
         assert analysis_result["hosts_without_connection_items"][0]["hostid"] == "300"
 
+    def test_analyze_tag_based_connectivity_with_host_metadata(self):
+        """Metadata fields are merged into problematic_items and hosts_without_connection_items."""
+        analyzer = DataAnalyzer(None)
+
+        detection_result = {
+            "hosts_with_items": [
+                {
+                    "hostid": "100",
+                    "hostname": "host1",
+                    "host_name": "Host 1",
+                    "items": [
+                        {"itemid": "1001", "key": "icmpping", "name": "ICMP Ping"},
+                    ]
+                }
+            ],
+            "hosts_without_items": [
+                {"hostid": "200", "hostname": "host2", "host_name": "Host 2"},
+            ],
+        }
+
+        history_data = {
+            "1001": [
+                {"itemid": "1001", "value": "0", "clock": str(1000 - i)}
+                for i in range(10)
+            ],
+        }
+
+        host_metadata_by_id = {
+            "100": {
+                "location": "LocA",
+                "contact": "c@x.com",
+                "tenant": "Ten1",
+                "interface_ip": "10.0.0.1",
+                "proxy_group_name": "PG1",
+            },
+            "200": {
+                "location": "LocB",
+                "contact": "",
+                "tenant": "",
+                "interface_ip": "10.0.0.2",
+                "proxy_group_name": "",
+            },
+        }
+
+        result = analyzer.analyze_tag_based_connectivity(
+            detection_result=detection_result,
+            history_data=history_data,
+            threshold_percentage=70.0,
+            host_metadata_by_id=host_metadata_by_id,
+        )
+
+        assert len(result["problematic_items"]) == 1
+        pi = result["problematic_items"][0]
+        assert pi["location"] == "LocA"
+        assert pi["contact"] == "c@x.com"
+        assert pi["tenant"] == "Ten1"
+        assert pi["interface_ip"] == "10.0.0.1"
+        assert pi["proxy_group_name"] == "PG1"
+
+        assert result["hosts"][0]["location"] == "LocA"
+
+        hwi = result["hosts_without_connection_items"][0]
+        assert hwi["hostid"] == "200"
+        assert hwi["location"] == "LocB"
+        assert hwi["interface_ip"] == "10.0.0.2"
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

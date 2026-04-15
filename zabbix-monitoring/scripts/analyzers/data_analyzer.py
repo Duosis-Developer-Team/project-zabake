@@ -419,11 +419,42 @@ class DataAnalyzer:
             "status": status
         }
     
+    def _merge_host_metadata(
+        self,
+        host_id: Any,
+        host_metadata_by_id: Optional[Dict[str, Dict[str, str]]],
+    ) -> Dict[str, str]:
+        if not host_metadata_by_id or host_id is None:
+            return {
+                "location": "",
+                "contact": "",
+                "tenant": "",
+                "interface_ip": "",
+                "proxy_group_name": "",
+            }
+        meta = host_metadata_by_id.get(str(host_id))
+        if not meta:
+            return {
+                "location": "",
+                "contact": "",
+                "tenant": "",
+                "interface_ip": "",
+                "proxy_group_name": "",
+            }
+        return {
+            "location": meta.get("location", ""),
+            "contact": meta.get("contact", ""),
+            "tenant": meta.get("tenant", ""),
+            "interface_ip": meta.get("interface_ip", ""),
+            "proxy_group_name": meta.get("proxy_group_name", ""),
+        }
+    
     def analyze_tag_based_connectivity(
         self,
         detection_result: Dict[str, Any],
         history_data: Dict[str, List[Dict[str, Any]]],
-        threshold_percentage: float = 70.0
+        threshold_percentage: float = 70.0,
+        host_metadata_by_id: Optional[Dict[str, Dict[str, str]]] = None,
     ) -> Dict[str, Any]:
         """
         Analyze connectivity items detected by tags
@@ -432,6 +463,7 @@ class DataAnalyzer:
             detection_result: Detection results from connectivity_analyzer
             history_data: History data dictionary (item_id -> list of records)
             threshold_percentage: Minimum acceptable connectivity percentage (default: 70%)
+            host_metadata_by_id: Optional hostid -> {location, contact, tenant, interface_ip, proxy_group_name}
             
         Returns:
             Analysis results dictionary with per-item scoring
@@ -492,6 +524,7 @@ class DataAnalyzer:
             # Add problematic items with host status
             for item in analyzed_items:
                 if item["below_threshold"]:
+                    meta = self._merge_host_metadata(host_id, host_metadata_by_id)
                     problematic_items.append({
                         "hostid": host_id,
                         "hostname": hostname,
@@ -502,7 +535,8 @@ class DataAnalyzer:
                         "percentage": item["percentage"],
                         "status": item["status"],
                         "host_status": host_status,
-                        "detail": f"{host_name} hostunda bulunan {item['name']} item'ı için connection problemleri bulunmakta."
+                        "detail": f"{host_name} hostunda bulunan {item['name']} item'ı için connection problemleri bulunmakta.",
+                        **meta,
                     })
             
             analyzed_hosts.append({
@@ -513,7 +547,8 @@ class DataAnalyzer:
                 "total_items": total_items_count,
                 "items_below_threshold": items_below,
                 "has_issues": host_has_issues,
-                "host_status": host_status
+                "host_status": host_status,
+                **self._merge_host_metadata(host_id, host_metadata_by_id),
             })
         
         # Calculate summary
@@ -522,11 +557,17 @@ class DataAnalyzer:
         total_items_analyzed = sum(h["total_items"] for h in analyzed_hosts)
         items_below_threshold = len(problematic_items)
         
+        hosts_without_enriched: List[Dict[str, Any]] = []
+        for h in hosts_without_items:
+            hid = h.get("hostid")
+            meta = self._merge_host_metadata(hid, host_metadata_by_id)
+            hosts_without_enriched.append({**h, **meta})
+        
         summary = {
             "total_hosts_analyzed": total_hosts_analyzed,
             "hosts_with_issues": hosts_with_issues,
             "hosts_without_issues": total_hosts_analyzed - hosts_with_issues,
-            "hosts_without_connection_items": len(hosts_without_items),
+            "hosts_without_connection_items": len(hosts_without_enriched),
             "total_items_analyzed": total_items_analyzed,
             "items_below_threshold": items_below_threshold,
             "threshold_percentage": threshold_percentage,
@@ -537,7 +578,7 @@ class DataAnalyzer:
             "summary": summary,
             "hosts": analyzed_hosts,
             "problematic_items": problematic_items,
-            "hosts_without_connection_items": hosts_without_items
+            "hosts_without_connection_items": hosts_without_enriched
         }
     
     def save_tag_based_analysis(self, analysis_result: Dict[str, Any], output_dir: str):

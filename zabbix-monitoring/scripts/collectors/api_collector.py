@@ -182,6 +182,61 @@ class ZabbixAPICollector:
             logger.error(f"Failed to collect hosts: {str(e)}")
             raise
     
+    def get_proxy_groups_by_ids(self, proxy_group_ids: List[str]) -> Dict[str, str]:
+        """
+        Resolve proxy group IDs to names (Zabbix 7+). Returns empty dict if none or API unsupported.
+        
+        Args:
+            proxy_group_ids: Unique proxy_groupid values from host objects
+            
+        Returns:
+            Map proxy_groupid (str) -> proxy group name
+        """
+        if not proxy_group_ids:
+            return {}
+        
+        # Normalize and drop empty/zero
+        normalized: List[str] = []
+        for pid in proxy_group_ids:
+            if pid is None:
+                continue
+            s = str(pid).strip()
+            if not s or s == "0":
+                continue
+            if s not in normalized:
+                normalized.append(s)
+        
+        if not normalized:
+            return {}
+        
+        logger.info(f"Resolving {len(normalized)} proxy group name(s) via proxygroup.get")
+        
+        params = {
+            "output": ["proxy_groupid", "name"],
+            "proxy_groupids": normalized,
+        }
+        
+        try:
+            response = self._api_request("proxygroup.get", params)
+            rows = response.get("result", [])
+            result: Dict[str, str] = {}
+            for row in rows:
+                pgid = row.get("proxy_groupid")
+                name = row.get("name", "")
+                if pgid is not None:
+                    result[str(pgid)] = name or ""
+            logger.info(f"Resolved {len(result)} proxy group name(s)")
+            return result
+        except ZabbixAPIError as e:
+            logger.warning(
+                "proxygroup.get failed (Zabbix 7+ required for proxy group names): %s",
+                str(e),
+            )
+            return {}
+        except Exception as e:
+            logger.warning("proxygroup.get failed: %s", str(e))
+            return {}
+    
     def get_templates(self) -> List[Dict[str, Any]]:
         """
         Get all templates from Zabbix

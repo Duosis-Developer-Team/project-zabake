@@ -60,6 +60,11 @@
           <thead>
             <tr>
               <th>Host Adı</th>
+              <th>Location</th>
+              <th>Contact</th>
+              <th>Tenant</th>
+              <th>Arayüz IP</th>
+              <th>Proxy Grubu</th>
               <th>İtem Adı</th>
               <th>Bağlantı Skoru</th>
               <th>İtem Durumu</th>
@@ -70,6 +75,11 @@
             {%- for item in failed_list -%}
             <tr>
               <td>{{ item.host_name | default(item.hostname) | default('N/A') }}</td>
+              <td>{{ item.location | default('') }}</td>
+              <td>{{ item.contact | default('') }}</td>
+              <td>{{ item.tenant | default('') }}</td>
+              <td>{{ item.interface_ip | default('') }}</td>
+              <td>{{ item.proxy_group_name | default('') }}</td>
               <td>{{ item.item_name | default('N/A') }}</td>
               <td style="text-align: center;">
                 {%- if item.status == 'no_data' -%}
@@ -118,6 +128,11 @@
               <th>Host ID</th>
               <th>Hostname</th>
               <th>Görünen Ad</th>
+              <th>Location</th>
+              <th>Contact</th>
+              <th>Tenant</th>
+              <th>Arayüz IP</th>
+              <th>Proxy Grubu</th>
             </tr>
           </thead>
           <tbody>
@@ -126,6 +141,11 @@
               <td>{{ host.hostid | default('N/A') }}</td>
               <td>{{ host.hostname | default('N/A') }}</td>
               <td>{{ host.host_name | default(host.hostname) | default('N/A') }}</td>
+              <td>{{ host.location | default('') }}</td>
+              <td>{{ host.contact | default('') }}</td>
+              <td>{{ host.tenant | default('') }}</td>
+              <td>{{ host.interface_ip | default('') }}</td>
+              <td>{{ host.proxy_group_name | default('') }}</td>
             </tr>
             {%- endfor -%}
           </tbody>
@@ -170,6 +190,11 @@
       {%- for item in failed_list %}
 
       Host: {{ item.host_name | default(item.hostname) | default('N/A') }}
+      Location: {{ item.location | default('') }}
+      Contact: {{ item.contact | default('') }}
+      Tenant: {{ item.tenant | default('') }}
+      Arayüz IP: {{ item.interface_ip | default('') }}
+      Proxy Grubu: {{ item.proxy_group_name | default('') }}
       İtem: {{ item.item_name | default('N/A') }}
       Skor: {%- if item.status == 'no_data' %} N/A{%- else %} {{ item.percentage }}%{%- endif %}
       İtem Durumu: {{ item.status | upper }}
@@ -188,7 +213,9 @@
       BAĞLANTI İTEMİ OLMAYAN HOSTLAR ({{ no_item_hosts | length }}):
       ------------------------------------------
       {%- for host in no_item_hosts %}
-      {{ host.host_name | default(host.hostname) | default('N/A') }}
+      Host: {{ host.host_name | default(host.hostname) | default('N/A') }} | ID: {{ host.hostid | default('N/A') }}
+      Location: {{ host.location | default('') }} | Contact: {{ host.contact | default('') }} | Tenant: {{ host.tenant | default('') }}
+      Arayüz IP: {{ host.interface_ip | default('') }} | Proxy Grubu: {{ host.proxy_group_name | default('') }}
       {%- endfor -%}
       {%- endif %}
 
