@@ -6,6 +6,7 @@
       import json
       import sys
       import requests
+      from collections import deque
       from urllib3.exceptions import InsecureRequestWarning
       
       requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
@@ -52,24 +53,44 @@
                       break
               
               if matched_location:
-                  # Also fetch child locations (locations that have this location as parent)
+                  # BFS: collect all descendant location IDs (any depth), with pagination per parent
                   try:
-                      child_locations_response = requests.get(
-                          f"{netbox_url}/api/dcim/locations/",
-                          headers={'Authorization': f'Token {netbox_token}', 'Accept': 'application/json'},
-                          params={'parent_id': location_id_filter, 'limit': 1000},
-                          verify=verify_ssl,
-                          timeout=30
+                      seen_ids = set(location_ids_to_filter)
+                      queue = deque([location_id_filter])
+                      while queue:
+                          pid = queue.popleft()
+                          child_url = (
+                              f"{netbox_url}/api/dcim/locations/"
+                              f"?parent_id={pid}&limit=1000"
+                          )
+                          while child_url:
+                              child_locations_response = requests.get(
+                                  child_url,
+                                  headers={
+                                      'Authorization': f'Token {netbox_token}',
+                                      'Accept': 'application/json'
+                                  },
+                                  verify=verify_ssl,
+                                  timeout=30
+                              )
+                              child_locations_response.raise_for_status()
+                              child_locations_data = child_locations_response.json()
+                              for loc in child_locations_data.get('results', []):
+                                  cid = loc.get('id')
+                                  if cid is None:
+                                      continue
+                                  if cid not in seen_ids:
+                                      seen_ids.add(cid)
+                                      location_ids_to_filter.append(cid)
+                                      queue.append(cid)
+                              child_url = child_locations_data.get('next')
+                      print(
+                          f"DEBUG: BFS location subtree: {len(location_ids_to_filter)} "
+                          f"location IDs (root + all descendants).",
+                          file=sys.stderr
                       )
-                      child_locations_response.raise_for_status()
-                      child_locations_data = child_locations_response.json()
-                      child_locations = child_locations_data.get('results', [])
-                      if child_locations:
-                          child_ids = [loc.get('id') for loc in child_locations]
-                          location_ids_to_filter.extend(child_ids)
-                          print(f"DEBUG: Found {len(child_locations)} child locations. Total location IDs to filter: {len(location_ids_to_filter)}", file=sys.stderr)
                   except Exception as e:
-                      print(f"DEBUG: Could not fetch child locations: {e}", file=sys.stderr)
+                      print(f"DEBUG: Could not fetch descendant locations: {e}", file=sys.stderr)
               
               if not location_id_filter:
                   print(f"WARNING: Location '{location_filter}' not found in Netbox. Will fetch all devices.", file=sys.stderr)

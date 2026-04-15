@@ -250,93 +250,71 @@
           return None
       
       def get_location_name(device, netbox_url, netbox_token, verify_ssl):
-          """Get location name: parent if exists, otherwise location or site"""
+          """
+          Resolve host-group / DC_ID location label as the root (top-level) NetBox location name.
+          Walks the location parent chain until parent is null (multi-level hierarchy).
+          Mirror: scripts/netbox_location_hierarchy.py (resolve_root_location_name) for unit tests.
+          """
           location_obj = device.get('location')
           if not location_obj:
-              # No location, fallback to site name
               site = device.get('site') or {}
-              if site.get('name'):
-                  return site['name']
-              return ''
-          
-          location_id = None
-          # If location is expanded as dict
+              return site.get('name', '') or ''
+
+          current_id = None
+          current_name = ''
+
           if isinstance(location_obj, dict):
-              location_id = location_obj.get('id')
-              # Check if parent is already expanded in the response
-              parent = location_obj.get('parent')
-              if parent:
-                  if isinstance(parent, dict) and parent.get('name'):
-                      # Parent is expanded, use it directly
-                      return parent.get('name', '')
-                  elif isinstance(parent, int):
-                      # Parent is just an ID, fetch it directly
-                      try:
-                          parent_response = requests.get(
-                              f"{netbox_url.rstrip('/')}/api/dcim/locations/{parent}/",
-                              headers={'Authorization': f'Token {netbox_token}', 'Accept': 'application/json'},
-                              verify=verify_ssl,
-                              timeout=10
-                          )
-                          if parent_response.status_code == 200:
-                              parent_data = parent_response.json()
-                              return parent_data.get('name', '')
-                      except Exception as e:
-                          pass
-          # If location is just an ID
+              current_id = location_obj.get('id')
+              current_name = location_obj.get('name', '') or ''
           elif isinstance(location_obj, int):
-              location_id = location_obj
-          
-          # Fetch location from API to get parent information
-          if location_id:
+              current_id = location_obj
+
+          if not current_id:
+              if isinstance(location_obj, dict) and location_obj.get('name'):
+                  return location_obj.get('name', '')
+              site = device.get('site') or {}
+              return site.get('name', '') or ''
+
+          MAX_DEPTH = 32
+          visited = set()
+
+          for _ in range(MAX_DEPTH):
+              if current_id in visited:
+                  break
+              visited.add(current_id)
+
               try:
-                  # First, fetch the location itself
                   response = requests.get(
-                      f"{netbox_url.rstrip('/')}/api/dcim/locations/{location_id}/",
+                      f"{netbox_url.rstrip('/')}/api/dcim/locations/{current_id}/",
                       headers={'Authorization': f'Token {netbox_token}', 'Accept': 'application/json'},
                       verify=verify_ssl,
                       timeout=10
                   )
-                  if response.status_code == 200:
-                      loc_data = response.json()
-                      # Check for parent in the fetched location data
-                      parent = loc_data.get('parent')
-                      if parent:
-                          # Parent exists, fetch parent's name
-                          if isinstance(parent, dict) and parent.get('name'):
-                              # Parent is expanded in response
-                              return parent.get('name', '')
-                          elif isinstance(parent, int):
-                              # Parent is just an ID, fetch it
-                              try:
-                                  parent_response = requests.get(
-                                      f"{netbox_url.rstrip('/')}/api/dcim/locations/{parent}/",
-                                      headers={'Authorization': f'Token {netbox_token}', 'Accept': 'application/json'},
-                                      verify=verify_ssl,
-                                      timeout=10
-                                  )
-                                  if parent_response.status_code == 200:
-                                      parent_data = parent_response.json()
-                                      return parent_data.get('name', '')
-                              except Exception as e:
-                                  # If parent fetch fails, fall through to use location name
-                                  pass
-                      # No parent, use current location name
-                      return loc_data.get('name', '')
-              except Exception as e:
-                  # If location fetch fails, try to use location name from device if available
-                  if isinstance(location_obj, dict) and location_obj.get('name'):
-                      return location_obj.get('name', '')
-          
-          # Fallback: if location was a dict with name, use it
+                  if response.status_code != 200:
+                      break
+                  loc_data = response.json()
+                  current_name = loc_data.get('name', current_name)
+                  parent = loc_data.get('parent')
+
+                  if parent is None:
+                      return current_name
+                  if isinstance(parent, dict):
+                      current_id = parent.get('id')
+                      if not current_id:
+                          break
+                  elif isinstance(parent, int):
+                      current_id = parent
+                  else:
+                      break
+              except Exception:
+                  break
+
+          if current_name:
+              return current_name
           if isinstance(location_obj, dict) and location_obj.get('name'):
               return location_obj.get('name', '')
-          
-          # Final fallback to site name
           site = device.get('site') or {}
-          if site.get('name'):
-              return site['name']
-          return ''
+          return site.get('name', '') or ''
       
       def normalize_netbox_choice_field(value):
           """NetBox choice / custom field: list or scalar to plain string."""

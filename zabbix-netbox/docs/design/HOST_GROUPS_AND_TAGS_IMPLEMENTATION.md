@@ -4,11 +4,15 @@
 
 Netbox (Loki)'dan Zabbix'e host aktarımında, lokasyon ve cihaz tipi bilgileri **host groups** olarak, diğer metadata bilgileri ise **tags** olarak gönderilecek.
 
+**NetBox DCIM location hierarchy:** Zabbix host group / `DC_ID` için kullanılan lokasyon etiketi, NetBox’ta **kök (root) lokasyon adıdır** — `parent` zinciri `null` olana kadar yukarı çıkılır. Ayrıntı: [LOCATION_HIERARCHY_RESOLUTION.md](./LOCATION_HIERARCHY_RESOLUTION.md).
+
+> **Archived (v1):** Bu dosyanın ilk sürümünde host group “Lokasyon” satırı yalnızca `device['site']['name']` idi. Canlı senkron, `get_location_name` ile NetBox **location** ağacının kökünü kullanır; lokasyon yoksa site adına düşer.
+
 ## Host Groups
 
 ### Netbox'tan Alınacak Bilgiler:
 
-1. **Lokasyon**: `device['site']['name']` → Örnek: "ISTANBUL", "ANKARA"
+1. **Lokasyon (root NetBox location):** `get_location_name` ile kök `dcim/locations` adı; lokasyon yoksa `device['site']['name']` → Örnek: "DC18", "ISTANBUL"
 2. **Cihaz Tipi**: `device['device_type']['model']` → Örnek: "ThinkSystem SR650", "PowerEdge R730"
 
 ### CSV Formatı:

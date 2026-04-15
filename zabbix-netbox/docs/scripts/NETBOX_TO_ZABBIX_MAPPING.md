@@ -4,15 +4,19 @@
 
 Bu dokümantasyon, Netbox (Loki) API'den alınan verilerin Zabbix'e nasıl aktarılacağını açıklar.
 
+**Location hierarchy (current):** Host group / `DC_ID` için kullanılan “lokasyon” etiketi, NetBox **location** ağacının **kök** adıdır (çok seviye parent zinciri). Tasarım: [../design/LOCATION_HIERARCHY_RESOLUTION.md](../design/LOCATION_HIERARCHY_RESOLUTION.md).
+
+> **Archived (v1):** Aşağıdaki “Lokasyon (Site)” maddesi yalnızca `device['site']['name']` kaynağını anlatıyordu. Kök NetBox lokasyon çözümlemesi v2 ile güncellendi; site adı yedek kaynak olarak kalır.
+
 ## Host Groups (Zabbix Host Groups)
 
 Host Groups, Zabbix'te host'ları organize etmek için kullanılır. CSV'deki `HOST_GROUPS` alanına yazılır.
 
 ### Netbox'tan Alınacak Host Groups:
 
-1. **Lokasyon** (Site)
-   - **Netbox Source**: `device['site']['name']`
-   - **Örnek**: "ISTANBUL", "ANKARA", "IZMIR"
+1. **Lokasyon** (root NetBox DCIM location, `get_location_name`)
+   - **Netbox Source**: NetBox `dcim/locations` kök düğüm adı (`parent` null olana kadar); lokasyon yoksa `device['site']['name']`
+   - **Örnek**: "DC18", "ISTANBUL"
    - **CSV Field**: `HOST_GROUPS` (virgülle ayrılmış liste)
 
 2. **Cihaz Tipi** (Device Type)
