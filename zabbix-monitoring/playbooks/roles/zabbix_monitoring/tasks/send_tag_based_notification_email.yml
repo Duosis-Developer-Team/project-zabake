@@ -65,6 +65,7 @@
               <th>Tenant</th>
               <th>Arayüz IP</th>
               <th>Proxy Grubu</th>
+              <th>Template</th>
               <th>İtem Adı</th>
               <th>Bağlantı Skoru</th>
               <th>İtem Durumu</th>
@@ -80,6 +81,7 @@
               <td>{{ item.tenant | default('') }}</td>
               <td>{{ item.interface_ip | default('') }}</td>
               <td>{{ item.proxy_group_name | default('') }}</td>
+              <td>{{ item.item_template | default('') }}</td>
               <td>{{ item.item_name | default('N/A') }}</td>
               <td style="text-align: center;">
                 {%- if item.status == 'no_data' -%}
@@ -195,6 +197,7 @@
       Tenant: {{ item.tenant | default('') }}
       Arayüz IP: {{ item.interface_ip | default('') }}
       Proxy Grubu: {{ item.proxy_group_name | default('') }}
+      Template: {{ item.item_template | default('') }}
       İtem: {{ item.item_name | default('N/A') }}
       Skor: {%- if item.status == 'no_data' %} N/A{%- else %} {{ item.percentage }}%{%- endif %}
       İtem Durumu: {{ item.status | upper }}

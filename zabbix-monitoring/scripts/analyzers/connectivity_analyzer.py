@@ -381,6 +381,7 @@ class ConnectivityAnalyzer:
                     "status": item.get("status", ""),
                     "lastvalue": item.get("lastvalue", ""),
                     "lastclock": item.get("lastclock", ""),
+                    "template": item.get("template", "") or item.get("template_name", ""),
                     "tags": tags
                 })
         

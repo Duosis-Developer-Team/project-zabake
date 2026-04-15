@@ -431,7 +431,7 @@ class TestIntegration:
                     "hostname": "host1",
                     "host_name": "Host 1",
                     "items": [
-                        {"itemid": "1001", "key": "icmpping", "name": "ICMP Ping"},
+                        {"itemid": "1001", "key": "icmpping", "name": "ICMP Ping", "template": "BLT - Lenovo ICT XCC Monitoring"},
                     ]
                 }
             ],
@@ -478,6 +478,7 @@ class TestIntegration:
         assert pi["tenant"] == "Ten1"
         assert pi["interface_ip"] == "10.0.0.1"
         assert pi["proxy_group_name"] == "PG1"
+        assert pi["item_template"] == "BLT - Lenovo ICT XCC Monitoring"
 
         assert result["hosts"][0]["location"] == "LocA"
 
