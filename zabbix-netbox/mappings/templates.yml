@@ -6,6 +6,10 @@ Lenovo IPMI:
     type: snmpv2
     host_groups: 
       - "Physical Hosts"
+    macros:
+      "{$REDFISH.API.URL}": "https://{HOST.IP}/"
+      "{$REDFISH.PASSWORD}": "S7G3y9TtmRSm"
+      "{$REDFISH.USER}": "zabbix"
 Inspur M6:
   - name: BLT - Inspur M6 Template
     type: snmpv2
