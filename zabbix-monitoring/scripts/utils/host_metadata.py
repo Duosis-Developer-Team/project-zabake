@@ -1,5 +1,5 @@
 """
-Host metadata for reports: Zabbix host tags, main interface IP, proxy group name.
+Host metadata for reports: Zabbix host tags, linked templates, main interface IP, proxy group name.
 """
 
 from typing import Any, Dict, List, Tuple
@@ -29,6 +29,21 @@ def extract_standard_host_tags(host_tags: List[Dict[str, Any]]) -> Dict[str, str
         if key:
             out[key.lower()] = (entry.get("value") or "").strip()
     return out
+
+
+def extract_host_template_names(host: Dict[str, Any]) -> str:
+    """
+    Comma-separated names of all templates linked to the host (parentTemplates).
+    Sorted alphabetically for stable output.
+    """
+    parents = host.get("parentTemplates") or []
+    names: List[str] = []
+    for entry in parents:
+        name = (entry.get("name") or "").strip()
+        if name and name not in names:
+            names.append(name)
+    names.sort()
+    return ", ".join(names)
 
 
 def extract_main_interface_ip(interfaces: List[Dict[str, Any]]) -> str:
@@ -76,7 +91,7 @@ def build_host_metadata_map(
 ) -> Dict[str, Dict[str, str]]:
     """
     Build hostid -> metadata for report rows.
-    Keys: location, contact, tenant, interface_ip, proxy_group_name.
+    Keys: location, contact, tenant, interface_ip, proxy_group_name, host_templates.
     """
     result: Dict[str, Dict[str, str]] = {}
     
@@ -90,6 +105,7 @@ def build_host_metadata_map(
         interfaces = host.get("interfaces") or []
         interface_ip = extract_main_interface_ip(interfaces)
         proxy_group_name = _proxy_group_name_for_host(host, proxy_id_to_name)
+        host_templates = extract_host_template_names(host)
         
         result[str(host_id)] = {
             "location": tag_fields["location"],
@@ -97,6 +113,7 @@ def build_host_metadata_map(
             "tenant": tag_fields["tenant"],
             "interface_ip": interface_ip,
             "proxy_group_name": proxy_group_name,
+            "host_templates": host_templates,
         }
     
     return result

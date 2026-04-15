@@ -431,7 +431,7 @@ class TestIntegration:
                     "hostname": "host1",
                     "host_name": "Host 1",
                     "items": [
-                        {"itemid": "1001", "key": "icmpping", "name": "ICMP Ping", "template": "BLT - Lenovo ICT XCC Monitoring"},
+                        {"itemid": "1001", "key": "icmpping", "name": "ICMP Ping"},
                     ]
                 }
             ],
@@ -454,6 +454,7 @@ class TestIntegration:
                 "tenant": "Ten1",
                 "interface_ip": "10.0.0.1",
                 "proxy_group_name": "PG1",
+                "host_templates": "Alpha Tpl, Beta Tpl",
             },
             "200": {
                 "location": "LocB",
@@ -461,6 +462,7 @@ class TestIntegration:
                 "tenant": "",
                 "interface_ip": "10.0.0.2",
                 "proxy_group_name": "",
+                "host_templates": "Gamma Tpl",
             },
         }
 
@@ -478,14 +480,16 @@ class TestIntegration:
         assert pi["tenant"] == "Ten1"
         assert pi["interface_ip"] == "10.0.0.1"
         assert pi["proxy_group_name"] == "PG1"
-        assert pi["item_template"] == "BLT - Lenovo ICT XCC Monitoring"
+        assert pi["host_templates"] == "Alpha Tpl, Beta Tpl"
 
         assert result["hosts"][0]["location"] == "LocA"
+        assert result["hosts"][0]["host_templates"] == "Alpha Tpl, Beta Tpl"
 
         hwi = result["hosts_without_connection_items"][0]
         assert hwi["hostid"] == "200"
         assert hwi["location"] == "LocB"
         assert hwi["interface_ip"] == "10.0.0.2"
+        assert hwi["host_templates"] == "Gamma Tpl"
 
 
 if __name__ == "__main__":

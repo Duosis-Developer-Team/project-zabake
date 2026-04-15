@@ -11,6 +11,7 @@ sys.path.insert(0, str(scripts_dir))
 from utils.host_metadata import (
     build_host_metadata_map,
     collect_unique_proxy_group_ids,
+    extract_host_template_names,
     extract_main_interface_ip,
     extract_standard_host_tags,
 )
@@ -30,6 +31,20 @@ class TestExtractStandardHostTags:
 
     def test_empty(self):
         assert extract_standard_host_tags([]) == {"location": "", "contact": "", "tenant": ""}
+
+
+class TestExtractHostTemplateNames:
+    def test_sorted_comma_separated(self):
+        host = {
+            "parentTemplates": [
+                {"templateid": "2", "name": "Z Template"},
+                {"templateid": "1", "name": "A Template"},
+            ]
+        }
+        assert extract_host_template_names(host) == "A Template, Z Template"
+
+    def test_empty(self):
+        assert extract_host_template_names({}) == ""
 
 
 class TestExtractMainInterfaceIp:
@@ -73,6 +88,7 @@ class TestBuildHostMetadataMap:
                     {"tag": "Tenant", "value": "T1"},
                 ],
                 "interfaces": [{"main": "1", "ip": "10.1.1.1"}],
+                "parentTemplates": [{"templateid": "99", "name": "Tmpl B"}, {"templateid": "98", "name": "Tmpl A"}],
             }
         ]
         proxy_map = {"3": "PG-Name"}
@@ -82,6 +98,7 @@ class TestBuildHostMetadataMap:
         assert m["10"]["tenant"] == "T1"
         assert m["10"]["interface_ip"] == "10.1.1.1"
         assert m["10"]["proxy_group_name"] == "PG-Name"
+        assert m["10"]["host_templates"] == "Tmpl A, Tmpl B"
 
     def test_no_proxy_group_when_not_monitored_by_group(self):
         hosts = [
@@ -95,3 +112,4 @@ class TestBuildHostMetadataMap:
         ]
         m = build_host_metadata_map(hosts, {"3": "X"})
         assert m["1"]["proxy_group_name"] == ""
+        assert m["1"]["host_templates"] == ""

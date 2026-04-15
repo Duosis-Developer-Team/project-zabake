@@ -21,13 +21,14 @@ def load_json_file(path: Path):
 
 
 def _host_metadata_columns(row: dict) -> list:
-    """Report columns from analysis JSON (location, contact, tenant, interface_ip, proxy_group_name)."""
+    """Report columns from analysis JSON (location, contact, tenant, interface_ip, proxy_group_name, host_templates)."""
     return [
         row.get("location", "") or "",
         row.get("contact", "") or "",
         row.get("tenant", "") or "",
         row.get("interface_ip", "") or "",
         row.get("proxy_group_name", "") or "",
+        row.get("host_templates", "") or "",
     ]
 
 
@@ -44,7 +45,7 @@ def build_csv_attachment(analysis_results: dict) -> MIMEApplication:
             "Tenant",
             "Arayüz IP",
             "Proxy Grubu",
-            "Template",
+            "Host Templates",
             "İtem Adı",
             "Bağlantı Skoru (%)",
             "İtem Durumu",
@@ -87,13 +88,11 @@ def build_csv_attachment(analysis_results: dict) -> MIMEApplication:
         host_status_tr = host_status_tr_map.get(host_status, host_status.upper())
 
         meta = _host_metadata_columns(item)
-        item_template = item.get("item_template", "") or ""
         writer.writerow(
             [
                 row_idx,
                 host_name,
                 *meta,
-                item_template,
                 item_name,
                 score_display,
                 status_tr,
@@ -112,7 +111,6 @@ def build_csv_attachment(analysis_results: dict) -> MIMEApplication:
                 row_idx,
                 host_name,
                 *meta,
-                "",
                 "—",
                 "N/A",
                 "BAĞLANTI İTEMİ YOK",

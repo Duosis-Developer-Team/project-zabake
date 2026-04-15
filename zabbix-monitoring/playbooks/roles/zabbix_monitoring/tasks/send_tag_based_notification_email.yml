@@ -65,7 +65,7 @@
               <th>Tenant</th>
               <th>Arayüz IP</th>
               <th>Proxy Grubu</th>
-              <th>Template</th>
+              <th>Host Templates</th>
               <th>İtem Adı</th>
               <th>Bağlantı Skoru</th>
               <th>İtem Durumu</th>
@@ -81,7 +81,7 @@
               <td>{{ item.tenant | default('') }}</td>
               <td>{{ item.interface_ip | default('') }}</td>
               <td>{{ item.proxy_group_name | default('') }}</td>
-              <td>{{ item.item_template | default('') }}</td>
+              <td>{{ item.host_templates | default('') }}</td>
               <td>{{ item.item_name | default('N/A') }}</td>
               <td style="text-align: center;">
                 {%- if item.status == 'no_data' -%}
@@ -135,6 +135,7 @@
               <th>Tenant</th>
               <th>Arayüz IP</th>
               <th>Proxy Grubu</th>
+              <th>Host Templates</th>
             </tr>
           </thead>
           <tbody>
@@ -148,6 +149,7 @@
               <td>{{ host.tenant | default('') }}</td>
               <td>{{ host.interface_ip | default('') }}</td>
               <td>{{ host.proxy_group_name | default('') }}</td>
+              <td>{{ host.host_templates | default('') }}</td>
             </tr>
             {%- endfor -%}
           </tbody>
@@ -197,7 +199,7 @@
       Tenant: {{ item.tenant | default('') }}
       Arayüz IP: {{ item.interface_ip | default('') }}
       Proxy Grubu: {{ item.proxy_group_name | default('') }}
-      Template: {{ item.item_template | default('') }}
+      Host Templates: {{ item.host_templates | default('') }}
       İtem: {{ item.item_name | default('N/A') }}
       Skor: {%- if item.status == 'no_data' %} N/A{%- else %} {{ item.percentage }}%{%- endif %}
       İtem Durumu: {{ item.status | upper }}
@@ -219,6 +221,7 @@
       Host: {{ host.host_name | default(host.hostname) | default('N/A') }} | ID: {{ host.hostid | default('N/A') }}
       Location: {{ host.location | default('') }} | Contact: {{ host.contact | default('') }} | Tenant: {{ host.tenant | default('') }}
       Arayüz IP: {{ host.interface_ip | default('') }} | Proxy Grubu: {{ host.proxy_group_name | default('') }}
+      Host Templates: {{ host.host_templates | default('') }}
       {%- endfor -%}
       {%- endif %}
 

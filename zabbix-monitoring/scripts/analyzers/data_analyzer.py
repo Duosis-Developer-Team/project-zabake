@@ -431,6 +431,7 @@ class DataAnalyzer:
                 "tenant": "",
                 "interface_ip": "",
                 "proxy_group_name": "",
+                "host_templates": "",
             }
         meta = host_metadata_by_id.get(str(host_id))
         if not meta:
@@ -440,6 +441,7 @@ class DataAnalyzer:
                 "tenant": "",
                 "interface_ip": "",
                 "proxy_group_name": "",
+                "host_templates": "",
             }
         return {
             "location": meta.get("location", ""),
@@ -447,6 +449,7 @@ class DataAnalyzer:
             "tenant": meta.get("tenant", ""),
             "interface_ip": meta.get("interface_ip", ""),
             "proxy_group_name": meta.get("proxy_group_name", ""),
+            "host_templates": meta.get("host_templates", ""),
         }
     
     def analyze_tag_based_connectivity(
@@ -463,7 +466,7 @@ class DataAnalyzer:
             detection_result: Detection results from connectivity_analyzer
             history_data: History data dictionary (item_id -> list of records)
             threshold_percentage: Minimum acceptable connectivity percentage (default: 70%)
-            host_metadata_by_id: Optional hostid -> {location, contact, tenant, interface_ip, proxy_group_name}
+            host_metadata_by_id: Optional hostid -> metadata incl. host_templates (linked parentTemplates)
             
         Returns:
             Analysis results dictionary with per-item scoring
@@ -496,7 +499,6 @@ class DataAnalyzer:
                     "itemid": item_id,
                     "key": item.get("key"),
                     "name": item.get("name"),
-                    "template": item.get("template", ""),
                     "connectivity_score": score_result["score"],
                     "percentage": score_result["percentage"],
                     "successful_count": score_result["successful_count"],
@@ -533,7 +535,6 @@ class DataAnalyzer:
                         "itemid": item["itemid"],
                         "item_key": item["key"],
                         "item_name": item["name"],
-                        "item_template": item.get("template", ""),
                         "percentage": item["percentage"],
                         "status": item["status"],
                         "host_status": host_status,
