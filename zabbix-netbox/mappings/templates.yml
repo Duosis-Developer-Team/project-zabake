@@ -3,7 +3,7 @@
 # host_groups field is optional and will be added to the host groups from Netbox
 Lenovo IPMI:
   - name: BLT - Lenovo ICT XCC Monitoring
-    type: snmpv2
+    type: snmpv3
     host_groups: 
       - "Physical Hosts"
     macros:

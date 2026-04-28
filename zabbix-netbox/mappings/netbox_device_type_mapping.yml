@@ -168,7 +168,7 @@ mappings:
   - device_type: "Check Point Firewall"
     conditions:
       device_role: "Firewall"
-      manufacturer: ["CHECK POINT", "Check Point"]
+      manufacturer: ["CHECK POINT", "Check Point", "Checkpoint", "CHECKPOINT"]
     priority: 1
 
   # Network Devices - Cisco

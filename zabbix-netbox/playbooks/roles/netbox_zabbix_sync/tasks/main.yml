@@ -15,6 +15,7 @@
     netbox_devices_monitor_count: 0
     netbox_devices_skip_raw: []
     netbox_devices_skip_count: 0
+    netbox_unmapped_pairs: []
     netbox_devices_raw: []
     netbox_devices_count: 0
   when: not ((sync_devices | bool) or (only_fetch | bool))

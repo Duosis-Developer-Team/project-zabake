@@ -6,7 +6,7 @@
       import json
       import sys
       import requests
-      from collections import deque
+      from collections import Counter, deque
       from urllib3.exceptions import InsecureRequestWarning
       
       requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
@@ -206,6 +206,7 @@
           return False
       
       all_devices = []
+      unmatched_devices = []
       # Build API URL with location and izlenmeli filters if provided
       # If multiple location IDs (parent + children), we'll need to fetch separately or use a different approach
       api_url = f"{netbox_url}/api/dcim/devices/?limit=1000&status=active"
@@ -377,6 +378,20 @@
                       filtered_devices.append(device)
                   else:
                       unmatched_count += 1
+                      device_type = device.get('device_type') or {}
+                      manufacturer_obj = device_type.get('manufacturer') or {}
+                      manufacturer_name = manufacturer_obj.get('name', 'N/A')
+                      location_obj = device.get('location')
+                      if isinstance(location_obj, dict):
+                          dc_name = location_obj.get('name', 'N/A')
+                      else:
+                          site_obj = device.get('site') or {}
+                          dc_name = site_obj.get('name', 'N/A')
+                      unmatched_devices.append({
+                          'role': role_name or 'N/A',
+                          'manufacturer': manufacturer_name or 'N/A',
+                          'dc': dc_name or 'N/A'
+                      })
                       # Debug: Print first unmatched device details for troubleshooting
                       if unmatched_count == 1 and len(all_devices) == 0:
                           # Try 'role' first (Netbox API field name), then 'device_role' as fallback
@@ -436,10 +451,20 @@
           filter_info += f" + location filter (ID: {location_id_filter}, name: {location_filter})"
       print(f"DEBUG: Total devices after {filter_info} (mode={izlenmeli_mode}): {len(all_devices)}", file=sys.stderr)
       
+      unmapped_pair_counts = Counter(
+          (item.get('role', 'N/A'), item.get('manufacturer', 'N/A'), item.get('dc', 'N/A'))
+          for item in unmatched_devices
+      )
+      unmapped_pairs = [
+          {'role': role, 'manufacturer': manufacturer, 'dc': dc, 'count': count}
+          for (role, manufacturer, dc), count in sorted(unmapped_pair_counts.items())
+      ]
+
       result = {
           'devices': all_devices,
           'count': len(all_devices),
-          'mode': izlenmeli_mode
+          'mode': izlenmeli_mode,
+          'unmapped_pairs': unmapped_pairs
       }
       
       print(json.dumps(result))
@@ -511,6 +536,7 @@
     netbox_devices_monitor_count: "{{ (fetch_devices_monitor_result.stdout | from_json).count }}"
     netbox_devices_skip_raw: "{{ (fetch_devices_skip_result.stdout | from_json).devices }}"
     netbox_devices_skip_count: "{{ (fetch_devices_skip_result.stdout | from_json).count }}"
+    netbox_unmapped_pairs: "{{ (fetch_devices_monitor_result.stdout | from_json).unmapped_pairs | default([]) }}"
     # Backwards compatibility: main flow uses netbox_devices_raw/count for monitor set
     netbox_devices_raw: "{{ (fetch_devices_monitor_result.stdout | from_json).devices }}"
     netbox_devices_count: "{{ (fetch_devices_monitor_result.stdout | from_json).count }}"
