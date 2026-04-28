@@ -9,7 +9,7 @@ Lenovo IPMI:
     macros:
       "{$REDFISH.API.URL}": "https://{HOST.IP}/"
       "{$REDFISH.PASSWORD}": "S7G3y9TtmRSm"
-      "{$REDFISH.USER}": "zabbix"
+      "{$REDFISH.USER}": "monitor"
 Inspur M6:
   - name: BLT - Inspur M6 Template
     type: snmpv2
