@@ -6,7 +6,7 @@ Phase-1 reconciliation module for:
 - IBM LPARs (`ibm_lpar_general`)
 
 Comparison target:
-- NetBox VM inventory table (`netbox_virtualization_vm`)
+- NetBox VM inventory table (`discovery_netbox_virtualization_vm`)
 
 Execution model:
 - AWX -> Ansible playbook -> Python reconciler CLI
