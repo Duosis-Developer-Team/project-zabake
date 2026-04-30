@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional
 
-from matchers.customer import customer_code_equal
+from matchers.customer import customer_code_equal, parse_customer_code_from_name, resolve_customer_code
 
 
 @dataclass
@@ -27,7 +27,14 @@ class ReconcilerBase:
         return dl_cluster == nb_cluster
 
     def customer_matches(self, datalake: dict, netbox: dict) -> bool:
-        return customer_code_equal(datalake.get("customer_code"), netbox.get("custom_fields_musteri"))
+        datalake_customer = resolve_customer_code(datalake)
+        netbox_customer = (
+            resolve_customer_code({"customer_code": netbox.get("custom_fields_musteri")})
+            or parse_customer_code_from_name(netbox.get("name"))
+        )
+        if not datalake_customer or not netbox_customer:
+            return True
+        return customer_code_equal(datalake_customer, netbox_customer)
 
     def reconcile(self, datalake_rows: list[dict], netbox_rows: list[dict]) -> dict:
         datalake_map = {self.datalake_key(row): row for row in datalake_rows if self.datalake_key(row)}

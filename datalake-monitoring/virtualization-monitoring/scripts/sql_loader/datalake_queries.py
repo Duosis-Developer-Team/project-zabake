@@ -9,7 +9,6 @@ def fetch_vmware_vms(connection, window_days: int) -> list[dict]:
             datacenter,
             cluster,
             vmhost,
-            customerid AS customer_code,
             collection_time
         FROM vm_metrics
         WHERE collection_time >= NOW() - (%s::text || ' days')::interval
@@ -25,7 +24,6 @@ def fetch_nutanix_vms(connection, window_days: int) -> list[dict]:
             vm_uuid,
             vm_name,
             cluster_name AS cluster,
-            customerid AS customer_code,
             timestamp AS collection_time
         FROM nutanix_vm_metrics
         WHERE timestamp >= NOW() - (%s::text || ' days')::interval
@@ -40,7 +38,6 @@ def fetch_ibm_lpars(connection, window_days: int) -> list[dict]:
         SELECT DISTINCT ON (lparname)
             lparname,
             servername AS cluster,
-            customerid AS customer_code,
             time AS collection_time
         FROM ibm_lpar_general
         WHERE time >= NOW() - (%s::text || ' days')::interval

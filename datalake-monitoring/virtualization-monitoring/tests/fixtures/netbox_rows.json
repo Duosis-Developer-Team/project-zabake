@@ -3,7 +3,7 @@
     "custom_fields_uuid": "abc-123",
     "name": "vm-app-01",
     "cluster_name": "km-cluster-01",
-    "custom_fields_musteri": "cust-a"
+    "custom_fields_musteri": "cust"
   },
   {
     "custom_fields_uuid": "nut-uuid-01",

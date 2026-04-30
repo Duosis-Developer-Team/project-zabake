@@ -8,5 +8,9 @@ Phase-1 reconciliation module for:
 Comparison target:
 - NetBox VM inventory table (`discovery_netbox_virtualization_vm`)
 
+Customer code behavior:
+- explicit customer columns are not required
+- customer code is derived from VM/LPAR name prefix when needed
+
 Execution model:
 - AWX -> Ansible playbook -> Python reconciler CLI
