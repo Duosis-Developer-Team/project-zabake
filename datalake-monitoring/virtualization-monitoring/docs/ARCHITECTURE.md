@@ -10,5 +10,12 @@ Role workflow:
 Python reconciliation:
 - reads datalake VM/LPAR entities
 - reads latest NetBox VM inventory snapshot
-- matches and classifies differences
-- writes machine-readable JSON report
+- resolves Nutanix `cluster_uuid -> cluster_name`
+- classifies environment:
+  - `classic_vmware` when VMware cluster name contains `KM`
+  - `hyperconv_vmware` for VMware clusters not containing `KM`
+  - `hyperconv_nutanix` for Nutanix VM rows
+  - `power_ibm` for IBM LPAR rows
+- matches and classifies differences (`in_both`, `cluster_mismatch`, `customer_mismatch`, `only_in_loki`, `only_in_datalake`)
+- writes JSON + summary JSON + combined CSV
+- renders summary email body and sends SMTP email with CSV attachment
