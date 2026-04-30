@@ -1,0 +1,45 @@
+---
+- name: Render email body files
+  ansible.builtin.command:
+    argv:
+      - python3
+      - "{{ playbook_dir }}/../scripts/main.py"
+      - --mode
+      - render-email
+      - --input-file
+      - "{{ reconciliation_output_file }}"
+      - --output-dir
+      - "{{ output_dir }}"
+  register: email_render_result
+  changed_when: false
+
+- name: Parse email render metadata
+  ansible.builtin.set_fact:
+    email_render_metadata: "{{ email_render_result.stdout | from_json }}"
+
+- name: Send SMTP email
+  ansible.builtin.command:
+    argv:
+      - python3
+      - "{{ role_path }}/files/send_notification_email_smtp.py"
+      - --smtp-host
+      - "{{ mail.smtp_host }}"
+      - --smtp-port
+      - "{{ mail.smtp_port | string }}"
+      - --smtp-user
+      - "{{ mail.smtp_user }}"
+      - --smtp-pass
+      - "{{ mail.smtp_password }}"
+      - --from-addr
+      - "{{ mail.mail_from }}"
+      - --recipients
+      - "{{ mail.mail_recipients | join(',') }}"
+      - --subject
+      - "Datalake VM/LPAR reconciliation report"
+      - --results-file
+      - "{{ reconciliation_output_file }}"
+      - --html-file
+      - "{{ email_render_metadata.html_file }}"
+      - --text-file
+      - "{{ email_render_metadata.text_file }}"
+  changed_when: false

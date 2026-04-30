@@ -1,0 +1,20 @@
+[
+  {
+    "custom_fields_uuid": "abc-123",
+    "name": "vm-app-01",
+    "cluster_name": "km-cluster-01",
+    "custom_fields_musteri": "cust-a"
+  },
+  {
+    "custom_fields_uuid": "nut-uuid-01",
+    "name": "nut-vm-01",
+    "cluster_name": "ahv-cluster-01",
+    "custom_fields_musteri": "cust-a"
+  },
+  {
+    "custom_fields_uuid": "",
+    "name": "lpar-01",
+    "cluster_name": "server-01",
+    "custom_fields_musteri": "cust-a"
+  }
+]

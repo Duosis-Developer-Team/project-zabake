@@ -1,0 +1,17 @@
+---
+- name: Ensure output directory exists
+  ansible.builtin.file:
+    path: "{{ output_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Run reconciliation CLI
+  ansible.builtin.include_tasks: run_reconciliation.yml
+
+- name: Upsert reconciliation results
+  ansible.builtin.include_tasks: upsert_results.yml
+  when: reconciliation_db.enabled | bool
+
+- name: Send summary email
+  ansible.builtin.include_tasks: send_email.yml
+  when: mail.enabled | bool

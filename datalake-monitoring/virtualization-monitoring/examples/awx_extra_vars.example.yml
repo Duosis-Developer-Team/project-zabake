@@ -1,0 +1,40 @@
+---
+recon_window_days: 7
+recon_targets:
+  - vmware
+  - nutanix
+  - ibm_lpar
+
+datalake_db:
+  host: "db.local"
+  port: 5432
+  name: "datalake"
+  user: "readonly"
+  password: "REPLACE_ME"
+
+netbox_db:
+  same_as_datalake: true
+
+reconciliation_db:
+  enabled: false
+  host: ""
+  port: 5432
+  name: ""
+  user: ""
+  password: ""
+  table: reconciliation_results
+
+gui_replay:
+  enabled: true
+  repo_path: "/runner/project/Datalake-Platform-GUI"
+
+mail:
+  enabled: false
+  smtp_host: ""
+  smtp_port: 587
+  smtp_user: ""
+  smtp_password: ""
+  mail_from: "datalake-recon@local"
+  mail_recipients: []
+
+output_dir: "/tmp/vm_reconciliation"
