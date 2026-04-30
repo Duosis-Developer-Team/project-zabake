@@ -10,7 +10,7 @@ from outputs.json_writer import write_json_report
 from reconcilers import IbmLparReconciler, NutanixVmReconciler, VmwareVmReconciler
 from settings import load_settings
 from sql_loader.datalake_queries import fetch_ibm_lpars, fetch_nutanix_vms, fetch_vmware_vms
-from sql_loader.gui_replay import load_gui_sql_strings
+from sql_loader.gui_replay import build_gui_replay_snapshot
 from sql_loader.netbox_queries import fetch_netbox_vm_inventory
 from utils.db import connect
 from utils.logging import configure_logging
@@ -22,7 +22,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--window-days", type=int, default=7)
     parser.add_argument("--targets", default="vmware,nutanix,ibm_lpar")
     parser.add_argument("--output-dir", default="/tmp/vm_reconciliation")
-    parser.add_argument("--gui-repo-path", default="")
     parser.add_argument("--gui-replay-enabled", default="true")
     parser.add_argument("--input-file", default="")
     parser.add_argument("--table", default="reconciliation_results")
@@ -39,6 +38,7 @@ def run_reconciliation(args: argparse.Namespace) -> dict:
 
     target_names = [item.strip() for item in args.targets.split(",") if item.strip()]
     targets = []
+    gui_replay = {}
     if args.dry_run:
         fixtures = Path(args.fixtures_dir)
         netbox_rows = json.loads((fixtures / "netbox_rows.json").read_text(encoding="utf-8"))
@@ -51,6 +51,15 @@ def run_reconciliation(args: argparse.Namespace) -> dict:
         if "ibm_lpar" in target_names:
             rows = json.loads((fixtures / "ibm_lpar_rows.json").read_text(encoding="utf-8"))
             targets.append(IbmLparReconciler().reconcile(rows, netbox_rows))
+        if args.gui_replay_enabled.lower() == "true":
+            gui_replay = {
+                "source": "internal_sql_replay",
+                "vmware_distinct_vm_count": 0,
+                "nutanix_distinct_vm_count": 0,
+                "ibm_distinct_lpar_count": 0,
+                "window_days": args.window_days,
+                "note": "dry-run mode uses fixtures and skips live SQL replay counts",
+            }
     else:
         with connect(settings.datalake_db) as dl_conn, connect(settings.netbox_db) as nb_conn:
             netbox_rows = fetch_netbox_vm_inventory(nb_conn)
@@ -63,16 +72,8 @@ def run_reconciliation(args: argparse.Namespace) -> dict:
             if "ibm_lpar" in target_names:
                 rows = fetch_ibm_lpars(dl_conn, args.window_days)
                 targets.append(IbmLparReconciler().reconcile(rows, netbox_rows))
-
-    gui_replay = {}
-    if args.gui_replay_enabled.lower() == "true" and args.gui_repo_path:
-        sql_map = load_gui_sql_strings(args.gui_repo_path)
-        gui_replay = {
-            "loaded_sql_keys": sorted(sql_map.keys()),
-            "vm_metrics_total_legacy": 0,
-            "vm_metrics_total_replay": 0,
-            "delta": 0,
-        }
+            if args.gui_replay_enabled.lower() == "true":
+                gui_replay = build_gui_replay_snapshot(dl_conn, args.window_days)
 
     run_id = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S") + "-" + uuid.uuid4().hex[:8]
     payload = {

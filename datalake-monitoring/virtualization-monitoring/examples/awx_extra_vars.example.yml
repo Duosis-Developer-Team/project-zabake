@@ -26,7 +26,6 @@ reconciliation_db:
 
 gui_replay:
   enabled: true
-  repo_path: "/runner/project/Datalake-Platform-GUI"
 
 mail:
   enabled: false
