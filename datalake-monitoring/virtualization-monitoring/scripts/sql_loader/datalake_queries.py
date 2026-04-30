@@ -23,12 +23,12 @@ def fetch_nutanix_vms(connection, window_days: int) -> list[dict]:
         SELECT DISTINCT ON (vm_uuid)
             vm_uuid,
             vm_name,
-            cluster_name AS cluster,
-            timestamp AS collection_time
+            cluster_uuid::text AS cluster,
+            collection_time
         FROM nutanix_vm_metrics
-        WHERE timestamp >= NOW() - (%s::text || ' days')::interval
+        WHERE collection_time >= NOW() - (%s::text || ' days')::interval
           AND vm_uuid IS NOT NULL
-        ORDER BY vm_uuid, timestamp DESC
+        ORDER BY vm_uuid, collection_time DESC
     """
     return fetch_all(connection, query, (str(window_days),))
 
