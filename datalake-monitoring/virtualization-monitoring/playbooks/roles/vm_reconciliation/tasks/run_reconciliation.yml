@@ -37,3 +37,4 @@
   ansible.builtin.set_fact:
     reconciliation_output_file: "{{ (vm_reconciliation_run.stdout | from_json).output_file }}"
     reconciliation_summary_file: "{{ (vm_reconciliation_run.stdout | from_json).summary_file }}"
+    reconciliation_csv_file: "{{ (vm_reconciliation_run.stdout | from_json).csv_file }}"

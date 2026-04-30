@@ -42,4 +42,6 @@
       - "{{ email_render_metadata.html_file }}"
       - --text-file
       - "{{ email_render_metadata.text_file }}"
+      - --csv-file
+      - "{{ reconciliation_csv_file }}"
   changed_when: false

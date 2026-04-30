@@ -1,6 +1,7 @@
 import argparse
 import smtplib
 import sys
+from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -22,6 +23,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--results-file", required=True)
     parser.add_argument("--html-file", required=True)
     parser.add_argument("--text-file", required=True)
+    parser.add_argument("--csv-file", required=True)
     return parser.parse_args()
 
 
@@ -35,12 +37,22 @@ def main() -> int:
     html_body = load_text(args.html_file)
     text_body = load_text(args.text_file)
 
-    message = MIMEMultipart("alternative")
+    message = MIMEMultipart("mixed")
     message["Subject"] = args.subject
     message["From"] = args.from_addr
     message["To"] = ", ".join(recipients)
-    message.attach(MIMEText(text_body, "plain", "utf-8"))
-    message.attach(MIMEText(html_body, "html", "utf-8"))
+    alternatives = MIMEMultipart("alternative")
+    alternatives.attach(MIMEText(text_body, "plain", "utf-8"))
+    alternatives.attach(MIMEText(html_body, "html", "utf-8"))
+    message.attach(alternatives)
+    csv_bytes = Path(args.csv_file).read_bytes()
+    csv_attachment = MIMEApplication(csv_bytes, _subtype="csv")
+    csv_attachment.add_header(
+        "Content-Disposition",
+        "attachment",
+        filename=Path(args.csv_file).name,
+    )
+    message.attach(csv_attachment)
 
     smtp = smtplib.SMTP(args.smtp_host, args.smtp_port, timeout=60)
     try:
