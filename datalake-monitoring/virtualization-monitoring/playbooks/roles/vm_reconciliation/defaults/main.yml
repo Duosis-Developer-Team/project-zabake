@@ -7,6 +7,7 @@ recon_targets:
 
 output_dir: "/tmp/vm_reconciliation"
 log_level: "INFO"
+install_python_dependencies: true
 
 datalake_db:
   host: ""

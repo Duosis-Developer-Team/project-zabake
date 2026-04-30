@@ -5,6 +5,12 @@
     state: directory
     mode: "0755"
 
+- name: Install Python dependencies for reconciliation scripts
+  ansible.builtin.pip:
+    requirements: "{{ playbook_dir }}/../scripts/requirements.txt"
+    executable: pip3
+  when: install_python_dependencies | bool
+
 - name: Run reconciliation CLI
   ansible.builtin.include_tasks: run_reconciliation.yml
 
