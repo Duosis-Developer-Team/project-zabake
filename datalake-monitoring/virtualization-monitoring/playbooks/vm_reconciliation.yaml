@@ -1,0 +1,28 @@
+---
+- name: Datalake VM and LPAR reconciliation
+  hosts: localhost
+  gather_facts: false
+
+  pre_tasks:
+    - name: Validate datalake_db.host
+      fail:
+        msg: "datalake_db.host is required"
+      when: datalake_db.host is not defined or datalake_db.host | length == 0
+
+    - name: Validate datalake_db.name
+      fail:
+        msg: "datalake_db.name is required"
+      when: datalake_db.name is not defined or datalake_db.name | length == 0
+
+    - name: Validate datalake_db.user
+      fail:
+        msg: "datalake_db.user is required"
+      when: datalake_db.user is not defined or datalake_db.user | length == 0
+
+    - name: Validate datalake_db.password
+      fail:
+        msg: "datalake_db.password is required"
+      when: datalake_db.password is not defined or datalake_db.password | length == 0
+
+  roles:
+    - role: vm_reconciliation

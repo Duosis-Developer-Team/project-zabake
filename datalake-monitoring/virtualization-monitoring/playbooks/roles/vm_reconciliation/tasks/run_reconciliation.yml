@@ -1,0 +1,41 @@
+---
+- name: Build script path
+  ansible.builtin.set_fact:
+    recon_script_path: "{{ playbook_dir }}/../scripts/main.py"
+
+- name: Execute reconciliation script
+  ansible.builtin.command:
+    argv:
+      - python3
+      - "{{ recon_script_path }}"
+      - --mode
+      - vm-reconciliation
+      - --window-days
+      - "{{ recon_window_days | string }}"
+      - --output-dir
+      - "{{ output_dir }}"
+      - --targets
+      - "{{ recon_targets | join(',') }}"
+      - --gui-replay-enabled
+      - "{{ gui_replay.enabled | string }}"
+      - --gui-repo-path
+      - "{{ gui_replay.repo_path }}"
+  register: vm_reconciliation_run
+  changed_when: false
+  environment:
+    DATALAKE_DB_HOST: "{{ datalake_db.host }}"
+    DATALAKE_DB_PORT: "{{ datalake_db.port | string }}"
+    DATALAKE_DB_NAME: "{{ datalake_db.name }}"
+    DATALAKE_DB_USER: "{{ datalake_db.user }}"
+    DATALAKE_DB_PASSWORD: "{{ datalake_db.password }}"
+    NETBOX_DB_HOST: "{{ (netbox_db.same_as_datalake | bool) | ternary(datalake_db.host, netbox_db.host) }}"
+    NETBOX_DB_PORT: "{{ ((netbox_db.same_as_datalake | bool) | ternary(datalake_db.port, netbox_db.port)) | string }}"
+    NETBOX_DB_NAME: "{{ (netbox_db.same_as_datalake | bool) | ternary(datalake_db.name, netbox_db.name) }}"
+    NETBOX_DB_USER: "{{ (netbox_db.same_as_datalake | bool) | ternary(datalake_db.user, netbox_db.user) }}"
+    NETBOX_DB_PASSWORD: "{{ (netbox_db.same_as_datalake | bool) | ternary(datalake_db.password, netbox_db.password) }}"
+    LOG_LEVEL: "{{ log_level }}"
+
+- name: Parse reconciliation output metadata
+  ansible.builtin.set_fact:
+    reconciliation_output_file: "{{ (vm_reconciliation_run.stdout | from_json).output_file }}"
+    reconciliation_summary_file: "{{ (vm_reconciliation_run.stdout | from_json).summary_file }}"

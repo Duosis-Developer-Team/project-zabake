@@ -1,0 +1,8 @@
+[
+  {
+    "vm_uuid": "nut-uuid-01",
+    "vm_name": "nut-vm-01",
+    "cluster": "ahv-cluster-01",
+    "customer_code": "cust-a"
+  }
+]
