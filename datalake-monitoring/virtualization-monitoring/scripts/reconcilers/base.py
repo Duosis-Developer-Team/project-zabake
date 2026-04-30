@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Optional
 
 from matchers.customer import customer_code_equal
 
@@ -7,8 +8,8 @@ from matchers.customer import customer_code_equal
 class MatchResult:
     key: str
     status: str
-    datalake: dict | None
-    netbox: dict | None
+    datalake: Optional[dict]
+    netbox: Optional[dict]
 
 
 class ReconcilerBase:
