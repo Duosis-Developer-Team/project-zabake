@@ -1,474 +1,227 @@
 ---
-- name: Create Python script to fetch all devices with mapping-based filtering
+- name: Create Python script to fetch all devices from database
   copy:
     content: |
       #!/usr/bin/env python3
       import json
       import sys
-      import requests
-      from collections import Counter, deque
-      from urllib3.exceptions import InsecureRequestWarning
-      
-      requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
-      
-      netbox_url = sys.argv[1].rstrip('/')
-      netbox_token = sys.argv[2]
-      verify_ssl = sys.argv[3].lower() == 'true'
-      mapping_file_path = sys.argv[4]
-      location_filter = sys.argv[5] if len(sys.argv) > 5 else ''
-      izlenmeli_mode = sys.argv[6] if len(sys.argv) > 6 else 'monitor'
-      
-      # Load device type mapping from file
+      import psycopg2
+      import psycopg2.extras
+
+      db_host = sys.argv[1]
+      db_port = int(sys.argv[2])
+      db_name = sys.argv[3]
+      db_user = sys.argv[4]
+      db_password = sys.argv[5]
+      mapping_file_path = sys.argv[6]
+      location_filter = sys.argv[7] if len(sys.argv) > 7 else ''
+      izlenmeli_mode = sys.argv[8] if len(sys.argv) > 8 else 'monitor'
+
       with open(mapping_file_path, 'r') as f:
           device_type_mapping = json.load(f)
       mappings = device_type_mapping.get('mappings', [])
-      
-      # Resolve location ID from location name if filter is provided
-      # Also collect child location IDs if the location has children
-      location_id_filter = None
-      location_ids_to_filter = []
-      if location_filter:
-          print(f"DEBUG: Resolving location ID for location name: {location_filter}", file=sys.stderr)
-          try:
-              # Search for location by name
-              location_response = requests.get(
-                  f"{netbox_url}/api/dcim/locations/",
-                  headers={'Authorization': f'Token {netbox_token}', 'Accept': 'application/json'},
-                  params={'name': location_filter, 'limit': 1000},
-                  verify=verify_ssl,
-                  timeout=30
-              )
-              location_response.raise_for_status()
-              location_data = location_response.json()
-              locations = location_data.get('results', [])
-              
-              # Find exact match (case-insensitive)
-              matched_location = None
-              for loc in locations:
-                  if loc.get('name', '').upper() == location_filter.upper():
-                      matched_location = loc
-                      location_id_filter = loc.get('id')
-                      location_ids_to_filter.append(location_id_filter)
-                      print(f"DEBUG: Found location ID {location_id_filter} for location name '{location_filter}'", file=sys.stderr)
-                      break
-              
-              if matched_location:
-                  # BFS: collect all descendant location IDs (any depth), with pagination per parent
-                  try:
-                      seen_ids = set(location_ids_to_filter)
-                      queue = deque([location_id_filter])
-                      while queue:
-                          pid = queue.popleft()
-                          child_url = (
-                              f"{netbox_url}/api/dcim/locations/"
-                              f"?parent_id={pid}&limit=1000"
-                          )
-                          while child_url:
-                              child_locations_response = requests.get(
-                                  child_url,
-                                  headers={
-                                      'Authorization': f'Token {netbox_token}',
-                                      'Accept': 'application/json'
-                                  },
-                                  verify=verify_ssl,
-                                  timeout=30
-                              )
-                              child_locations_response.raise_for_status()
-                              child_locations_data = child_locations_response.json()
-                              for loc in child_locations_data.get('results', []):
-                                  cid = loc.get('id')
-                                  if cid is None:
-                                      continue
-                                  if cid not in seen_ids:
-                                      seen_ids.add(cid)
-                                      location_ids_to_filter.append(cid)
-                                      queue.append(cid)
-                              child_url = child_locations_data.get('next')
-                      print(
-                          f"DEBUG: BFS location subtree: {len(location_ids_to_filter)} "
-                          f"location IDs (root + all descendants).",
-                          file=sys.stderr
-                      )
-                  except Exception as e:
-                      print(f"DEBUG: Could not fetch descendant locations: {e}", file=sys.stderr)
-              
-              if not location_id_filter:
-                  print(f"WARNING: Location '{location_filter}' not found in Netbox. Will fetch all devices.", file=sys.stderr)
-          except Exception as e:
-              print(f"ERROR: Failed to resolve location ID: {e}", file=sys.stderr)
-              print(f"WARNING: Will continue without location filter.", file=sys.stderr)
-      
-      # Debug: Print mapping info
+
       print(f"DEBUG: Loaded {len(mappings)} device type mappings", file=sys.stderr)
-      
-      def device_matches_conditions(device, conditions):
-          """Check if device matches the given conditions"""
-          # Device role check - Netbox API uses 'role' field, not 'device_role'
-          if 'device_role' in conditions:
-              # Try 'role' first (Netbox API field name), then 'device_role' as fallback
-              role_obj = device.get('role') or device.get('device_role')
-              role_name = role_obj.get('name', '') if role_obj and isinstance(role_obj, dict) else ''
-              
-              # Debug: Print role matching for HOST devices
-              expected_roles = conditions['device_role']
-              if 'HOST' in role_name.upper() or (isinstance(expected_roles, str) and 'HOST' in expected_roles.upper()) or (isinstance(expected_roles, list) and any('HOST' in str(r).upper() for r in expected_roles)):
-                  print(f"DEBUG: Checking HOST device role match: device_role='{role_name}', expected={expected_roles}", file=sys.stderr)
-              
-              if isinstance(expected_roles, list):
-                  if not role_name or role_name.upper() not in [r.upper() for r in expected_roles]:
-                      if 'HOST' in role_name.upper():
-                          print(f"DEBUG: HOST device role '{role_name}' does not match expected roles {expected_roles}", file=sys.stderr)
-                      return False
-              else:
-                  if not role_name or role_name.upper() != expected_roles.upper():
-                      if 'HOST' in role_name.upper():
-                          print(f"DEBUG: HOST device role '{role_name}' does not match expected role '{expected_roles}'", file=sys.stderr)
-                      return False
-          
-          # Manufacturer check
-          if 'manufacturer' in conditions:
-              device_type = device.get('device_type') or {}
-              manufacturer_obj = device_type.get('manufacturer') or {}
-              manufacturer_name = manufacturer_obj.get('name', '')
-              expected_manufacturers = conditions['manufacturer']
-              
-              # Debug for HOST devices
-              role_obj = device.get('role') or device.get('device_role')
-              role_name = role_obj.get('name', '') if role_obj and isinstance(role_obj, dict) else ''
-              if 'HOST' in role_name.upper():
-                  print(f"DEBUG: Checking manufacturer for HOST device: manufacturer='{manufacturer_name}', expected={expected_manufacturers}", file=sys.stderr)
-              
-              if isinstance(expected_manufacturers, list):
-                  if not manufacturer_name or manufacturer_name.upper() not in [m.upper() for m in expected_manufacturers]:
-                      if 'HOST' in role_name.upper():
-                          print(f"DEBUG: HOST device manufacturer '{manufacturer_name}' does not match expected manufacturers {expected_manufacturers}", file=sys.stderr)
-                      return False
-              else:
-                  if not manufacturer_name or manufacturer_name.upper() != expected_manufacturers.upper():
-                      if 'HOST' in role_name.upper():
-                          print(f"DEBUG: HOST device manufacturer '{manufacturer_name}' does not match expected manufacturer '{expected_manufacturers}'", file=sys.stderr)
-                      return False
-          
-          # Model contains check
-          if 'model_contains' in conditions:
-              device_type = device.get('device_type') or {}
-              model = device_type.get('model', '')
-              expected_contains = conditions['model_contains']
-              if isinstance(expected_contains, list):
-                  if not any(contain.upper() in model.upper() for contain in expected_contains):
-                      return False
-              else:
-                  if expected_contains.upper() not in model.upper():
-                      return False
-          
-          # Model suffix check
-          if 'model_suffix' in conditions:
-              device_type = device.get('device_type') or {}
-              model = device_type.get('model', '')
-              expected_suffix = conditions['model_suffix']
-              if not model.upper().endswith(expected_suffix.upper()):
-                  return False
-          
-          # Name contains check
-          if 'name_contains' in conditions:
-              name = device.get('name', '')
-              expected_contains = conditions['name_contains']
-              if isinstance(expected_contains, list):
-                  if not any(contain.upper() in name.upper() for contain in expected_contains):
-                      return False
-              else:
-                  if expected_contains.upper() not in name.upper():
-                      return False
-          
-          return True
-      
-      def device_matches_any_mapping(device):
-          """Check if device matches any mapping condition"""
-          # Debug: Check if this is a HOST device
-          role_obj = device.get('role') or device.get('device_role')
-          role_name = role_obj.get('name', '') if role_obj and isinstance(role_obj, dict) else ''
-          is_host = 'HOST' in role_name.upper()
-          
-          if is_host:
-              print(f"DEBUG: Checking HOST device '{device.get('name', 'N/A')}' against {len(mappings)} mappings", file=sys.stderr)
-          
-          for mapping in mappings:
-              conditions = mapping.get('conditions', {})
-              if is_host:
-                  print(f"DEBUG: Checking HOST device against mapping '{mapping.get('device_type', 'N/A')}'", file=sys.stderr)
-              if device_matches_conditions(device, conditions):
-                  if is_host:
-                      print(f"DEBUG: HOST device '{device.get('name', 'N/A')}' MATCHED mapping '{mapping.get('device_type', 'N/A')}'", file=sys.stderr)
-                  return True
-          
-          if is_host:
-              print(f"DEBUG: HOST device '{device.get('name', 'N/A')}' did NOT match any mapping", file=sys.stderr)
-          return False
-      
-      all_devices = []
-      unmatched_devices = []
-      # Build API URL with location and izlenmeli filters if provided
-      # If multiple location IDs (parent + children), we'll need to fetch separately or use a different approach
-      api_url = f"{netbox_url}/api/dcim/devices/?limit=1000&status=active"
-      if location_ids_to_filter:
-          # Netbox API supports filtering by multiple location IDs using location_id parameter multiple times
-          # But we'll use a simpler approach: fetch for each location ID and combine
-          if len(location_ids_to_filter) == 1:
-              api_url += f"&location_id={location_ids_to_filter[0]}"
-              print(f"DEBUG: Applying location filter at API level: location_id={location_ids_to_filter[0]}", file=sys.stderr)
-          else:
-              # For multiple locations, we'll fetch all and filter in Python
-              print(f"DEBUG: Multiple location IDs found ({len(location_ids_to_filter)}). Will fetch all devices and filter by location in Python.", file=sys.stderr)
-              api_url = f"{netbox_url}/api/dcim/devices/?limit=1000&status=active"
+      print(f"DEBUG: Connecting to DB {db_host}:{db_port}/{db_name} (mode={izlenmeli_mode})", file=sys.stderr)
 
-      # Apply izlenmeli filter at API level
+      # Build WHERE conditions
+      where_conditions = ["d.status_value = 'active'"]
+      query_params = []
+
       if izlenmeli_mode == 'monitor':
-          # Devices to be monitored: izlenmeli = Evet or null (no choice set)
-          api_url += "&cf_izlenmeli=Evet&cf_izlenmeli=null"
+          where_conditions.append("(d.izlenmeli IS NULL OR d.izlenmeli != 'Hayir' AND d.izlenmeli != 'Hayır')")
       elif izlenmeli_mode == 'skip':
-          # Devices explicitly marked as not to be monitored
-          api_url += "&cf_izlenmeli=Hayır"
+          where_conditions.append("(d.izlenmeli = 'Hayir' OR d.izlenmeli = 'Hayır')")
 
-      print(f"DEBUG: Using NetBox API URL ({izlenmeli_mode}): {api_url}", file=sys.stderr)
-      
-      next_url = api_url
-      
-      while next_url:
-          try:
-              response = requests.get(
-                  next_url,
-                  headers={
-                      'Authorization': f'Token {netbox_token}',
-                      'Accept': 'application/json'
-                  },
-                  verify=verify_ssl,
-                  timeout=30
-              )
-              response.raise_for_status()
-              data = response.json()
-              
-              devices = data.get('results', [])
-              
-              # Debug: Print page info
-              print(f"DEBUG: Fetched {len(devices)} devices from this page", file=sys.stderr)
-              
-              # Debug: Print role distribution
-              if len(devices) > 0:
-                  role_count = {}
-                  for device in devices:
-                      role_obj = device.get('role') or device.get('device_role')
-                      role_name = role_obj.get('name', 'Unknown') if role_obj and isinstance(role_obj, dict) else 'Unknown'
-                      role_count[role_name] = role_count.get(role_name, 0) + 1
-                  print(f"DEBUG: Role distribution on this page: {role_count}", file=sys.stderr)
-              
-              # Debug: Print all devices with HOST role (before filtering)
-              host_devices = []
-              for device in devices:
-                  role_obj = device.get('role') or device.get('device_role')
-                  role_name = role_obj.get('name', '') if role_obj and isinstance(role_obj, dict) else ''
-                  if role_name and 'HOST' in role_name.upper():
-                      host_devices.append(device)
-              
-              if host_devices:
-                  print(f"DEBUG: Found {len(host_devices)} HOST devices on this page (before mapping filters):", file=sys.stderr)
-                  for i, device in enumerate(host_devices[:10]):  # Show first 10 HOST devices
-                      role_obj = device.get('role') or device.get('device_role')
-                      role_name = role_obj.get('name', 'N/A') if role_obj and isinstance(role_obj, dict) else 'N/A'
-                      
-                      device_type = device.get('device_type') or {}
-                      manufacturer_obj = device_type.get('manufacturer') or {}
-                      manufacturer_name = manufacturer_obj.get('name', 'N/A')
-                      model = device_type.get('model', 'N/A')
-                      name = device.get('name', 'N/A')
-                      
-                      device_location = 'N/A'
-                      location_obj = device.get('location')
-                      if location_obj:
-                          if isinstance(location_obj, dict):
-                              device_location = location_obj.get('name', 'N/A')
-                          elif isinstance(location_obj, int):
-                              device_location = f"ID:{location_obj}"
-                      else:
-                          site_obj = device.get('site')
-                          if site_obj and isinstance(site_obj, dict):
-                              device_location = site_obj.get('name', 'N/A')
-                      print(f"  HOST Device {i+1}: name={name}, location={device_location}, role={role_name}, manufacturer={manufacturer_name}, model={model}", file=sys.stderr)
-              else:
-                  print("DEBUG: No HOST devices found on this page", file=sys.stderr)
-              
-              # Debug: Print sample device details (first 3 devices)
-              if len(devices) > 0 and len(all_devices) == 0:  # Only print on first page
-                  print("DEBUG: Sample device details (first 3 devices):", file=sys.stderr)
-                  for i, device in enumerate(devices[:3]):
-                      # Try 'role' first (Netbox API field name), then 'device_role' as fallback
-                      role_obj = device.get('role') or device.get('device_role')
-                      role_name = role_obj.get('name', 'N/A') if role_obj and isinstance(role_obj, dict) else 'N/A'
-                      
-                      device_type = device.get('device_type') or {}
-                      manufacturer_obj = device_type.get('manufacturer') or {}
-                      manufacturer_name = manufacturer_obj.get('name', 'N/A')
-                      model = device_type.get('model', 'N/A')
-                      name = device.get('name', 'N/A')
-                      
-                      # Get location info
-                      device_location = 'N/A'
-                      location_obj = device.get('location')
-                      if location_obj:
-                          if isinstance(location_obj, dict):
-                              device_location = location_obj.get('name', 'N/A')
-                          elif isinstance(location_obj, int):
-                              device_location = f"ID:{location_obj}"
-                      else:
-                          site_obj = device.get('site')
-                          if site_obj and isinstance(site_obj, dict):
-                              device_location = site_obj.get('name', 'N/A')
-                      print(f"  Device {i+1}: name={name}, location={device_location}, role={role_name}, manufacturer={manufacturer_name}, model={model}", file=sys.stderr)
-              
-              # Apply mapping-based filters.
-              # Not: location filter tek bir ID ise API seviyesinde uygulanır.
-              # Birden fazla location ID varsa, lokasyon filtresi Python tarafında uygulanır.
-              filtered_devices = []
-              unmatched_count = 0
-              host_device_count = 0
-              total_device_count = 0
-              location_filtered_count = 0
+      if location_filter:
+          where_conditions.append("(d.location_name ILIKE %s OR d.site_name ILIKE %s)")
+          query_params.extend([f'%{location_filter}%', f'%{location_filter}%'])
+          print(f"DEBUG: Applying location filter: {location_filter}", file=sys.stderr)
 
-              for device in devices:
-                  total_device_count += 1
-                  # Debug: Count HOST devices before mapping check
-                  role_obj = device.get('role') or device.get('device_role')
-                  role_name = role_obj.get('name', '') if role_obj and isinstance(role_obj, dict) else ''
-                  
-                  # Debug: Print first few devices to see what we're processing
-                  if total_device_count <= 5:
-                      print(f"DEBUG: Processing device #{total_device_count}: name={device.get('name', 'N/A')}, role={role_name}", file=sys.stderr)
-                  
-                  if role_name and 'HOST' in role_name.upper():
-                      host_device_count += 1
-                      if host_device_count <= 3:  # Debug first 3 HOST devices
-                          device_type = device.get('device_type') or {}
-                          manufacturer_obj = device_type.get('manufacturer') or {}
-                          manufacturer_name = manufacturer_obj.get('name', 'N/A')
-                          print(f"DEBUG: Processing HOST device #{host_device_count}: name={device.get('name', 'N/A')}, role={role_name}, manufacturer={manufacturer_name}", file=sys.stderr)
+      where_clause = " AND ".join(where_conditions)
 
-                  # -----------------------------
-                  # Lokasyon filtresi (çoklu ID için)
-                  # -----------------------------
-                  include_by_location = True
-                  if location_ids_to_filter:
-                      if len(location_ids_to_filter) > 1:
-                          # Birden fazla location ID varsa, cihazın location ID'si bu listede mi kontrol et
-                          device_location = device.get('location')
-                          device_location_id = None
-                          if isinstance(device_location, dict):
-                              device_location_id = device_location.get('id')
-                          elif isinstance(device_location, int):
-                              device_location_id = device_location
-
-                          if device_location_id not in location_ids_to_filter:
-                              include_by_location = False
-                              location_filtered_count += 1
-
-                  if not include_by_location:
-                      # Bu cihaz sadece lokasyon filtresinden dolayı hariç tutuldu
-                      continue
-                  
-                  # Mapping-based filters
-                  if device_matches_any_mapping(device):
-                      filtered_devices.append(device)
-                  else:
-                      unmatched_count += 1
-                      device_type = device.get('device_type') or {}
-                      manufacturer_obj = device_type.get('manufacturer') or {}
-                      manufacturer_name = manufacturer_obj.get('name', 'N/A')
-                      location_obj = device.get('location')
-                      if isinstance(location_obj, dict):
-                          dc_name = location_obj.get('name', 'N/A')
-                      else:
-                          site_obj = device.get('site') or {}
-                          dc_name = site_obj.get('name', 'N/A')
-                      unmatched_devices.append({
-                          'role': role_name or 'N/A',
-                          'manufacturer': manufacturer_name or 'N/A',
-                          'dc': dc_name or 'N/A'
-                      })
-                      # Debug: Print first unmatched device details for troubleshooting
-                      if unmatched_count == 1 and len(all_devices) == 0:
-                          # Try 'role' first (Netbox API field name), then 'device_role' as fallback
-                          role_obj = device.get('role') or device.get('device_role')
-                          role_name = role_obj.get('name', 'N/A') if role_obj and isinstance(role_obj, dict) else 'N/A'
-                          
-                          device_type = device.get('device_type') or {}
-                          manufacturer_obj = device_type.get('manufacturer') or {}
-                          manufacturer_name = manufacturer_obj.get('name', 'N/A')
-                          model = device_type.get('model', 'N/A')
-                          name = device.get('name', 'N/A')
-                          print(f"DEBUG: First unmatched device: name={name}, role={role_name}, manufacturer={manufacturer_name}, model={model}", file=sys.stderr)
-                          # Check why it doesn't match
-                          for mapping in mappings:
-                              conditions = mapping.get('conditions', {})
-                              print(f"  Checking mapping '{mapping.get('device_type', 'N/A')}':", file=sys.stderr)
-                              if 'device_role' in conditions:
-                                  expected_role = conditions['device_role']
-                                  if isinstance(expected_role, list):
-                                      print(f"    device_role: expected one of {expected_role}, got '{role_name}'", file=sys.stderr)
-                                  else:
-                                      print(f"    device_role: expected '{expected_role}', got '{role_name}'", file=sys.stderr)
-                              if 'manufacturer' in conditions:
-                                  expected_manufacturer = conditions['manufacturer']
-                                  if isinstance(expected_manufacturer, list):
-                                      print(f"    manufacturer: expected one of {expected_manufacturer}, got '{manufacturer_name}'", file=sys.stderr)
-                                  else:
-                                      print(f"    manufacturer: expected '{expected_manufacturer}', got '{manufacturer_name}'", file=sys.stderr)
-                              if 'model_contains' in conditions:
-                                  expected_contains = conditions['model_contains']
-                                  print(f"    model_contains: expected {expected_contains}, got model '{model}'", file=sys.stderr)
-                              if 'model_suffix' in conditions:
-                                  expected_suffix = conditions['model_suffix']
-                                  print(f"    model_suffix: expected '{expected_suffix}', got model '{model}'", file=sys.stderr)
-              
-              all_devices.extend(filtered_devices)
-              filter_info = "mapping filters"
-              if location_ids_to_filter:
-                  if len(location_ids_to_filter) == 1:
-                      filter_info += f" + location filter (ID: {location_ids_to_filter[0]})"
-                  else:
-                      filter_info += f" + location filter (IDs: {location_ids_to_filter})"
-                      if location_filtered_count > 0:
-                          print(f"DEBUG: Location filter stats: {location_filtered_count} devices filtered out by location on this page", file=sys.stderr)
-              print(f"DEBUG: Processed {total_device_count} total devices, {host_device_count} HOST devices, {len(filtered_devices)} devices matched after {filter_info} on this page", file=sys.stderr)
-              next_url = data.get('next')
-              
-              if not next_url:
-                  break
-          except Exception as e:
-              print(f"Error: {e}", file=sys.stderr)
-              sys.exit(1)
-      
-      # Debug: Print final results
-      filter_info = "mapping filters"
-      if location_id_filter:
-          filter_info += f" + location filter (ID: {location_id_filter}, name: {location_filter})"
-      print(f"DEBUG: Total devices after {filter_info} (mode={izlenmeli_mode}): {len(all_devices)}", file=sys.stderr)
-      
-      unmapped_pair_counts = Counter(
-          (item.get('role', 'N/A'), item.get('manufacturer', 'N/A'), item.get('dc', 'N/A'))
-          for item in unmatched_devices
+      sql = """
+      WITH RECURSIVE location_tree AS (
+          SELECT
+              l.id, l.name, l.parent_id, l.parent_name, l.description, l.site_name,
+              l.id AS start_location_id, 0 AS level
+          FROM public.discovery_loki_location l
+          UNION ALL
+          SELECT
+              parent.id, parent.name, parent.parent_id, parent.parent_name,
+              parent.description, parent.site_name, lt.start_location_id, lt.level + 1
+          FROM public.discovery_loki_location parent
+          INNER JOIN location_tree lt ON lt.parent_id = parent.id
+      ),
+      root_locations AS (
+          SELECT DISTINCT ON (start_location_id)
+              start_location_id,
+              id AS root_location_id,
+              name AS root_location_name,
+              description AS root_location_description
+          FROM location_tree
+          WHERE parent_id IS NULL
+          ORDER BY start_location_id, level DESC
+      ),
+      cluster_map AS (
+          SELECT
+              site_name,
+              STRING_AGG(DISTINCT cluster_name, ', ' ORDER BY cluster_name) AS resolved_cluster_name
+          FROM public.discovery_netbox_virtualization_vm
+          WHERE cluster_name IS NOT NULL AND site_name IS NOT NULL
+          GROUP BY site_name
       )
-      unmapped_pairs = [
-          {'role': role, 'manufacturer': manufacturer, 'dc': dc, 'count': count}
-          for (role, manufacturer, dc), count in sorted(unmapped_pair_counts.items())
-      ]
+      SELECT
+          d.id,
+          d.name,
+          d.device_type_name AS device_model,
+          d.manufacturer_name,
+          d.device_role_name,
+          d.primary_ip_address,
+          d.site_id,
+          d.site_name,
+          d.location_id,
+          d.location_name,
+          l.description AS location_description,
+          l.parent_id AS location_parent_id,
+          l.parent_name AS location_parent_name,
+          rl.root_location_name,
+          rl.root_location_description,
+          d.tenant_id,
+          d.tenant_name,
+          d.platform_id,
+          d.platform_name,
+          p.parent_name AS platform_parent_name,
+          p.manufacturer_name AS platform_manufacturer_name,
+          p.cf_dc AS platform_cf_dc,
+          p.cf_site AS platform_cf_site,
+          p.cf_ip_addresses AS platform_cf_ip_addresses,
+          p.cf_port AS platform_cf_port,
+          p.cf_url AS platform_cf_url,
+          cm.resolved_cluster_name AS cluster_name,
+          d.custom_fields,
+          d.sahiplik,
+          d.kurulum_tarihi,
+          d.izlenmeli,
+          d.zabbix_monitoring,
+          d.datalake_monitoring,
+          d.tags1_name,
+          d.tags2_name,
+          d.tags3_name,
+          d.tags4_name,
+          d.tags5_name,
+          d.created::text,
+          d.last_updated::text
+      FROM public.discovery_netbox_inventory_device d
+      LEFT JOIN public.discovery_loki_location l ON d.location_id = l.id
+      LEFT JOIN root_locations rl ON d.location_id = rl.start_location_id
+      LEFT JOIN public.discovery_netbox_platform p ON d.platform_id = p.id
+      LEFT JOIN cluster_map cm ON d.site_name = cm.site_name
+      WHERE """ + where_clause
+
+      def device_matches_conditions(device, conditions):
+          if 'device_role' in conditions:
+              role_name = (device.get('device_role_name') or '').upper()
+              expected = conditions['device_role']
+              if isinstance(expected, list):
+                  if role_name not in [r.upper() for r in expected]:
+                      return False
+              else:
+                  if role_name != expected.upper():
+                      return False
+
+          if 'manufacturer' in conditions:
+              manufacturer = (device.get('manufacturer_name') or '').upper()
+              expected = conditions['manufacturer']
+              if isinstance(expected, list):
+                  if manufacturer not in [m.upper() for m in expected]:
+                      return False
+              else:
+                  if manufacturer != expected.upper():
+                      return False
+
+          if 'model_contains' in conditions:
+              model = (device.get('device_model') or '').upper()
+              expected = conditions['model_contains']
+              if isinstance(expected, list):
+                  if not any(c.upper() in model for c in expected):
+                      return False
+              else:
+                  if expected.upper() not in model:
+                      return False
+
+          if 'model_suffix' in conditions:
+              model = (device.get('device_model') or '').upper()
+              expected = conditions['model_suffix']
+              if isinstance(expected, list):
+                  if not any(model.endswith(s.upper()) for s in expected):
+                      return False
+              else:
+                  if not model.endswith(expected.upper()):
+                      return False
+
+          if 'name_contains' in conditions:
+              name = (device.get('name') or '').upper()
+              expected = conditions['name_contains']
+              if isinstance(expected, list):
+                  if not any(c.upper() in name for c in expected):
+                      return False
+              else:
+                  if expected.upper() not in name:
+                      return False
+
+          return True
+
+      def device_matches_any_mapping(device):
+          for mapping in mappings:
+              if device_matches_conditions(device, mapping.get('conditions', {})):
+                  return True
+          return False
+
+      try:
+          conn = psycopg2.connect(
+              host=db_host, port=db_port, dbname=db_name,
+              user=db_user, password=db_password,
+              connect_timeout=30
+          )
+          conn.set_session(readonly=True)
+          cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+          cur.execute(sql, query_params if query_params else None)
+          rows = cur.fetchall()
+          cur.close()
+          conn.close()
+      except Exception as e:
+          print(f"ERROR: Database connection/query failed: {e}", file=sys.stderr)
+          sys.exit(1)
+
+      print(f"DEBUG: Fetched {len(rows)} rows from database (mode={izlenmeli_mode})", file=sys.stderr)
+
+      all_devices = []
+      unmatched_count = 0
+      for row in rows:
+          device = dict(row)
+          if device.get('custom_fields') is None:
+              device['custom_fields'] = {}
+          elif not isinstance(device['custom_fields'], dict):
+              try:
+                  device['custom_fields'] = json.loads(device['custom_fields'])
+              except Exception:
+                  device['custom_fields'] = {}
+
+          if device_matches_any_mapping(device):
+              all_devices.append(device)
+          else:
+              unmatched_count += 1
+
+      print(f"DEBUG: After mapping filter (mode={izlenmeli_mode}): {len(all_devices)} matched, {unmatched_count} unmatched", file=sys.stderr)
 
       result = {
           'devices': all_devices,
           'count': len(all_devices),
-          'mode': izlenmeli_mode,
-          'unmapped_pairs': unmapped_pairs
+          'mode': izlenmeli_mode
       }
-      
-      print(json.dumps(result))
-    dest: "/tmp/fetch_all_netbox_devices.py"
+      print(json.dumps(result, default=str))
+    dest: "/tmp/fetch_all_db_devices.py"
     mode: '0755'
   delegate_to: localhost
   run_once: true
@@ -484,7 +237,7 @@
   debug:
     msg: |
       ============================================
-      MAPPING-BASED FILTERING
+      MAPPING-BASED FILTERING (DATABASE MODE)
       ============================================
       Using device type mapping file: {{ device_type_mapping_path }}
       Total mappings loaded: {{ device_type_mapping.mappings | length }}
@@ -492,14 +245,17 @@
       {% for mapping in device_type_mapping.mappings %}
       - {{ mapping.device_type }}: {{ mapping.conditions | to_nice_json }}
       {% endfor %}
+      DB Host: {{ discovery_db_host }}:{{ discovery_db_port }}/{{ discovery_db_name }}
       ============================================
 
-- name: Fetch monitor devices using Python script with mapping-based filtering
+- name: Fetch monitor devices from database
   command: >
-    python3 /tmp/fetch_all_netbox_devices.py
-    "{{ netbox_url }}"
-    "{{ netbox_token }}"
-    "{{ netbox_verify_ssl | string }}"
+    python3 /tmp/fetch_all_db_devices.py
+    "{{ discovery_db_host }}"
+    "{{ discovery_db_port }}"
+    "{{ discovery_db_name }}"
+    "{{ discovery_db_user }}"
+    "{{ discovery_db_password }}"
     "/tmp/netbox_device_type_mapping.json"
     "{{ location_filter | default('') }}"
     "monitor"
@@ -507,12 +263,14 @@
   changed_when: false
   delegate_to: localhost
 
-- name: Fetch skip devices using Python script with mapping-based filtering
+- name: Fetch skip devices from database
   command: >
-    python3 /tmp/fetch_all_netbox_devices.py
-    "{{ netbox_url }}"
-    "{{ netbox_token }}"
-    "{{ netbox_verify_ssl | string }}"
+    python3 /tmp/fetch_all_db_devices.py
+    "{{ discovery_db_host }}"
+    "{{ discovery_db_port }}"
+    "{{ discovery_db_name }}"
+    "{{ discovery_db_user }}"
+    "{{ discovery_db_password }}"
     "/tmp/netbox_device_type_mapping.json"
     "{{ location_filter | default('') }}"
     "skip"
@@ -536,8 +294,6 @@
     netbox_devices_monitor_count: "{{ (fetch_devices_monitor_result.stdout | from_json).count }}"
     netbox_devices_skip_raw: "{{ (fetch_devices_skip_result.stdout | from_json).devices }}"
     netbox_devices_skip_count: "{{ (fetch_devices_skip_result.stdout | from_json).count }}"
-    netbox_unmapped_pairs: "{{ (fetch_devices_monitor_result.stdout | from_json).unmapped_pairs | default([]) }}"
-    # Backwards compatibility: main flow uses netbox_devices_raw/count for monitor set
     netbox_devices_raw: "{{ (fetch_devices_monitor_result.stdout | from_json).devices }}"
     netbox_devices_count: "{{ (fetch_devices_monitor_result.stdout | from_json).count }}"
 
@@ -545,9 +301,8 @@
   debug:
     msg: |
       ============================================
-      NETBOX API FETCH RESULTS
+      DATABASE FETCH RESULTS
       ============================================
       Monitor devices (Evet/null) count: {{ netbox_devices_monitor_count }}
       Skip devices (Hayır) count: {{ netbox_devices_skip_count }}
       ============================================
-
