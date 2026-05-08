@@ -1,4 +1,14 @@
 ---
+# NOTE: Platform sync (sync_platforms: true) is outside the DB-migration MVP scope.
+# It still uses the NetBox API. If you enable sync_platforms, also provide
+# netbox_url, netbox_token, and netbox_verify_ssl in your AWX Job Template variables.
+
+- name: Warn that platform sync still requires NetBox API credentials
+  debug:
+    msg: >
+      WARNING: sync_platforms=true is enabled. Platform fetch still uses the NetBox API.
+      Make sure netbox_url, netbox_token, and netbox_verify_ssl are set in AWX variables.
+
 - name: Create Python script to fetch all platforms with filtering
   copy:
     content: |

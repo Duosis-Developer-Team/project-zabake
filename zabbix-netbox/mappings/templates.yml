@@ -3,13 +3,13 @@
 # host_groups field is optional and will be added to the host groups from Netbox
 Lenovo IPMI:
   - name: BLT - Lenovo ICT XCC Monitoring
-    type: snmpv3
+    type: snmpv2
     host_groups: 
       - "Physical Hosts"
     macros:
       "{$REDFISH.API.URL}": "https://{HOST.IP}/"
       "{$REDFISH.PASSWORD}": "S7G3y9TtmRSm"
-      "{$REDFISH.USER}": "monitor"
+      "{$REDFISH.USER}": "zabbix"
 Inspur M6:
   - name: BLT - Inspur M6 Template
     type: snmpv2

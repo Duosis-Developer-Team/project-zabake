@@ -485,6 +485,7 @@
   when:
     - zbx_scenario == 'create'
     - _missing_params | default([]) | length == 0
+    - not (dry_run | default(false) | bool)
 
 - name: Record create success
   set_fact:
@@ -554,6 +555,47 @@
     - >-
       (zbx_create_resp.json.error.message | default('')) is search('already exists')
       or (zbx_create_resp.json.error.data | default('') | string) is search('already exists')
+
+- name: DRY-RUN - Create preview summary
+  debug:
+    msg: |
+      ========================================
+      DRY-RUN: ZABBIX HOST CREATE PREVIEW
+      ========================================
+      Host          : {{ zbx_record.HOSTNAME }}
+      IP            : {{ zbx_record.HOST_IP }}
+      Device Type   : {{ zbx_record.DEVICE_TYPE | default('N/A') }}
+      Zabbix'te Var : HAYIR (yeni host oluşturulacaktı)
+      Template'ler  : {{ zbx_template_names | join(', ') }}
+      Host Group'lar: {{ zbx_required_groups_for_record | join(', ') }}
+      DC_ID         : {{ zbx_location_name }} → {{ zbx_matched_proxy_group | default('eşleşme yok') }} (proxy_groupid: {{ zbx_proxy_group_id | default('N/A') }})
+      Monitored By  : {{ zbx_monitored_by }}
+      Tag Sayısı    : {{ zbx_tags | default([]) | length }}
+      Macro Sayısı  : {{ zbx_host_macros_formatted | default([]) | length }}
+      ----------------------------------------
+      DRY-RUN: host.create çağrısı YAPILMADI.
+      ========================================
+  when:
+    - dry_run | default(false) | bool
+    - zbx_scenario == 'create'
+    - _missing_params | default([]) | length == 0
+
+- name: DRY-RUN - Record create preview result
+  set_fact:
+    device_result:
+      hostname: "{{ zbx_record.HOSTNAME }}"
+      device_role: "{{ zbx_record.DEVICE_ROLE | default('N/A') }}"
+      status: "dry_run"
+      reason: "Dry-run: host.create çağrısı yapılmadı — eklenecekti"
+      ip: "{{ zbx_record.HOST_IP }}"
+      location: "{{ zbx_record.REPORT_LOCATION | default('N/A', true) }}"
+      site: "{{ zbx_record.REPORT_SITE | default('N/A', true) }}"
+      tenant: "{{ zbx_record.REPORT_TENANT | default('N/A', true) }}"
+      ownership: "{{ zbx_record.REPORT_OWNERSHIP | default('N/A', true) }}"
+  when:
+    - dry_run | default(false) | bool
+    - zbx_scenario == 'create'
+    - _missing_params | default([]) | length == 0
 
 - name: Validate required parameters before update
   set_fact:
@@ -772,6 +814,7 @@
     - _zbx_interface_update is defined
     - _missing_params | default([]) | length == 0
     - _needs_update | default(true) | bool
+    - not (dry_run | default(false) | bool)
 
 - name: Record no update needed (already up-to-date)
   set_fact:
@@ -895,3 +938,48 @@
     - zbx_update_resp is defined
     - zbx_update_resp.json is defined
     - zbx_update_resp.json.error is defined
+
+- name: DRY-RUN - Update preview summary
+  debug:
+    msg: |
+      ========================================
+      DRY-RUN: ZABBIX HOST UPDATE PREVIEW
+      ========================================
+      Host            : {{ zbx_record.HOSTNAME }}
+      Host ID (mevcut): {{ zbx_existing_host.hostid }}
+      IP (mevcut→yeni): {{ _existing_interface.ip | default('N/A') }} → {{ zbx_record.HOST_IP }}
+      Device Type     : {{ zbx_record.DEVICE_TYPE | default('N/A') }}
+      Hostname değişti: {{ zbx_existing_host.host | default('') != zbx_record.HOSTNAME }}
+      IP değişti      : {{ _existing_interface.ip | default('') != zbx_record.HOST_IP }}
+      Monitored By    : {{ zbx_existing_host.monitored_by | default('N/A') }} → {{ zbx_monitored_by }}
+      Proxy Group     : {{ zbx_existing_host.proxy_groupid | default('N/A') }} → {{ zbx_proxy_group_id }}
+      Macro değişti   : {{ _macros_needs_update | default(false) }}
+      DC_ID           : {{ zbx_location_name }} → {{ zbx_matched_proxy_group | default('eşleşme yok') }}
+      ----------------------------------------
+      DRY-RUN: host.update çağrısı YAPILMADI.
+      ========================================
+  when:
+    - dry_run | default(false) | bool
+    - zbx_scenario == 'update'
+    - zbx_existing_host.hostid is defined
+    - _needs_update | default(false) | bool
+    - _missing_params | default([]) | length == 0
+
+- name: DRY-RUN - Record update preview result
+  set_fact:
+    device_result:
+      hostname: "{{ zbx_record.HOSTNAME }}"
+      device_role: "{{ zbx_record.DEVICE_ROLE | default('N/A') }}"
+      status: "dry_run"
+      reason: "Dry-run: host.update çağrısı yapılmadı — güncellenecekti"
+      ip: "{{ zbx_record.HOST_IP }}"
+      location: "{{ zbx_record.REPORT_LOCATION | default('N/A', true) }}"
+      site: "{{ zbx_record.REPORT_SITE | default('N/A', true) }}"
+      tenant: "{{ zbx_record.REPORT_TENANT | default('N/A', true) }}"
+      ownership: "{{ zbx_record.REPORT_OWNERSHIP | default('N/A', true) }}"
+  when:
+    - dry_run | default(false) | bool
+    - zbx_scenario == 'update'
+    - zbx_existing_host.hostid is defined
+    - _needs_update | default(false) | bool
+    - _missing_params | default([]) | length == 0
