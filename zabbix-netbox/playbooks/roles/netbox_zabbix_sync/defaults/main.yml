@@ -1,7 +1,7 @@
 ---
 # Discovery database connection settings (PostgreSQL)
 discovery_db_host: ""
-discovery_db_port: 5432
+discovery_db_port: 5000
 discovery_db_name: ""
 discovery_db_user: ""
 discovery_db_password: ""

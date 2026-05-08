@@ -5,11 +5,12 @@
       #!/usr/bin/env python3
       import json
       import sys
-      import psycopg2
-      import psycopg2.extras
+      import os
+      import subprocess
+      import tempfile
 
       db_host = sys.argv[1]
-      db_port = int(sys.argv[2])
+      db_port = sys.argv[2]
       db_name = sys.argv[3]
       db_user = sys.argv[4]
       db_password = sys.argv[5]
@@ -22,20 +23,23 @@
       mappings = device_type_mapping.get('mappings', [])
 
       print(f"DEBUG: Loaded {len(mappings)} device type mappings", file=sys.stderr)
-      print(f"DEBUG: Connecting to DB {db_host}:{db_port}/{db_name} (mode={izlenmeli_mode})", file=sys.stderr)
+      print(f"DEBUG: Connecting to DB {db_host}:{db_port}/{db_name} via psql (mode={izlenmeli_mode})", file=sys.stderr)
 
       # Build WHERE conditions
       where_conditions = ["d.status_value = 'active'"]
-      query_params = []
 
       if izlenmeli_mode == 'monitor':
-          where_conditions.append("(d.izlenmeli IS NULL OR d.izlenmeli != 'Hayir' AND d.izlenmeli != 'Hayır')")
+          where_conditions.append(
+              "(d.izlenmeli IS NULL OR (d.izlenmeli != 'Hayir' AND d.izlenmeli != 'Hayır'))"
+          )
       elif izlenmeli_mode == 'skip':
           where_conditions.append("(d.izlenmeli = 'Hayir' OR d.izlenmeli = 'Hayır')")
 
       if location_filter:
-          where_conditions.append("(d.location_name ILIKE %s OR d.site_name ILIKE %s)")
-          query_params.extend([f'%{location_filter}%', f'%{location_filter}%'])
+          loc_escaped = location_filter.replace("'", "''")
+          where_conditions.append(
+              f"(d.location_name ILIKE '%{loc_escaped}%' OR d.site_name ILIKE '%{loc_escaped}%')"
+          )
           print(f"DEBUG: Applying location filter: {location_filter}", file=sys.stderr)
 
       where_clause = " AND ".join(where_conditions)
@@ -71,53 +75,114 @@
           WHERE cluster_name IS NOT NULL AND site_name IS NOT NULL
           GROUP BY site_name
       )
-      SELECT
-          d.id,
-          d.name,
-          d.device_type_name AS device_model,
-          d.manufacturer_name,
-          d.device_role_name,
-          d.primary_ip_address,
-          d.site_id,
-          d.site_name,
-          d.location_id,
-          d.location_name,
-          l.description AS location_description,
-          l.parent_id AS location_parent_id,
-          l.parent_name AS location_parent_name,
-          rl.root_location_name,
-          rl.root_location_description,
-          d.tenant_id,
-          d.tenant_name,
-          d.platform_id,
-          d.platform_name,
-          p.parent_name AS platform_parent_name,
-          p.manufacturer_name AS platform_manufacturer_name,
-          p.cf_dc AS platform_cf_dc,
-          p.cf_site AS platform_cf_site,
-          p.cf_ip_addresses AS platform_cf_ip_addresses,
-          p.cf_port AS platform_cf_port,
-          p.cf_url AS platform_cf_url,
-          cm.resolved_cluster_name AS cluster_name,
-          d.custom_fields,
-          d.sahiplik,
-          d.kurulum_tarihi,
-          d.izlenmeli,
-          d.zabbix_monitoring,
-          d.datalake_monitoring,
-          d.tags1_name,
-          d.tags2_name,
-          d.tags3_name,
-          d.tags4_name,
-          d.tags5_name,
-          d.created::text,
-          d.last_updated::text
-      FROM public.discovery_netbox_inventory_device d
-      LEFT JOIN public.discovery_loki_location l ON d.location_id = l.id
-      LEFT JOIN root_locations rl ON d.location_id = rl.start_location_id
-      LEFT JOIN public.discovery_netbox_platform p ON d.platform_id = p.id
-      LEFT JOIN cluster_map cm ON d.site_name = cm.site_name
-      WHERE """ + where_clause
+      SELECT COALESCE(json_agg(row_to_json(q)), '[]'::json)::text
+      FROM (
+          SELECT
+              d.id,
+              d.name,
+              d.device_type_name AS device_model,
+              d.manufacturer_name,
+              d.device_role_name,
+              d.primary_ip_address,
+              d.site_id,
+              d.site_name,
+              d.location_id,
+              d.location_name,
+              l.description AS location_description,
+              l.parent_id AS location_parent_id,
+              l.parent_name AS location_parent_name,
+              rl.root_location_name,
+              rl.root_location_description,
+              d.tenant_id,
+              d.tenant_name,
+              d.platform_id,
+              d.platform_name,
+              p.parent_name AS platform_parent_name,
+              p.manufacturer_name AS platform_manufacturer_name,
+              p.cf_dc AS platform_cf_dc,
+              p.cf_site AS platform_cf_site,
+              p.cf_ip_addresses AS platform_cf_ip_addresses,
+              p.cf_port AS platform_cf_port,
+              p.cf_url AS platform_cf_url,
+              cm.resolved_cluster_name AS cluster_name,
+              d.custom_fields,
+              d.sahiplik,
+              d.kurulum_tarihi,
+              d.izlenmeli,
+              d.zabbix_monitoring,
+              d.datalake_monitoring,
+              d.tags1_name,
+              d.tags2_name,
+              d.tags3_name,
+              d.tags4_name,
+              d.tags5_name,
+              d.created::text,
+              d.last_updated::text
+          FROM public.discovery_netbox_inventory_device d
+          LEFT JOIN public.discovery_loki_location l ON d.location_id = l.id
+          LEFT JOIN root_locations rl ON d.location_id = rl.start_location_id
+          LEFT JOIN public.discovery_netbox_platform p ON d.platform_id = p.id
+          LEFT JOIN cluster_map cm ON d.site_name = cm.site_name
+          WHERE """ + where_clause + """
+      ) q;
+      """
+
+      sql_file = None
+      proc = None
+      try:
+          with tempfile.NamedTemporaryFile(
+              mode='w', suffix='.sql', delete=False, prefix='/tmp/fetch_devices_'
+          ) as tf:
+              tf.write(sql)
+              sql_file = tf.name
+
+          env = os.environ.copy()
+          env['PGPASSWORD'] = db_password
+
+          proc = subprocess.run(
+              [
+                  'psql',
+                  '-h', db_host,
+                  '-p', str(db_port),
+                  '-U', db_user,
+                  '-d', db_name,
+                  '-t',
+                  '-A',
+                  '-f', sql_file,
+              ],
+              capture_output=True,
+              text=True,
+              env=env,
+              timeout=120,
+          )
+
+          if proc.stderr:
+              print(f"DEBUG psql stderr: {proc.stderr}", file=sys.stderr)
+
+          if proc.returncode != 0:
+              print(f"ERROR: psql exited with code {proc.returncode}", file=sys.stderr)
+              sys.exit(1)
+
+      finally:
+          if sql_file and os.path.exists(sql_file):
+              os.unlink(sql_file)
+
+      raw_output = proc.stdout.strip()
+      print(f"DEBUG: psql returned {len(raw_output)} chars (mode={izlenmeli_mode})", file=sys.stderr)
+
+      if not raw_output or raw_output == 'null':
+          rows = []
+      else:
+          try:
+              rows = json.loads(raw_output)
+              if not isinstance(rows, list):
+                  rows = []
+          except json.JSONDecodeError as e:
+              print(f"ERROR: Failed to parse psql output: {e}", file=sys.stderr)
+              print(f"ERROR: Raw output (first 500 chars): {raw_output[:500]}", file=sys.stderr)
+              sys.exit(1)
+
+      print(f"DEBUG: Fetched {len(rows)} rows from database (mode={izlenmeli_mode})", file=sys.stderr)
 
       def device_matches_conditions(device, conditions):
           if 'device_role' in conditions:
@@ -178,24 +243,6 @@
                   return True
           return False
 
-      try:
-          conn = psycopg2.connect(
-              host=db_host, port=db_port, dbname=db_name,
-              user=db_user, password=db_password,
-              connect_timeout=30
-          )
-          conn.set_session(readonly=True)
-          cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-          cur.execute(sql, query_params if query_params else None)
-          rows = cur.fetchall()
-          cur.close()
-          conn.close()
-      except Exception as e:
-          print(f"ERROR: Database connection/query failed: {e}", file=sys.stderr)
-          sys.exit(1)
-
-      print(f"DEBUG: Fetched {len(rows)} rows from database (mode={izlenmeli_mode})", file=sys.stderr)
-
       all_devices = []
       unmatched_count = 0
       for row in rows:
@@ -213,12 +260,16 @@
           else:
               unmatched_count += 1
 
-      print(f"DEBUG: After mapping filter (mode={izlenmeli_mode}): {len(all_devices)} matched, {unmatched_count} unmatched", file=sys.stderr)
+      print(
+          f"DEBUG: After mapping filter (mode={izlenmeli_mode}): "
+          f"{len(all_devices)} matched, {unmatched_count} unmatched",
+          file=sys.stderr,
+      )
 
       result = {
           'devices': all_devices,
           'count': len(all_devices),
-          'mode': izlenmeli_mode
+          'mode': izlenmeli_mode,
       }
       print(json.dumps(result, default=str))
     dest: "/tmp/fetch_all_db_devices.py"
