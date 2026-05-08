@@ -1,193 +1,42 @@
 ---
-- name: Create Python script to fetch all devices from database
+- name: Create Python device filter script
   copy:
     content: |
       #!/usr/bin/env python3
+      """
+      Reads a JSON array of device rows and applies device_type_mapping
+      conditions. No database connection — filtering only.
+      """
       import json
       import sys
-      import os
-      import subprocess
-      import tempfile
 
-      db_host = sys.argv[1]
-      db_port = sys.argv[2]
-      db_name = sys.argv[3]
-      db_user = sys.argv[4]
-      db_password = sys.argv[5]
-      mapping_file_path = sys.argv[6]
-      location_filter = sys.argv[7] if len(sys.argv) > 7 else ''
-      izlenmeli_mode = sys.argv[8] if len(sys.argv) > 8 else 'monitor'
+      json_file      = sys.argv[1]
+      mapping_file   = sys.argv[2]
+      izlenmeli_mode = sys.argv[3] if len(sys.argv) > 3 else 'monitor'
 
-      with open(mapping_file_path, 'r') as f:
+      with open(mapping_file, 'r') as f:
           device_type_mapping = json.load(f)
       mappings = device_type_mapping.get('mappings', [])
 
       print(f"DEBUG: Loaded {len(mappings)} device type mappings", file=sys.stderr)
-      print(f"DEBUG: Connecting to DB {db_host}:{db_port}/{db_name} via psql (mode={izlenmeli_mode})", file=sys.stderr)
+      print(f"DEBUG: Processing mode={izlenmeli_mode}", file=sys.stderr)
 
-      # Build WHERE conditions
-      where_conditions = ["d.status_value = 'active'"]
+      with open(json_file, 'r') as f:
+          raw = f.read().strip()
 
-      if izlenmeli_mode == 'monitor':
-          where_conditions.append(
-              "(d.izlenmeli IS NULL OR (d.izlenmeli != 'Hayir' AND d.izlenmeli != 'Hayır'))"
-          )
-      elif izlenmeli_mode == 'skip':
-          where_conditions.append("(d.izlenmeli = 'Hayir' OR d.izlenmeli = 'Hayır')")
-
-      if location_filter:
-          loc_escaped = location_filter.replace("'", "''")
-          where_conditions.append(
-              f"(d.location_name ILIKE '%{loc_escaped}%' OR d.site_name ILIKE '%{loc_escaped}%')"
-          )
-          print(f"DEBUG: Applying location filter: {location_filter}", file=sys.stderr)
-
-      where_clause = " AND ".join(where_conditions)
-
-      sql = """
-      WITH RECURSIVE location_tree AS (
-          SELECT
-              l.id, l.name, l.parent_id, l.parent_name, l.description, l.site_name,
-              l.id AS start_location_id, 0 AS level
-          FROM public.discovery_loki_location l
-          UNION ALL
-          SELECT
-              parent.id, parent.name, parent.parent_id, parent.parent_name,
-              parent.description, parent.site_name, lt.start_location_id, lt.level + 1
-          FROM public.discovery_loki_location parent
-          INNER JOIN location_tree lt ON lt.parent_id = parent.id
-      ),
-      root_locations AS (
-          SELECT DISTINCT ON (start_location_id)
-              start_location_id,
-              id AS root_location_id,
-              name AS root_location_name,
-              description AS root_location_description
-          FROM location_tree
-          WHERE parent_id IS NULL
-          ORDER BY start_location_id, level DESC
-      ),
-      cluster_map AS (
-          SELECT
-              site_name,
-              STRING_AGG(DISTINCT cluster_name, ', ' ORDER BY cluster_name) AS resolved_cluster_name
-          FROM public.discovery_netbox_virtualization_vm
-          WHERE cluster_name IS NOT NULL AND site_name IS NOT NULL
-          GROUP BY site_name
-      )
-      SELECT COALESCE(json_agg(row_to_json(q)), '[]'::json)::text
-      FROM (
-          SELECT
-              d.id,
-              d.name,
-              d.device_type_name AS device_model,
-              d.manufacturer_name,
-              d.device_role_name,
-              d.primary_ip_address,
-              d.site_id,
-              d.site_name,
-              d.location_id,
-              d.location_name,
-              l.description AS location_description,
-              l.parent_id AS location_parent_id,
-              l.parent_name AS location_parent_name,
-              rl.root_location_name,
-              rl.root_location_description,
-              d.tenant_id,
-              d.tenant_name,
-              d.platform_id,
-              d.platform_name,
-              p.parent_name AS platform_parent_name,
-              p.manufacturer_name AS platform_manufacturer_name,
-              p.cf_dc AS platform_cf_dc,
-              p.cf_site AS platform_cf_site,
-              p.cf_ip_addresses AS platform_cf_ip_addresses,
-              p.cf_port AS platform_cf_port,
-              p.cf_url AS platform_cf_url,
-              cm.resolved_cluster_name AS cluster_name,
-              d.custom_fields,
-              d.sahiplik,
-              d.kurulum_tarihi,
-              d.izlenmeli,
-              d.zabbix_monitoring,
-              d.datalake_monitoring,
-              d.tags1_name,
-              d.tags2_name,
-              d.tags3_name,
-              d.tags4_name,
-              d.tags5_name,
-              d.created::text,
-              d.last_updated::text
-          FROM public.discovery_netbox_inventory_device d
-          LEFT JOIN public.discovery_loki_location l ON d.location_id = l.id
-          LEFT JOIN root_locations rl ON d.location_id = rl.start_location_id
-          LEFT JOIN public.discovery_netbox_platform p ON d.platform_id = p.id
-          LEFT JOIN cluster_map cm ON d.site_name = cm.site_name
-          WHERE """ + where_clause + """
-      ) q;
-      """
-
-      sql_file = None
-      proc = None
-      try:
-          with tempfile.NamedTemporaryFile(
-              mode='w', suffix='.sql', delete=False, prefix='/tmp/fetch_devices_'
-          ) as tf:
-              tf.write(sql)
-              sql_file = tf.name
-
-          env = os.environ.copy()
-          env['PGPASSWORD'] = db_password
-
-          proc = subprocess.run(
-              [
-                  'psql',
-                  '-h', db_host,
-                  '-p', str(db_port),
-                  '-U', db_user,
-                  '-d', db_name,
-                  '-t',
-                  '-A',
-                  '-f', sql_file,
-              ],
-              capture_output=True,
-              text=True,
-              env=env,
-              timeout=120,
-          )
-
-          if proc.stderr:
-              print(f"DEBUG psql stderr: {proc.stderr}", file=sys.stderr)
-
-          if proc.returncode != 0:
-              print(f"ERROR: psql exited with code {proc.returncode}", file=sys.stderr)
-              sys.exit(1)
-
-      finally:
-          if sql_file and os.path.exists(sql_file):
-              os.unlink(sql_file)
-
-      raw_output = proc.stdout.strip()
-      print(f"DEBUG: psql returned {len(raw_output)} chars (mode={izlenmeli_mode})", file=sys.stderr)
-
-      if not raw_output or raw_output == 'null':
+      if not raw or raw in ('null', '[]', ''):
           rows = []
       else:
-          try:
-              rows = json.loads(raw_output)
-              if not isinstance(rows, list):
-                  rows = []
-          except json.JSONDecodeError as e:
-              print(f"ERROR: Failed to parse psql output: {e}", file=sys.stderr)
-              print(f"ERROR: Raw output (first 500 chars): {raw_output[:500]}", file=sys.stderr)
-              sys.exit(1)
+          rows = json.loads(raw)
+          if not isinstance(rows, list):
+              rows = []
 
-      print(f"DEBUG: Fetched {len(rows)} rows from database (mode={izlenmeli_mode})", file=sys.stderr)
+      print(f"DEBUG: Input rows: {len(rows)}", file=sys.stderr)
 
       def device_matches_conditions(device, conditions):
           if 'device_role' in conditions:
               role_name = (device.get('device_role_name') or '').upper()
-              expected = conditions['device_role']
+              expected  = conditions['device_role']
               if isinstance(expected, list):
                   if role_name not in [r.upper() for r in expected]:
                       return False
@@ -197,7 +46,7 @@
 
           if 'manufacturer' in conditions:
               manufacturer = (device.get('manufacturer_name') or '').upper()
-              expected = conditions['manufacturer']
+              expected     = conditions['manufacturer']
               if isinstance(expected, list):
                   if manufacturer not in [m.upper() for m in expected]:
                       return False
@@ -206,7 +55,7 @@
                       return False
 
           if 'model_contains' in conditions:
-              model = (device.get('device_model') or '').upper()
+              model    = (device.get('device_model') or '').upper()
               expected = conditions['model_contains']
               if isinstance(expected, list):
                   if not any(c.upper() in model for c in expected):
@@ -216,7 +65,7 @@
                       return False
 
           if 'model_suffix' in conditions:
-              model = (device.get('device_model') or '').upper()
+              model    = (device.get('device_model') or '').upper()
               expected = conditions['model_suffix']
               if isinstance(expected, list):
                   if not any(model.endswith(s.upper()) for s in expected):
@@ -226,7 +75,7 @@
                       return False
 
           if 'name_contains' in conditions:
-              name = (device.get('name') or '').upper()
+              name     = (device.get('name') or '').upper()
               expected = conditions['name_contains']
               if isinstance(expected, list):
                   if not any(c.upper() in name for c in expected):
@@ -243,7 +92,7 @@
                   return True
           return False
 
-      all_devices = []
+      all_devices   = []
       unmatched_count = 0
       for row in rows:
           device = dict(row)
@@ -261,18 +110,18 @@
               unmatched_count += 1
 
       print(
-          f"DEBUG: After mapping filter (mode={izlenmeli_mode}): "
-          f"{len(all_devices)} matched, {unmatched_count} unmatched",
+          f"DEBUG: After mapping filter: {len(all_devices)} matched, "
+          f"{unmatched_count} unmatched (mode={izlenmeli_mode})",
           file=sys.stderr,
       )
 
       result = {
           'devices': all_devices,
-          'count': len(all_devices),
-          'mode': izlenmeli_mode,
+          'count':   len(all_devices),
+          'mode':    izlenmeli_mode,
       }
       print(json.dumps(result, default=str))
-    dest: "/tmp/fetch_all_db_devices.py"
+    dest: /tmp/filter_db_devices.py
     mode: '0755'
   delegate_to: localhost
   run_once: true
@@ -280,7 +129,7 @@
 - name: Save device type mapping to temporary file
   copy:
     content: "{{ device_type_mapping | to_json }}"
-    dest: "/tmp/netbox_device_type_mapping.json"
+    dest: /tmp/netbox_device_type_mapping.json
   delegate_to: localhost
   run_once: true
 
@@ -299,54 +148,236 @@
       DB Host: {{ discovery_db_host }}:{{ discovery_db_port }}/{{ discovery_db_name }}
       ============================================
 
+# ─── Monitor query ─────────────────────────────────────────────────────────────
+
 - name: Fetch monitor devices from database
+  community.postgresql.postgresql_query:
+    db: "{{ discovery_db_name }}"
+    login_host: "{{ discovery_db_host }}"
+    login_port: "{{ discovery_db_port | int }}"
+    login_user: "{{ discovery_db_user }}"
+    login_password: "{{ discovery_db_password }}"
+    query: |
+      WITH RECURSIVE location_tree AS (
+          SELECT
+              l.id, l.name, l.parent_id, l.parent_name, l.description, l.site_name,
+              l.id AS start_location_id, 0 AS level
+          FROM public.discovery_loki_location l
+          UNION ALL
+          SELECT
+              parent.id, parent.name, parent.parent_id, parent.parent_name,
+              parent.description, parent.site_name, lt.start_location_id, lt.level + 1
+          FROM public.discovery_loki_location parent
+          INNER JOIN location_tree lt ON lt.parent_id = parent.id
+      ),
+      root_locations AS (
+          SELECT DISTINCT ON (start_location_id)
+              start_location_id,
+              id          AS root_location_id,
+              name        AS root_location_name,
+              description AS root_location_description
+          FROM location_tree
+          WHERE parent_id IS NULL
+          ORDER BY start_location_id, level DESC
+      ),
+      cluster_map AS (
+          SELECT
+              site_name,
+              STRING_AGG(DISTINCT cluster_name, ', ' ORDER BY cluster_name) AS resolved_cluster_name
+          FROM public.discovery_netbox_virtualization_vm
+          WHERE cluster_name IS NOT NULL AND site_name IS NOT NULL
+          GROUP BY site_name
+      )
+      SELECT
+          d.id, d.name,
+          d.device_type_name   AS device_model,
+          d.manufacturer_name,
+          d.device_role_name,
+          d.primary_ip_address,
+          d.site_id, d.site_name,
+          d.location_id, d.location_name,
+          l.description        AS location_description,
+          l.parent_id          AS location_parent_id,
+          l.parent_name        AS location_parent_name,
+          rl.root_location_name,
+          rl.root_location_description,
+          d.tenant_id, d.tenant_name,
+          d.platform_id, d.platform_name,
+          p.parent_name        AS platform_parent_name,
+          p.manufacturer_name  AS platform_manufacturer_name,
+          p.cf_dc              AS platform_cf_dc,
+          p.cf_site            AS platform_cf_site,
+          p.cf_ip_addresses    AS platform_cf_ip_addresses,
+          p.cf_port            AS platform_cf_port,
+          p.cf_url             AS platform_cf_url,
+          cm.resolved_cluster_name AS cluster_name,
+          d.custom_fields, d.sahiplik, d.kurulum_tarihi,
+          d.izlenmeli, d.zabbix_monitoring, d.datalake_monitoring,
+          d.tags1_name, d.tags2_name, d.tags3_name, d.tags4_name, d.tags5_name,
+          d.created::text, d.last_updated::text
+      FROM public.discovery_netbox_inventory_device d
+      LEFT JOIN public.discovery_loki_location l      ON d.location_id = l.id
+      LEFT JOIN root_locations rl                     ON d.location_id = rl.start_location_id
+      LEFT JOIN public.discovery_netbox_platform p    ON d.platform_id = p.id
+      LEFT JOIN cluster_map cm                        ON d.site_name   = cm.site_name
+      WHERE d.status_value = 'active'
+        AND (d.izlenmeli IS NULL OR (d.izlenmeli != 'Hayir' AND d.izlenmeli != 'Hayır'))
+      {% if location_filter | default('') | trim != '' %}
+        AND (d.location_name ILIKE '%{{ location_filter }}%'
+             OR  d.site_name ILIKE '%{{ location_filter }}%')
+      {% endif %}
+  register: _pg_monitor_result
+  changed_when: false
+  delegate_to: localhost
+  run_once: true
+
+- name: Display monitor query row count
+  debug:
+    msg: "DEBUG: Monitor query returned {{ _pg_monitor_result.query_result | length }} rows"
+
+- name: Save monitor query results to temp file
+  copy:
+    content: "{{ _pg_monitor_result.query_result | to_json }}"
+    dest: /tmp/monitor_devices_raw.json
+  delegate_to: localhost
+  run_once: true
+
+- name: Apply device mapping filter to monitor devices
   command: >
-    python3 /tmp/fetch_all_db_devices.py
-    "{{ discovery_db_host }}"
-    "{{ discovery_db_port }}"
-    "{{ discovery_db_name }}"
-    "{{ discovery_db_user }}"
-    "{{ discovery_db_password }}"
-    "/tmp/netbox_device_type_mapping.json"
-    "{{ location_filter | default('') }}"
-    "monitor"
+    python3 /tmp/filter_db_devices.py
+    /tmp/monitor_devices_raw.json
+    /tmp/netbox_device_type_mapping.json
+    monitor
   register: fetch_devices_monitor_result
   changed_when: false
   delegate_to: localhost
+  run_once: true
 
-- name: Fetch skip devices from database
-  command: >
-    python3 /tmp/fetch_all_db_devices.py
-    "{{ discovery_db_host }}"
-    "{{ discovery_db_port }}"
-    "{{ discovery_db_name }}"
-    "{{ discovery_db_user }}"
-    "{{ discovery_db_password }}"
-    "/tmp/netbox_device_type_mapping.json"
-    "{{ location_filter | default('') }}"
-    "skip"
-  register: fetch_devices_skip_result
-  changed_when: false
-  delegate_to: localhost
-
-- name: Display Python script debug output (monitor devices)
+- name: Display filter debug output (monitor)
   debug:
     msg: "{{ fetch_devices_monitor_result.stderr_lines | default([]) | join('\n') }}"
   when: fetch_devices_monitor_result.stderr_lines is defined and fetch_devices_monitor_result.stderr_lines | length > 0
 
-- name: Display Python script debug output (skip devices)
+# ─── Skip query ────────────────────────────────────────────────────────────────
+
+- name: Fetch skip devices from database
+  community.postgresql.postgresql_query:
+    db: "{{ discovery_db_name }}"
+    login_host: "{{ discovery_db_host }}"
+    login_port: "{{ discovery_db_port | int }}"
+    login_user: "{{ discovery_db_user }}"
+    login_password: "{{ discovery_db_password }}"
+    query: |
+      WITH RECURSIVE location_tree AS (
+          SELECT
+              l.id, l.name, l.parent_id, l.parent_name, l.description, l.site_name,
+              l.id AS start_location_id, 0 AS level
+          FROM public.discovery_loki_location l
+          UNION ALL
+          SELECT
+              parent.id, parent.name, parent.parent_id, parent.parent_name,
+              parent.description, parent.site_name, lt.start_location_id, lt.level + 1
+          FROM public.discovery_loki_location parent
+          INNER JOIN location_tree lt ON lt.parent_id = parent.id
+      ),
+      root_locations AS (
+          SELECT DISTINCT ON (start_location_id)
+              start_location_id,
+              id          AS root_location_id,
+              name        AS root_location_name,
+              description AS root_location_description
+          FROM location_tree
+          WHERE parent_id IS NULL
+          ORDER BY start_location_id, level DESC
+      ),
+      cluster_map AS (
+          SELECT
+              site_name,
+              STRING_AGG(DISTINCT cluster_name, ', ' ORDER BY cluster_name) AS resolved_cluster_name
+          FROM public.discovery_netbox_virtualization_vm
+          WHERE cluster_name IS NOT NULL AND site_name IS NOT NULL
+          GROUP BY site_name
+      )
+      SELECT
+          d.id, d.name,
+          d.device_type_name   AS device_model,
+          d.manufacturer_name,
+          d.device_role_name,
+          d.primary_ip_address,
+          d.site_id, d.site_name,
+          d.location_id, d.location_name,
+          l.description        AS location_description,
+          l.parent_id          AS location_parent_id,
+          l.parent_name        AS location_parent_name,
+          rl.root_location_name,
+          rl.root_location_description,
+          d.tenant_id, d.tenant_name,
+          d.platform_id, d.platform_name,
+          p.parent_name        AS platform_parent_name,
+          p.manufacturer_name  AS platform_manufacturer_name,
+          p.cf_dc              AS platform_cf_dc,
+          p.cf_site            AS platform_cf_site,
+          p.cf_ip_addresses    AS platform_cf_ip_addresses,
+          p.cf_port            AS platform_cf_port,
+          p.cf_url             AS platform_cf_url,
+          cm.resolved_cluster_name AS cluster_name,
+          d.custom_fields, d.sahiplik, d.kurulum_tarihi,
+          d.izlenmeli, d.zabbix_monitoring, d.datalake_monitoring,
+          d.tags1_name, d.tags2_name, d.tags3_name, d.tags4_name, d.tags5_name,
+          d.created::text, d.last_updated::text
+      FROM public.discovery_netbox_inventory_device d
+      LEFT JOIN public.discovery_loki_location l      ON d.location_id = l.id
+      LEFT JOIN root_locations rl                     ON d.location_id = rl.start_location_id
+      LEFT JOIN public.discovery_netbox_platform p    ON d.platform_id = p.id
+      LEFT JOIN cluster_map cm                        ON d.site_name   = cm.site_name
+      WHERE d.status_value = 'active'
+        AND (d.izlenmeli = 'Hayir' OR d.izlenmeli = 'Hayır')
+      {% if location_filter | default('') | trim != '' %}
+        AND (d.location_name ILIKE '%{{ location_filter }}%'
+             OR  d.site_name ILIKE '%{{ location_filter }}%')
+      {% endif %}
+  register: _pg_skip_result
+  changed_when: false
+  delegate_to: localhost
+  run_once: true
+
+- name: Display skip query row count
+  debug:
+    msg: "DEBUG: Skip query returned {{ _pg_skip_result.query_result | length }} rows"
+
+- name: Save skip query results to temp file
+  copy:
+    content: "{{ _pg_skip_result.query_result | to_json }}"
+    dest: /tmp/skip_devices_raw.json
+  delegate_to: localhost
+  run_once: true
+
+- name: Apply device mapping filter to skip devices
+  command: >
+    python3 /tmp/filter_db_devices.py
+    /tmp/skip_devices_raw.json
+    /tmp/netbox_device_type_mapping.json
+    skip
+  register: fetch_devices_skip_result
+  changed_when: false
+  delegate_to: localhost
+  run_once: true
+
+- name: Display filter debug output (skip)
   debug:
     msg: "{{ fetch_devices_skip_result.stderr_lines | default([]) | join('\n') }}"
   when: fetch_devices_skip_result.stderr_lines is defined and fetch_devices_skip_result.stderr_lines | length > 0
 
+# ─── Parse & expose results ────────────────────────────────────────────────────
+
 - name: Parse fetched monitor and skip devices
   set_fact:
-    netbox_devices_monitor_raw: "{{ (fetch_devices_monitor_result.stdout | from_json).devices }}"
+    netbox_devices_monitor_raw:   "{{ (fetch_devices_monitor_result.stdout | from_json).devices }}"
     netbox_devices_monitor_count: "{{ (fetch_devices_monitor_result.stdout | from_json).count }}"
-    netbox_devices_skip_raw: "{{ (fetch_devices_skip_result.stdout | from_json).devices }}"
-    netbox_devices_skip_count: "{{ (fetch_devices_skip_result.stdout | from_json).count }}"
-    netbox_devices_raw: "{{ (fetch_devices_monitor_result.stdout | from_json).devices }}"
-    netbox_devices_count: "{{ (fetch_devices_monitor_result.stdout | from_json).count }}"
+    netbox_devices_skip_raw:      "{{ (fetch_devices_skip_result.stdout | from_json).devices }}"
+    netbox_devices_skip_count:    "{{ (fetch_devices_skip_result.stdout | from_json).count }}"
+    netbox_devices_raw:           "{{ (fetch_devices_monitor_result.stdout | from_json).devices }}"
+    netbox_devices_count:         "{{ (fetch_devices_monitor_result.stdout | from_json).count }}"
 
 - name: Display fetch results for monitor and skip devices
   debug:
