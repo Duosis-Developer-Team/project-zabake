@@ -5,12 +5,6 @@
     datacenters_map: "{{ lookup('file', datacenters_map_path) | from_yaml }}"
     device_type_mapping: "{{ lookup('file', device_type_mapping_path) | from_yaml }}"
 
-- name: Generate HMDL run_id for this playbook run
-  set_fact:
-    hmdl_run_id: "{{ lookup('pipe', 'date +%Y%m%d%H%M%S') }}"
-  run_once: true
-  when: hmdl_log_enabled | bool
-
 - name: Fetch all devices from Netbox API (with pagination and mapping-based filtering)
   include_tasks: fetch_all_devices.yml
   when: (sync_devices | bool) or (only_fetch | bool)
@@ -21,6 +15,7 @@
     netbox_devices_monitor_count: 0
     netbox_devices_skip_raw: []
     netbox_devices_skip_count: 0
+    netbox_unmapped_pairs: []
     netbox_devices_raw: []
     netbox_devices_count: 0
   when: not ((sync_devices | bool) or (only_fetch | bool))
@@ -86,21 +81,17 @@
   debug:
     msg: |
       ============================================
-      MATCHING DEVICES FROM DATABASE
+      MATCHING DEVICES FROM NETBOX
       ============================================
       {% for device in netbox_devices_final %}
       Device #{{ loop.index }}:
         - Name: {{ device.name | default('N/A') }}
         - ID: {{ device.id | default('N/A') }}
-        - Site: {{ device.site_name | default('N/A') }}
-        - Role: {{ device.device_role_name | default('N/A') }}
-        - Manufacturer: {{ device.manufacturer_name | default('N/A') }}
-        - Model: {{ device.device_model | default('N/A') }}
-        - Primary IP: {{ device.primary_ip_address | default('N/A') }}
-        - Location: {{ device.location_name | default('N/A') }}
-        - Root Location (DC_ID): {{ device.root_location_name | default('N/A') }}
-        - Tenant: {{ device.tenant_name | default('N/A') }}
-        - Cluster: {{ device.cluster_name | default('N/A') }}
+        - Site: {{ device.site.name | default('N/A') if device.site else 'N/A' }}
+        - Role: {% if device.role %}{{ device.role.name | default('N/A') }}{% elif device.device_role %}{{ device.device_role.name | default('N/A') }}{% else %}N/A{% endif %}
+        - Manufacturer: {{ device.device_type.manufacturer.name | default('N/A') if device.device_type.manufacturer else 'N/A' }}
+        - Model: {{ device.device_type.model | default('N/A') if device.device_type else 'N/A' }}
+        - Primary IP: {{ device.primary_ip4.address | default('N/A') if device.primary_ip4 else 'N/A' }}
       {% endfor %}
       ============================================
   when:
@@ -243,14 +234,14 @@
       {%- for d in netbox_devices_skip_raw | default([]) -%}
       {%- set _ = out.append({
         'hostname': d.name | default('N/A'),
-        'device_role': d.device_role_name | default('N/A'),
+        'device_role': (d.role.name | default('N/A')) if (d.role is defined and d.role) else 'N/A',
         'status': 'atlandı',
-        'reason': 'İzlenmeyecek (DB izlenmeli=Hayır filtresi)',
-        'ip': d.primary_ip_address | default('N/A'),
-        'location': d.location_name | default(d.site_name | default('N/A')),
-        'site': d.site_name | default('N/A'),
-        'tenant': d.tenant_name | default('N/A'),
-        'ownership': d.sahiplik | default('N/A')
+        'reason': 'İzlenmeyecek (NetBox izlenmeli=Hayır filtresi)',
+        'ip': 'N/A',
+        'location': (d.location.name | default(d.site.name | default('N/A'), true)) if (d.location is defined and d.location) else ((d.site.name | default('N/A', true)) if (d.site is defined and d.site) else 'N/A'),
+        'site': (d.site.name | default('N/A')) if (d.site is defined and d.site) else 'N/A',
+        'tenant': (d.tenant.name | default('N/A')) if (d.tenant is defined and d.tenant) else 'N/A',
+        'ownership': (d.custom_fields.Sahiplik[0] | string | trim) if (d.custom_fields is defined and d.custom_fields.Sahiplik is defined and d.custom_fields.Sahiplik is sequence and d.custom_fields.Sahiplik is not string and (d.custom_fields.Sahiplik | length) > 0) else (((d.custom_fields.Sahiplik | default('', true)) | string | trim) if (d.custom_fields is defined and d.custom_fields.Sahiplik is defined and (d.custom_fields.Sahiplik | string | trim | length) > 0) else 'N/A')
       }) -%}
       {%- endfor -%}
       {{ out }}
@@ -285,40 +276,6 @@
     - report_izlenmeyecek | bool
     - netbox_platforms_skip_raw is defined
     - (netbox_platforms_skip_raw | default([]) | length) > 0
-
-- name: Log skipped devices (izlenmeli=Hayır) to HMDL audit table
-  include_tasks: hmdl_sync_log.yml
-  vars:
-    hmdl_log_device_id: "{{ hmdl_skip_item.id | default('skip_' + hmdl_skip_idx | string) }}"
-    hmdl_log_entry:
-      run_id: "{{ hmdl_run_id | default('') }}"
-      awx_job_id: "{{ lookup('env', 'AWX_JOB_ID') | default('', true) }}"
-      playbook_name: "{{ hmdl_playbook_name | default('db_to_zabbix_sync') }}"
-      source_device_id: "{{ hmdl_skip_item.id | default(None) }}"
-      source_device_name: "{{ hmdl_skip_item.name | default('') }}"
-      zabbix_hostname: "{{ hmdl_skip_item.name | default('') }}"
-      zabbix_host_ip: "{{ hmdl_skip_item.primary_ip_address | default('') }}"
-      device_type: "{{ hmdl_skip_item.device_model | default('') }}"
-      device_role: "{{ hmdl_skip_item.device_role_name | default('') }}"
-      manufacturer_name: "{{ hmdl_skip_item.manufacturer_name | default('') }}"
-      site_name: "{{ hmdl_skip_item.site_name | default('') }}"
-      location_name: "{{ hmdl_skip_item.location_name | default('') }}"
-      location_parent_name: "{{ hmdl_skip_item.location_parent_name | default('') }}"
-      root_location_name: "{{ hmdl_skip_item.root_location_name | default('') }}"
-      tenant_name: "{{ hmdl_skip_item.tenant_name | default('') }}"
-      cluster_name: "{{ hmdl_skip_item.cluster_name | default('') }}"
-      operation: skip
-      status: "atlandı"
-      reason: "İzlenmeyecek (DB izlenmeli=Hayır filtresi)"
-  loop: "{{ netbox_devices_skip_raw | default([]) }}"
-  loop_control:
-    loop_var: hmdl_skip_item
-    index_var: hmdl_skip_idx
-  when:
-    - hmdl_log_enabled | bool
-    - sync_devices | bool
-    - netbox_devices_skip_raw is defined
-    - netbox_devices_skip_raw | length > 0
 
 - name: Send notification email for failed devices
   include_tasks: send_notification_email.yml

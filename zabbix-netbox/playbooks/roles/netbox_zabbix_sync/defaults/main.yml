@@ -1,10 +1,8 @@
 ---
-# Discovery database connection settings (PostgreSQL)
-discovery_db_host: ""
-discovery_db_port: 5432
-discovery_db_name: ""
-discovery_db_user: ""
-discovery_db_password: ""
+# Netbox connection settings
+netbox_url: ""
+netbox_token: ""
+netbox_verify_ssl: false
 
 # Zabbix connection settings
 zabbix_url: ""
@@ -21,7 +19,6 @@ location_filter: ""  # Optional: Filter devices by location name (e.g., "DC11", 
 
 # Execution mode
 only_fetch: false  # When true, only fetch and log NetBox devices/platforms; skip Zabbix operations and email reporting
-dry_run: false     # When true, runs all mapping/validation/Zabbix checks but skips host.create/host.update API calls
 
 # Device and platform synchronization
 sync_devices: true             # When false, skip NetBox device fetch (unless only_fetch), device processing, and device result aggregation
@@ -35,23 +32,6 @@ device_type_mapping_path: "{{ playbook_dir | default(ansible_playbook_directory)
 platform_mapping_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/netbox_platform_mapping.yml"
 host_groups_config_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/host_groups_config.yml"
 tags_config_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/tags_config.yml"
-
-# NetBox API credentials (only needed if sync_platforms: true — out of DB-migration MVP scope)
-netbox_url: ""
-netbox_token: ""
-netbox_verify_ssl: false
-
-# HMDL Log / Audit settings
-hmdl_log_enabled: false
-hmdl_log_schema: hmdl
-hmdl_log_table: zabbix_sync_log
-hmdl_playbook_name: db_to_zabbix_sync
-# HMDL log DB connection — defaults to discovery DB; override if log DB is different
-hmdl_db_host: "{{ discovery_db_host }}"
-hmdl_db_port: "{{ discovery_db_port }}"
-hmdl_db_name: "{{ discovery_db_name }}"
-hmdl_db_user: "{{ discovery_db_user }}"
-hmdl_db_password: "{{ discovery_db_password }}"
 
 # Email notification settings
 mail_smtp_host: "10.34.8.191"

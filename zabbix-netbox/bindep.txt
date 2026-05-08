@@ -1,3 +1,0 @@
-# System packages for AWX Execution Environment
-libpq-devel [platform:rpm]
-libpq-dev [platform:dpkg]

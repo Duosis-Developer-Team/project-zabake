@@ -114,6 +114,35 @@
         </table>
         {%- endif -%}
         {%- endif -%}
+
+        {%- set unmapped_pairs = netbox_unmapped_pairs | default([]) -%}
+        {%- if unmapped_pairs | length > 0 -%}
+        <div class="section-header"><h3>⚠️ EKSİK MAPPING: Tanımlanmamış Role - Manufacturer İkilileri ({{ unmapped_pairs | length }} çift)</h3></div>
+        <p>
+          Bu cihazlar <strong>{{ location_filter if (location_filter | default('') | trim | length > 0) else 'tüm DC' }}</strong>
+          kapsamında mapping kuralı bulunamadığı için senkronizasyona alınmamıştır.
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>Device Role</th>
+              <th>Manufacturer</th>
+              <th>DC / Lokasyon</th>
+              <th>Cihaz Sayısı</th>
+            </tr>
+          </thead>
+          <tbody>
+            {%- for pair in unmapped_pairs -%}
+            <tr>
+              <td>{{ pair.role | default('N/A') }}</td>
+              <td>{{ pair.manufacturer | default('N/A') }}</td>
+              <td>{{ pair.dc | default('N/A') }}</td>
+              <td>{{ pair.count | default(0) }}</td>
+            </tr>
+            {%- endfor -%}
+          </tbody>
+        </table>
+        {%- endif -%}
         
         <div class="info-box">
           <p><strong>📎 Detaylı Rapor:</strong> Tüm cihazların detaylı bilgileri ekteki <code>zabbix_entegrasyon_detay.csv</code> dosyasında yer almaktadır.</p>
@@ -181,6 +210,22 @@
       Açıklama: {{ result.reason | default('İzlenmeyecek olarak işaretli') }}
       {%- endfor -%}
       {%- endif %}
+
+      {%- set unmapped_pairs = netbox_unmapped_pairs | default([]) -%}
+      {%- if unmapped_pairs | length > 0 %}
+
+      ⚠️ EKSİK MAPPING: TANIMLANMAMIŞ ROLE - MANUFACTURER İKİLİLERİ ({{ unmapped_pairs | length }} ÇİFT):
+      ------------------------------------------
+      Kapsam: {{ location_filter if (location_filter | default('') | trim | length > 0) else 'tüm DC' }}
+      Aşağıdaki role-manufacturer eşleşmeleri için mapping tanımı bulunamadı:
+      {%- for pair in unmapped_pairs %}
+
+      - Role: {{ pair.role | default('N/A') }}
+        Manufacturer: {{ pair.manufacturer | default('N/A') }}
+        DC/Lokasyon: {{ pair.dc | default('N/A') }}
+        Cihaz Sayısı: {{ pair.count | default(0) }}
+      {%- endfor -%}
+      {%- endif %}
       
       
       📎 DETAYLI RAPOR:
@@ -193,8 +238,12 @@
 - name: Generate email subject
   set_fact:
     email_subject: >-
+      {%- if (failed_devices_count | int > 0) or (netbox_unmapped_pairs | default([]) | length > 0) -%}
       {%- if failed_devices_count | int > 0 -%}
-      Loki - Zabbix Entegrasyonu Raporu - {{ failed_devices_count }} Sunucu Eklenemedi
+      Loki - Zabbix Entegrasyonu Raporu - {{ failed_devices_count }} Sunucu Eklenemedi{%- if netbox_unmapped_pairs | default([]) | length > 0 -%} + {{ netbox_unmapped_pairs | length }} Eksik Mapping{%- endif -%}
+      {%- else -%}
+      Loki - Zabbix Entegrasyonu Raporu - {{ netbox_unmapped_pairs | length }} Eksik Mapping Uyarısı
+      {%- endif -%}
       {%- else -%}
       Loki - Zabbix Entegrasyonu Raporu - Tüm İşlemler Başarılı ({{ added_devices_count }} Eklendi, {{ updated_devices_count }} Güncellendi)
       {%- endif -%}

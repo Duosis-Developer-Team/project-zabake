@@ -10,16 +10,30 @@
 
 - name: Extract izlenmeli raw value on device
   set_fact:
-    device_izlenmeli_raw: "{{ netbox_device.izlenmeli | default(None) }}"
+    device_izlenmeli_raw: >-
+      {% set cf = netbox_device.custom_fields | default({}) %}
+      {% if cf.izlenmeli is defined %}
+      {{ cf.izlenmeli }}
+      {% elif cf.monitor_edilmeli_mi is defined %}
+      {{ cf.monitor_edilmeli_mi }}
+      {% else %}
+      {{ None }}
+      {% endif %}
 
 - name: Check izlenmeli flag on device
   set_fact:
     device_izlenmeyecek: >-
       {% set val = device_izlenmeli_raw %}
-      {% if val is none or val == '' or val == 'None' %}
+      {% if val is none %}
       False
       {% else %}
-      {% set txt = (val | string) | lower %}
+      {# NetBox choice list: izlenmeli: ["Hayır"] veya ["Evet"] gibi gelebilir #}
+      {% if val is sequence and not (val is string) and (val | length) > 0 %}
+      {% set choice = val[0] %}
+      {% else %}
+      {% set choice = val %}
+      {% endif %}
+      {% set txt = (choice | string) | lower %}
       {{ txt in ['hayir', 'hayır', 'no', '0', 'false'] }}
       {% endif %}
 
@@ -34,14 +48,25 @@
   set_fact:
     current_device_result:
       hostname: "{{ netbox_device.name | default('N/A') }}"
-      device_role: "{{ netbox_device.device_role_name | default('N/A') }}"
+      device_role: >-
+        {% if netbox_device.role is defined and netbox_device.role %}
+        {{ netbox_device.role.name | default('N/A') }}
+        {% elif netbox_device.device_role is defined and netbox_device.device_role %}
+        {{ netbox_device.device_role.name | default('N/A') }}
+        {% else %}
+        N/A
+        {% endif %}
       status: "atlandı"
       reason: "İzlenmeyecek olarak işaretli"
-      ip: "{{ netbox_device.primary_ip_address | default('N/A') }}"
-      location: "{{ netbox_device.location_name | default(netbox_device.site_name | default('N/A')) }}"
-      site: "{{ netbox_device.site_name | default('N/A') }}"
-      tenant: "{{ netbox_device.tenant_name | default('N/A') }}"
-      ownership: "{{ netbox_device.sahiplik | default('N/A') }}"
+      ip: "{{ (netbox_device.primary_ip4.address.split('/') [0]) if (netbox_device.primary_ip4 is defined and netbox_device.primary_ip4 and netbox_device.primary_ip4.address is defined) else 'N/A' }}"
+      location: >-
+        {% if netbox_device.location is defined and netbox_device.location and netbox_device.location.name is defined and netbox_device.location.name %}{{ netbox_device.location.name }}{% elif netbox_device.site is defined and netbox_device.site and netbox_device.site.name is defined %}{{ netbox_device.site.name }}{% else %}N/A{% endif %}
+      site: "{{ netbox_device.site.name | default('N/A', true) if (netbox_device.site is defined and netbox_device.site) else 'N/A' }}"
+      tenant: "{{ netbox_device.tenant.name | default('N/A', true) if (netbox_device.tenant is defined and netbox_device.tenant) else 'N/A' }}"
+      ownership: >-
+        {% set cf = netbox_device.custom_fields | default({}) %}
+        {% set s = cf.Sahiplik | default('') %}
+        {% if s is sequence and s is not string and (s | length) > 0 %}{{ s[0] | string | trim }}{% elif s %}{{ s | string | trim }}{% else %}N/A{% endif %}
   when:
     - device_izlenmeyecek | default(false) | bool
     - report_izlenmeyecek | default(true) | bool
@@ -53,11 +78,13 @@
       import json
       import sys
       import os
+      import requests
       import yaml
-
+      
       # ============= YAML CONFIG LOADING =============
-
+      
       def load_yaml_config(config_path):
+          """Load YAML configuration file"""
           try:
               if os.path.exists(config_path):
                   with open(config_path, 'r') as f:
@@ -65,15 +92,21 @@
           except Exception as e:
               print(f"Warning: Failed to load config {config_path}: {e}", file=sys.stderr)
           return None
-
+      
       # ============= GENERIC ATTRIBUTE EXTRACTION =============
-
+      
       def extract_by_path(obj, path):
-          """Extract value from flat or nested object using dot notation path."""
+          """
+          Extract value from nested object using dot notation path
+          Example: extract_by_path(device, "device_type.manufacturer.name")
+          Returns None if path doesn't exist
+          """
           if not obj or not path:
               return None
+          
           keys = path.split('.')
           current = obj
+          
           for key in keys:
               if current is None:
                   return None
@@ -81,143 +114,273 @@
                   current = current.get(key)
               else:
                   return None
+          
           return current
-
+      
       def extract_by_path_with_fallback(obj, path, fallback_paths=None):
+          """
+          Extract value with fallback paths
+          Returns first non-None value found
+          """
+          # Try primary path
           value = extract_by_path(obj, path)
           if value is not None and value != '':
               return value
+          
+          # Try fallback paths
           if fallback_paths:
               if isinstance(fallback_paths, str):
                   fallback_paths = [fallback_paths]
-              for fp in fallback_paths:
-                  value = extract_by_path(obj, fp)
+              for fallback_path in fallback_paths:
+                  value = extract_by_path(obj, fallback_path)
                   if value is not None and value != '':
                       return value
+          
           return None
-
-      # ============= MAPPING CONDITIONS =============
-
+      
+      # ============= ORIGINAL FUNCTIONS (PRESERVED) =============
+      
       def check_condition(device, condition_key, condition_value):
+          """Check if device matches a condition"""
           if condition_key == 'device_role':
-              role = (device.get('device_role_name') or '').upper()
+              # Try 'role' first (Netbox API field name), then 'device_role' as fallback
+              role_obj = device.get('role') or device.get('device_role')
+              role = role_obj.get('name', '') if role_obj and isinstance(role_obj, dict) else ''
               if isinstance(condition_value, list):
-                  return role in [v.upper() for v in condition_value]
-              return role == condition_value.upper()
-
+                  return role.upper() in [v.upper() for v in condition_value]
+              return role.upper() == condition_value.upper()
+          
           elif condition_key == 'manufacturer':
-              manufacturer = (device.get('manufacturer_name') or '').upper()
+              device_type = device.get('device_type') or {}
+              manufacturer_obj = device_type.get('manufacturer') or {}
+              manufacturer = manufacturer_obj.get('name', '').upper()
               if isinstance(condition_value, list):
                   return manufacturer in [v.upper() for v in condition_value]
               return manufacturer == condition_value.upper()
-
+          
           elif condition_key == 'model_contains':
-              model = (device.get('device_model') or '').upper()
+              device_type = device.get('device_type') or {}
+              model = device_type.get('model', '').upper()
               if isinstance(condition_value, list):
                   return any(item.upper() in model for item in condition_value)
               return condition_value.upper() in model
-
+          
           elif condition_key == 'model_suffix':
-              model = (device.get('device_model') or '').upper()
+              device_type = device.get('device_type') or {}
+              model = device_type.get('model', '').upper()
               if isinstance(condition_value, list):
                   return any(model.endswith(item.upper()) for item in condition_value)
               return model.endswith(condition_value.upper())
-
+          
           elif condition_key == 'name_contains':
-              device_name = (device.get('name') or '').upper()
+              device_name = device.get('name', '').upper()
               if isinstance(condition_value, list):
                   return any(item.upper() in device_name for item in condition_value)
               return condition_value.upper() in device_name
-
+          
           return False
-
+      
       def find_matching_mapping(device, device_type_mapping):
+          """Return the first matching mapping dict from YAML, or None."""
           mappings = device_type_mapping.get('mappings', [])
           sorted_mappings = sorted(mappings, key=lambda x: x.get('priority', 999))
           for mapping in sorted_mappings:
               conditions = mapping.get('conditions', {})
-              if all(check_condition(device, k, v) for k, v in conditions.items()):
+              all_match = True
+              for condition_key, condition_value in conditions.items():
+                  if not check_condition(device, condition_key, condition_value):
+                      all_match = False
+                      break
+              if all_match:
                   return mapping
           return None
-
+      
       def determine_device_type(device, device_type_mapping):
+          """Determine device type from YAML mapping"""
           m = find_matching_mapping(device, device_type_mapping)
           return m.get('device_type') if m else None
-
-      # ============= DB-NATIVE FIELD EXTRACTORS =============
-
-      def get_primary_ip(device):
-          """Read primary IP directly from flat DB field."""
-          ip = device.get('primary_ip_address')
-          if not ip:
+      
+      def get_primary_ip(device, netbox_url, netbox_token, verify_ssl):
+          primary_ip4 = device.get('primary_ip4')
+          if not primary_ip4:
               return None
-          ip = str(ip).strip()
-          return ip.split('/')[0] if '/' in ip else ip
-
-      def get_location_name(device):
+          
+          # If primary_ip4 is a dict/object (expanded in API response)
+          if isinstance(primary_ip4, dict):
+              address = primary_ip4.get('address', '')
+              if address:
+                  return address.split('/')[0] if '/' in address else address
+              # If address not in dict, try to get from API using ID
+              ip_id = primary_ip4.get('id')
+              if ip_id:
+                  try:
+                      response = requests.get(
+                          f"{netbox_url.rstrip('/')}/api/ipam/ip-addresses/{ip_id}/",
+                          headers={'Authorization': f'Token {netbox_token}', 'Accept': 'application/json'},
+                          verify=verify_ssl,
+                          timeout=10
+                      )
+                      if response.status_code == 200:
+                          ip_data = response.json()
+                          address = ip_data.get('address', '')
+                          return address.split('/')[0] if '/' in address else address
+                  except:
+                      pass
+          
+          # If primary_ip4 is an integer (ID only)
+          if isinstance(primary_ip4, int):
+              try:
+                  response = requests.get(
+                      f"{netbox_url.rstrip('/')}/api/ipam/ip-addresses/{primary_ip4}/",
+                      headers={'Authorization': f'Token {netbox_token}', 'Accept': 'application/json'},
+                      verify=verify_ssl,
+                      timeout=10
+                  )
+                  if response.status_code == 200:
+                      ip_data = response.json()
+                      address = ip_data.get('address', '')
+                      return address.split('/')[0] if '/' in address else address
+              except:
+                  pass
+          
+          # If primary_ip4 is a string (direct address)
+          if isinstance(primary_ip4, str):
+              return primary_ip4.split('/')[0] if '/' in primary_ip4 else primary_ip4
+          
+          return None
+      
+      def get_location_name(device, netbox_url, netbox_token, verify_ssl):
           """
-          Return the DC_ID location label using DB fallback chain:
-          root_location_name → location_parent_name → location_name → site_name
+          Resolve host-group / DC_ID location label as the root (top-level) NetBox location name.
+          Walks the location parent chain until parent is null (multi-level hierarchy).
+          Mirror: scripts/netbox_location_hierarchy.py (resolve_root_location_name) for unit tests.
           """
-          return (
-              device.get('root_location_name') or
-              device.get('location_parent_name') or
-              device.get('location_name') or
-              device.get('site_name') or
-              ''
-          )
+          location_obj = device.get('location')
+          if not location_obj:
+              site = device.get('site') or {}
+              return site.get('name', '') or ''
 
+          current_id = None
+          current_name = ''
+
+          if isinstance(location_obj, dict):
+              current_id = location_obj.get('id')
+              current_name = location_obj.get('name', '') or ''
+          elif isinstance(location_obj, int):
+              current_id = location_obj
+
+          if not current_id:
+              if isinstance(location_obj, dict) and location_obj.get('name'):
+                  return location_obj.get('name', '')
+              site = device.get('site') or {}
+              return site.get('name', '') or ''
+
+          MAX_DEPTH = 32
+          visited = set()
+
+          for _ in range(MAX_DEPTH):
+              if current_id in visited:
+                  break
+              visited.add(current_id)
+
+              try:
+                  response = requests.get(
+                      f"{netbox_url.rstrip('/')}/api/dcim/locations/{current_id}/",
+                      headers={'Authorization': f'Token {netbox_token}', 'Accept': 'application/json'},
+                      verify=verify_ssl,
+                      timeout=10
+                  )
+                  if response.status_code != 200:
+                      break
+                  loc_data = response.json()
+                  current_name = loc_data.get('name', current_name)
+                  parent = loc_data.get('parent')
+
+                  if parent is None:
+                      return current_name
+                  if isinstance(parent, dict):
+                      current_id = parent.get('id')
+                      if not current_id:
+                          break
+                  elif isinstance(parent, int):
+                      current_id = parent
+                  else:
+                      break
+              except Exception:
+                  break
+
+          if current_name:
+              return current_name
+          if isinstance(location_obj, dict) and location_obj.get('name'):
+              return location_obj.get('name', '')
+          site = device.get('site') or {}
+          return site.get('name', '') or ''
+      
       def normalize_netbox_choice_field(value):
+          """NetBox choice / custom field: list or scalar to plain string."""
           if value is None:
               return ''
           if isinstance(value, list) and len(value) > 0:
               return str(value[0]).strip()
           return str(value).strip()
-
-      # ============= HOST GROUPS EXTRACTION =============
-
-      def extract_host_groups_from_config(device, config, device_type, templates):
+      
+      def extract_host_groups_from_config(device, config, device_type, templates, netbox_url, netbox_token, verify_ssl):
+          """
+          Extract host groups using YAML configuration
+          Falls back to hardcoded logic if config is None
+          """
           groups = []
-
+          
           if config is None:
+              # FALLBACK: Use original hardcoded logic
               if device_type:
                   groups.append(device_type)
-              location_name = get_location_name(device)
+              location_name = get_location_name(device, netbox_url, netbox_token, verify_ssl)
               if location_name:
                   groups.append(location_name)
-              sahiplik = device.get('sahiplik') or (device.get('custom_fields') or {}).get('Sahiplik', '')
-              if sahiplik:
-                  groups.append(str(sahiplik).strip())
+              custom_fields = device.get('custom_fields') or {}
+              if custom_fields.get('Sahiplik'):
+                  groups.append(custom_fields['Sahiplik'])
               return ','.join(groups) if groups else ''
-
+          
+          # CONFIG-DRIVEN LOGIC
           sources = config.get('host_groups', {}).get('sources', [])
           settings = config.get('host_groups', {}).get('settings', {})
+          
+          # Sort sources by priority
           sorted_sources = sorted(sources, key=lambda x: x.get('priority', 999))
-
+          
           for source in sorted_sources:
               if not source.get('enabled', True):
                   continue
+              
               source_type = source.get('type')
               value = None
-
+              
               if source_type == 'mapping_result':
+                  # Device type from mapping result
                   value = device_type
-
+              
               elif source_type == 'netbox_attribute':
+                  # Extract from Netbox attribute path
                   path = source.get('path')
                   fallback = source.get('fallback')
                   value = extract_by_path_with_fallback(device, path, fallback)
-
+              
               elif source_type == 'custom_field':
+                  # Extract from custom field
                   field_name = source.get('field_name')
-                  value = (device.get('custom_fields') or {}).get(field_name)
-
+                  custom_fields = device.get('custom_fields') or {}
+                  value = custom_fields.get(field_name)
+              
               elif source_type == 'computed':
+                  # Use computed function
                   compute_func = source.get('compute_function')
                   if compute_func == 'get_location_name':
-                      value = get_location_name(device)
-
+                      value = get_location_name(device, netbox_url, netbox_token, verify_ssl)
+              
               elif source_type == 'template_mapping':
+                  # Extract from template mappings
                   attr = source.get('attribute', 'host_groups')
                   template_groups = []
                   for template in templates:
@@ -226,13 +389,16 @@
                   if template_groups:
                       groups.extend(template_groups)
                       continue
-
+              
+              # Add value if not empty
               if value and value != '':
                   if settings.get('trim', True) and isinstance(value, str):
                       value = value.strip()
                   groups.append(value)
-
+          
+          # Apply global settings
           if settings.get('unique', True):
+              # Preserve order while removing duplicates
               seen = set()
               unique_groups = []
               for g in groups:
@@ -240,247 +406,353 @@
                       seen.add(g)
                       unique_groups.append(g)
               groups = unique_groups
-
+          
           if settings.get('skip_empty', True):
               groups = [g for g in groups if g and g != '']
-
+          
           separator = settings.get('separator', ',')
           return separator.join(groups) if groups else ''
-
-      def extract_host_groups(device, device_type):
-          return extract_host_groups_from_config(device, None, device_type, [])
-
-      # ============= TAGS EXTRACTION =============
-
+      
+      # Keep original function for backward compatibility
+      def extract_host_groups(device, device_type, netbox_url, netbox_token, verify_ssl):
+          """Original hardcoded host groups extraction (deprecated, use extract_host_groups_from_config)"""
+          groups = []
+          # 1. Device type (from mapping)
+          if device_type:
+              groups.append(device_type)
+          # 2. Location (parent if exists, otherwise location or site)
+          location_name = get_location_name(device, netbox_url, netbox_token, verify_ssl)
+          if location_name:
+              groups.append(location_name)
+          # 3. Contact (Ownership from custom_fields.Sahiplik)
+          custom_fields = device.get('custom_fields') or {}
+          if custom_fields.get('Sahiplik'):
+              groups.append(custom_fields['Sahiplik'])
+          return ','.join(groups) if groups else ''
+      
       def extract_hall(device):
-          description = device.get('location_description')
-          if description:
-              return description
-          return device.get('location_name') or None
-
-      def extract_tags_from_config(device, config, device_type=None, templates=None):
+          """Computed function to extract Hall information"""
+          location = device.get('location')
+          if location and isinstance(location, dict):
+              # Try description first (e.g., "DATA HALL X")
+              if location.get('description'):
+                  return location['description']
+              elif location.get('name'):
+                  return location['name']
+          return None
+      
+      def extract_tags_from_config(device, config, device_type=None, templates=None, netbox_url=None, netbox_token=None, verify_ssl=True):
+          """
+          Extract tags using YAML configuration
+          Falls back to hardcoded logic if config is None
+          
+          Args:
+              device: Netbox device data
+              config: Tags configuration from YAML
+              device_type: Device type from mapping (optional, for mapping_result source)
+              templates: Templates list (optional, for template_mapping source)
+              netbox_url: Netbox URL (optional, for computed functions that need API access)
+              netbox_token: Netbox API token (optional, for computed functions that need API access)
+              verify_ssl: SSL verification flag (optional, for computed functions that need API access)
+          """
           tags = {}
           loki_tags = []
-
+          
           if config is None:
+              # FALLBACK: Use original hardcoded logic
               return extract_tags_original(device)
-
+          
+          # CONFIG-DRIVEN LOGIC
           definitions = config.get('tags', {}).get('definitions', [])
           settings = config.get('tags', {}).get('settings', {})
-
+          
           for tag_def in definitions:
               if not tag_def.get('enabled', True):
                   continue
-
+              
               tag_name = tag_def.get('tag_name')
               source_type = tag_def.get('source_type')
               value = None
-
+              
               if source_type == 'netbox_attribute':
+                  # Extract from Netbox attribute path
                   path = tag_def.get('path')
                   fallback = tag_def.get('fallback')
                   value = extract_by_path_with_fallback(device, path, fallback)
+                  
+                  # Apply transform if specified
                   transform = tag_def.get('transform')
                   if transform == 'to_string' and value is not None:
                       value = str(value)
-
+              
               elif source_type == 'custom_field':
+                  # Extract from custom field
                   field_name = tag_def.get('field_name')
-                  value = (device.get('custom_fields') or {}).get(field_name)
-
+                  custom_fields = device.get('custom_fields') or {}
+                  value = custom_fields.get(field_name)
+              
               elif source_type == 'computed':
+                  # Use computed function
                   compute_func = tag_def.get('compute_function')
                   if compute_func == 'extract_hall':
                       value = extract_hall(device)
                   elif compute_func == 'get_location_name':
-                      value = get_location_name(device)
-
+                      # Location hierarchy computation
+                      if netbox_url and netbox_token is not None:
+                          value = get_location_name(device, netbox_url, netbox_token, verify_ssl)
+                      else:
+                          # Fallback to simple extraction if API credentials not available
+                          location = device.get('location') or {}
+                          if location.get('name'):
+                              value = location['name']
+                          else:
+                              site = device.get('site') or {}
+                              value = site.get('name')
+              
               elif source_type == 'mapping_result':
+                  # Device type from mapping result
                   value = device_type
-
+              
               elif source_type == 'template_mapping':
+                  # Extract host groups from template mappings as tags
+                  # This creates multiple tags if multiple template groups exist
                   if templates:
                       attr = tag_def.get('attribute', 'host_groups')
                       template_groups = []
                       for template in templates:
                           if attr in template:
                               template_groups.extend(template.get(attr, []))
+                      
+                      # Join with separator or create individual tags
                       if template_groups:
                           separator = tag_def.get('separator', ',')
                           value = separator.join(template_groups)
-
+              
               elif source_type == 'array_expansion':
+                  # Expand array into multiple tags with prefix
                   path = tag_def.get('path')
                   prefix = tag_def.get('prefix', '')
-                  if path == 'tags':
-                      # DB format: tags are in tags1_name...tags5_name columns
-                      tag_values = [
-                          device.get(f'tags{i}_name')
-                          for i in range(1, 6)
-                          if device.get(f'tags{i}_name')
-                      ]
-                  else:
-                      raw = extract_by_path(device, path)
-                      tag_values = []
-                      if raw and isinstance(raw, list):
-                          for item in raw:
-                              if isinstance(item, dict):
-                                  n = item.get('name')
-                              elif isinstance(item, str):
-                                  n = item
-                              else:
-                                  n = None
-                              if n:
-                                  tag_values.append(n)
-                  for item_name in tag_values:
-                      item_name = str(item_name)
-                      loki_tags.append(item_name)
-                      tags[f'{prefix}{item_name}'] = item_name
-                  continue
-
+                  array_data = extract_by_path(device, path)
+                  
+                  if array_data and isinstance(array_data, list):
+                      for item in array_data:
+                          item_name = None
+                          if isinstance(item, dict):
+                              item_name = item.get('name')
+                          elif isinstance(item, str):
+                              item_name = item
+                          
+                          if item_name:
+                              loki_tags.append(item_name)
+                              # Add as separate tag with prefix
+                              tags[f'{prefix}{item_name}'] = item_name
+                  continue  # Skip normal tag addition
+              
+              # Add tag if value is not empty
               if value is not None and value != '':
                   if settings.get('trim', True) and isinstance(value, str):
                       value = value.strip()
+                  
+                  # Skip if treat_empty_as_none and value is empty string
                   if settings.get('treat_empty_as_none', True) and value == '':
                       continue
+                  
                   tags[tag_name] = value
-
+          
+          # Apply global settings
           if settings.get('skip_none', True):
               tags = {k: v for k, v in tags.items() if v is not None}
+          
           if settings.get('skip_empty', True):
               tags = {k: v for k, v in tags.items() if v != ''}
-
+          
           return tags, loki_tags
-
+      
+      # Keep original function for backward compatibility
       def extract_tags_original(device):
+          """Original hardcoded tags extraction (deprecated, use extract_tags_from_config)"""
           tags = {}
-          loki_tags = []
-
-          if device.get('manufacturer_name'):
-              tags['Manufacturer'] = device['manufacturer_name']
-          if device.get('device_model'):
-              tags['Device_Type'] = device['device_model']
-
-          location_name = device.get('location_name') or ''
-          site_name = device.get('site_name') or ''
-          if location_name:
-              tags['Location_Detail'] = location_name
-          elif site_name:
-              tags['Location_Detail'] = site_name
-          if site_name:
-              tags['City'] = site_name
-
-          if device.get('tenant_name'):
-              tags['Tenant'] = device['tenant_name']
-
-          # Ownership: prefer direct sahiplik field, fallback to custom_fields
-          sahiplik = device.get('sahiplik') or ''
-          if not sahiplik:
-              sahiplik = (device.get('custom_fields') or {}).get('Sahiplik', '') or ''
-          if sahiplik:
-              tags['Contact'] = str(sahiplik).strip()
-
-          cf = device.get('custom_fields') or {}
-          if cf.get('Sorumlu_Ekip'):
-              tags['Sorumlu_Ekip'] = cf['Sorumlu_Ekip']
-
+          
+          # Mevcut tag'ler
+          device_type = device.get('device_type') or {}
+          manufacturer = device_type.get('manufacturer') or {}
+          if manufacturer.get('name'):
+              tags['Manufacturer'] = manufacturer['name']
+          if device_type.get('model'):
+              tags['Device_Type'] = device_type['model']
+          elif device_type.get('display'):
+              tags['Device_Type'] = device_type['display']
+          
+          location = device.get('location') or {}
+          site = device.get('site') or {}
+          if location.get('name'):
+              tags['Location_Detail'] = location['name']
+          elif site.get('name'):
+              tags['Location_Detail'] = site['name']
+          if site.get('name'):
+              tags['City'] = site['name']
+          
+          # Tenant (organization/company)
+          tenant = device.get('tenant') or {}
+          if tenant.get('name'):
+              tags['Tenant'] = tenant['name']
+          
+          # Contact (ownership from custom_fields.Sahiplik)
+          custom_fields = device.get('custom_fields') or {}
+          if custom_fields.get('Sahiplik'):
+              tags['Contact'] = custom_fields['Sahiplik']
+          
+          if custom_fields.get('Sorumlu_Ekip'):
+              tags['Sorumlu_Ekip'] = custom_fields['Sorumlu_Ekip']
           if device.get('id'):
               tags['Loki_ID'] = str(device['id'])
-
-          # Cluster from DB join field
-          if device.get('cluster_name'):
-              tags['Cluster'] = device['cluster_name']
-
-          # Hall from location_description or location_name
-          location_desc = device.get('location_description') or ''
-          if location_desc:
-              tags['Hall'] = location_desc
-          elif location_name:
-              tags['Hall'] = location_name
-
-          # Kurulum Tarihi: prefer direct field, fallback to custom_fields
-          kurulum = device.get('kurulum_tarihi') or cf.get('Kurulum_Tarihi') or ''
-          if kurulum:
-              tags['Kurulum_Tarihi'] = str(kurulum)
-
-          # Loki tags from tags1_name...tags5_name columns
-          for tag_field in ['tags1_name', 'tags2_name', 'tags3_name', 'tags4_name', 'tags5_name']:
-              tag_val = device.get(tag_field)
-              if tag_val:
-                  loki_tags.append(str(tag_val))
-
+          
+          # YENİ TAG'LER - Rack bilgileri
+          rack = device.get('rack')
+          if rack:
+              # Rack dict olarak geliyor veya ID olarak
+              if isinstance(rack, dict):
+                  if rack.get('name'):
+                      tags['Rack_Name'] = rack['name']
+                  # Rack type için role kullanılacak (rack_type genellikle null)
+                  rack_role = rack.get('role') or {}
+                  if rack_role.get('name'):
+                      tags['Rack_Type'] = rack_role['name']
+          
+          # YENİ TAG'LER - Cluster bilgisi
+          cluster = device.get('cluster')
+          if cluster:
+              if isinstance(cluster, dict) and cluster.get('name'):
+                  tags['Cluster'] = cluster['name']
+          
+          # YENİ TAG'LER - Hall bilgisi (location description veya name)
+          location = device.get('location')
+          if location:
+              if isinstance(location, dict):
+                  # Description'da "DATA HALL X" formatı var
+                  if location.get('description'):
+                      tags['Hall'] = location['description']
+                  elif location.get('name'):
+                      tags['Hall'] = location['name']
+          
+          # YENİ TAG'LER - Kurulum Tarihi (custom field)
+          if custom_fields.get('Kurulum_Tarihi'):
+              tags['Kurulum_Tarihi'] = custom_fields['Kurulum_Tarihi']
+          
+          # Loki tags (device['tags'] array'inden) - ayrı return edilecek
+          loki_tags = []
+          device_tags = device.get('tags', [])
+          for tag in device_tags:
+              if isinstance(tag, dict):
+                  tag_name = tag.get('name')
+                  if tag_name:
+                      loki_tags.append(tag_name)
+              elif isinstance(tag, str):
+                  loki_tags.append(tag)
+          
+          # None değerleri temizle
           tags = {k: v for k, v in tags.items() if v is not None and v != ''}
-          return tags, loki_tags
-
+          
+          return tags, loki_tags  # İki ayrı return: tags dict ve loki_tags list
+      
       def extract_tags(device):
+          """Wrapper for backward compatibility"""
           return extract_tags_original(device)
-
+      
       if __name__ == '__main__':
           device_file = sys.argv[1]
           device_type_mapping_file = sys.argv[2]
-          host_groups_config_file = sys.argv[3] if len(sys.argv) > 3 else None
-          tags_config_file = sys.argv[4] if len(sys.argv) > 4 else None
-          templates_file = sys.argv[5] if len(sys.argv) > 5 else None
-
+          netbox_url = sys.argv[3]
+          netbox_token = sys.argv[4]
+          verify_ssl = sys.argv[5].lower() == 'true'
+          host_groups_config_file = sys.argv[6] if len(sys.argv) > 6 else None
+          tags_config_file = sys.argv[7] if len(sys.argv) > 7 else None
+          templates_file = sys.argv[8] if len(sys.argv) > 8 else None
+          
+          # Load device JSON from file
           with open(device_file, 'r') as f:
               device = json.load(f)
-
+          
+          # Load device type mapping JSON from file
           with open(device_type_mapping_file, 'r') as f:
               device_type_mapping = json.load(f)
-
+          
           matching_mapping = find_matching_mapping(device, device_type_mapping)
-
-          host_groups_config = load_yaml_config(host_groups_config_file) if host_groups_config_file else None
-          tags_config = load_yaml_config(tags_config_file) if tags_config_file else None
+          
+          # Load YAML configs (optional)
+          host_groups_config = None
+          tags_config = None
           templates = []
-
+          
+          if host_groups_config_file:
+              host_groups_config = load_yaml_config(host_groups_config_file)
+          
+          if tags_config_file:
+              tags_config = load_yaml_config(tags_config_file)
+          
           if templates_file:
               templates_data = load_yaml_config(templates_file)
               if templates_data:
+                  # templates.yml format: device_type -> list of templates
                   device_type_temp = matching_mapping.get('device_type') if matching_mapping else None
                   if device_type_temp and device_type_temp in templates_data:
                       templates = templates_data[device_type_temp]
-
+          
+          # Determine device type and optional hostname customization from the same mapping
           device_type = matching_mapping.get('device_type') if matching_mapping else None
           hostname_prefix = (matching_mapping.get('hostname_prefix') or '') if matching_mapping else ''
           hostname_suffix = (matching_mapping.get('hostname_suffix') or '') if matching_mapping else ''
-
-          location_name = get_location_name(device)
-
-          host_groups_str = extract_host_groups_from_config(device, host_groups_config, device_type, templates)
-          tags_dict, loki_tags_list = extract_tags_from_config(device, tags_config, device_type, templates)
-
+          location_name = get_location_name(device, netbox_url, netbox_token, verify_ssl)
+          
+          # Extract host groups using config or fallback
+          host_groups_str = extract_host_groups_from_config(
+              device, host_groups_config, device_type, templates, 
+              netbox_url, netbox_token, verify_ssl
+          )
+          
+          # Extract tags using config or fallback
+          tags_dict, loki_tags_list = extract_tags_from_config(
+              device, tags_config, device_type, templates,
+              netbox_url, netbox_token, verify_ssl
+          )
+          
+          # If using fallback (no config), manually add Loki tags with prefix
+          # (Config-driven mode handles this automatically via array_expansion)
           if tags_config is None:
               for loki_tag in loki_tags_list:
                   if loki_tag:
+                      # Loki tag'leri "Loki_Tag_" prefix'i ile ekle
                       tags_dict[f'Loki_Tag_{loki_tag}'] = loki_tag
-
-          device_role = device.get('device_role_name') or ''
-          tenant_name = (device.get('tenant_name') or '').strip()
-          site_name = (device.get('site_name') or '').strip()
-
-          # Ownership: prefer direct field, fallback to custom_fields
-          sahiplik = device.get('sahiplik') or ''
-          if not sahiplik:
-              sahiplik = normalize_netbox_choice_field(
-                  (device.get('custom_fields') or {}).get('Sahiplik')
-              )
-
+          
+          # Get device role
+          role_obj = device.get('role') or device.get('device_role')
+          device_role = role_obj.get('name', '') if role_obj and isinstance(role_obj, dict) else ''
+          
+          tenant_obj = device.get('tenant') or {}
+          tenant_name = (tenant_obj.get('name', '') or '').strip() if isinstance(tenant_obj, dict) else ''
+          
+          site_obj = device.get('site') or {}
+          site_name = (site_obj.get('name', '') or '').strip() if isinstance(site_obj, dict) else ''
+          
+          custom_fields_report = device.get('custom_fields') or {}
+          ownership = normalize_netbox_choice_field(custom_fields_report.get('Sahiplik'))
+          
           result = {
               'device_type': device_type,
               'device_role': device_role,
-              'primary_ip': get_primary_ip(device),
+              'primary_ip': get_primary_ip(device, netbox_url, netbox_token, verify_ssl),
               'host_groups': host_groups_str,
               'tags': tags_dict,
               'loki_tags': loki_tags_list,
               'location': location_name,
-              'dc_id': location_name if location_name else site_name,
+              'dc_id': location_name if location_name else (device.get('site') or {}).get('name', ''),
               'tenant': tenant_name,
               'site': site_name,
-              'ownership': sahiplik,
+              'ownership': ownership,
               'hostname_prefix': hostname_prefix,
               'hostname_suffix': hostname_suffix,
           }
+          
           print(json.dumps(result))
     dest: "/tmp/netbox_device_processor.py"
     mode: '0755'
@@ -525,6 +797,9 @@
     python3 /tmp/netbox_device_processor.py
     "/tmp/netbox_device_{{ netbox_device.id | default('temp') }}.json"
     "/tmp/netbox_device_type_mapping_{{ netbox_device.id | default('temp') }}.json"
+    "{{ netbox_url }}"
+    "{{ netbox_token }}"
+    "{{ netbox_verify_ssl | string }}"
     "{{ host_groups_config_path | default((playbook_dir | default(ansible_playbook_directory)) + '/../mappings/host_groups_config.yml') if host_groups_config_stat.stat.exists else '' }}"
     "{{ tags_config_path | default((playbook_dir | default(ansible_playbook_directory)) + '/../mappings/tags_config.yml') if tags_config_stat.stat.exists else '' }}"
     "{{ templates_map_path | default((playbook_dir | default(ansible_playbook_directory)) + '/../mappings/templates.yml') if templates_stat.stat.exists else '' }}"
@@ -536,7 +811,7 @@
   set_fact:
     device_info: "{{ device_processing_result.stdout | from_json }}"
 
-- name: Compute Zabbix hostname base (normalized device name)
+- name: Compute Zabbix hostname base (normalized NetBox name)
   set_fact:
     zabbix_hostname_base: >-
       {{ netbox_device.name | default('') | replace('\t', ' ') | regex_replace('\\s+', ' ') | trim }}
@@ -549,7 +824,7 @@
 - name: Check if host exists in Zabbix by Loki_ID
   set_fact:
     zbx_existing_host: "{{ zabbix_hosts_by_loki_id.get(device_info.tags.Loki_ID | string) }}"
-  when:
+  when: 
     - zabbix_hosts_by_loki_id is defined
     - device_info.tags.Loki_ID is defined
     - device_info.device_type is not none
@@ -575,7 +850,7 @@
 - name: Determine scenario (create or update)
   set_fact:
     zbx_scenario: "{{ 'update' if (zbx_existing_host is defined and zbx_existing_host is not none and zbx_existing_host != None and zbx_existing_host.hostid is defined) else 'create' }}"
-  when:
+  when: 
     - device_info.device_type is not none
     - device_info.device_type != ""
     - device_info.primary_ip is not none
@@ -584,7 +859,7 @@
 - name: Display scenario for device
   debug:
     msg: "Device {{ netbox_device.name }}: Scenario = {{ zbx_scenario }} ({{ 'Host exists in Zabbix' if (zbx_existing_host is defined and zbx_existing_host is not none and zbx_existing_host.hostid is defined) else 'New host - will be created' }})"
-  when:
+  when: 
     - device_info.device_type is not none
     - device_info.device_type != ""
     - device_info.primary_ip is not none
@@ -637,7 +912,7 @@
       site: "{{ device_info.site | default('N/A', true) }}"
       tenant: "{{ device_info.tenant | default('N/A', true) }}"
       ownership: "{{ device_info.ownership | default('N/A', true) }}"
-  when:
+  when: 
     - device_info.device_type is not none
     - device_info.device_type != ""
     - (device_info.primary_ip is none or device_info.primary_ip == "")
@@ -652,7 +927,7 @@
 - name: Skip device if no IP address
   debug:
     msg: "Skipping device {{ netbox_device.name }} - no primary IP address found"
-  when:
+  when: 
     - device_info.device_type is not none
     - device_info.device_type != ""
     - (device_info.primary_ip is none or device_info.primary_ip == "")
@@ -673,7 +948,7 @@
       REPORT_SITE: "{{ device_info.site | default('') }}"
       REPORT_TENANT: "{{ device_info.tenant | default('') }}"
       REPORT_OWNERSHIP: "{{ device_info.ownership | default('') }}"
-  when:
+  when: 
     - device_info.device_type is not none
     - device_info.device_type != ""
     - device_info.primary_ip is not none
@@ -693,7 +968,7 @@
         password: "{{ zabbix_password }}"
       id: 0
   register: zbx_login_resp
-  when:
+  when: 
     - device_info.device_type is not none
     - device_info.device_type != ""
     - device_info.primary_ip is not none
@@ -704,7 +979,7 @@
 - name: Set zabbix_auth from login
   set_fact:
     zabbix_auth: "{{ zbx_login_resp.json.result }}"
-  when:
+  when: 
     - device_info.device_type is not none
     - device_info.device_type != ""
     - device_info.primary_ip is not none
@@ -719,7 +994,7 @@
     _zabbix_auth_for_role: "{{ zabbix_auth }}"
     _zbx_existing_host_for_role: "{{ zbx_existing_host | default(omit) }}"
     _zbx_scenario_for_role: "{{ zbx_scenario | default('create') }}"
-  when:
+  when: 
     - device_info.device_type is not none
     - device_info.device_type != ""
     - device_info.primary_ip is not none
@@ -738,7 +1013,7 @@
     zabbix_auth: "{{ _zabbix_auth_for_role }}"
     zbx_existing_host: "{{ _zbx_existing_host_for_role }}"
     zbx_scenario: "{{ _zbx_scenario_for_role }}"
-  when:
+  when: 
     - device_info.device_type is not none
     - device_info.device_type != ""
     - device_info.primary_ip is not none
@@ -749,7 +1024,7 @@
 - name: Collect device result from zabbix host operations (if processed)
   set_fact:
     current_device_result: "{{ device_result }}"
-  when:
+  when: 
     - device_result is defined
     - device_result | length > 0
     - device_result.hostname is defined
@@ -766,95 +1041,8 @@
   copy:
     content: "{{ current_device_result | to_json }}"
     dest: "/tmp/zabbix_host_operation_result_{{ netbox_device.id | default('unknown') }}.json"
-  when:
+  when: 
     - current_device_result is defined
     - current_device_result | length > 0
   delegate_to: localhost
   run_once: false
-
-# ─── HMDL Log ────────────────────────────────────────────────────────────────
-
-- name: Build HMDL log entry base for device
-  set_fact:
-    _hmdl_log_entry:
-      run_id: "{{ hmdl_run_id | default('') }}"
-      awx_job_id: "{{ lookup('env', 'AWX_JOB_ID') | default('', true) }}"
-      playbook_name: "{{ hmdl_playbook_name | default('db_to_zabbix_sync') }}"
-      source_device_id: "{{ netbox_device.id | default(None) }}"
-      source_device_name: "{{ netbox_device.name | default('') }}"
-      zabbix_hostid: "{{ zbx_existing_host.hostid | default('') }}"
-      zabbix_hostname: "{{ current_device_result.hostname | default(netbox_device.name | default('')) }}"
-      zabbix_host_ip: "{{ current_device_result.ip | default('') }}"
-      device_type: "{{ device_info.device_type | default('') }}"
-      device_role: "{{ current_device_result.device_role | default('') }}"
-      manufacturer_name: "{{ netbox_device.manufacturer_name | default('') }}"
-      site_name: "{{ current_device_result.site | default(netbox_device.site_name | default('')) }}"
-      location_name: "{{ netbox_device.location_name | default('') }}"
-      location_parent_name: "{{ netbox_device.location_parent_name | default('') }}"
-      root_location_name: "{{ netbox_device.root_location_name | default('') }}"
-      tenant_name: "{{ current_device_result.tenant | default(netbox_device.tenant_name | default('')) }}"
-      cluster_name: "{{ netbox_device.cluster_name | default('') }}"
-      operation: "{{ zbx_scenario | default('none') }}"
-      status: "{{ current_device_result.status | default('eklenemedi') }}"
-      reason: "{{ current_device_result.reason | default('') }}"
-      request_payload: "{{ zbx_record | default({}) }}"
-      response_payload: {}
-      error_payload: {}
-  when:
-    - hmdl_log_enabled | bool
-    - current_device_result is defined
-    - current_device_result | length > 0
-
-- name: Set HMDL zabbix_hostid and response from create success
-  set_fact:
-    _hmdl_log_entry: >-
-      {{ _hmdl_log_entry | combine({
-        'zabbix_hostid': zbx_create_resp.json.result.hostids | first | default(''),
-        'response_payload': zbx_create_resp.json.result
-      }) }}
-  when:
-    - hmdl_log_enabled | bool
-    - _hmdl_log_entry is defined
-    - zbx_create_resp is defined
-    - zbx_create_resp.json is defined
-    - zbx_create_resp.json.result is defined
-    - zbx_create_resp.json.result.hostids is defined
-
-- name: Set HMDL error_payload from create failure
-  set_fact:
-    _hmdl_log_entry: "{{ _hmdl_log_entry | combine({'error_payload': zbx_create_resp.json.error}) }}"
-  when:
-    - hmdl_log_enabled | bool
-    - _hmdl_log_entry is defined
-    - zbx_create_resp is defined
-    - zbx_create_resp.json is defined
-    - zbx_create_resp.json.error is defined
-
-- name: Set HMDL response_payload from update success
-  set_fact:
-    _hmdl_log_entry: "{{ _hmdl_log_entry | combine({'response_payload': zbx_update_resp.json.result}) }}"
-  when:
-    - hmdl_log_enabled | bool
-    - _hmdl_log_entry is defined
-    - zbx_update_resp is defined
-    - zbx_update_resp.json is defined
-    - zbx_update_resp.json.result is defined
-
-- name: Set HMDL error_payload from update failure
-  set_fact:
-    _hmdl_log_entry: "{{ _hmdl_log_entry | combine({'error_payload': zbx_update_resp.json.error}) }}"
-  when:
-    - hmdl_log_enabled | bool
-    - _hmdl_log_entry is defined
-    - zbx_update_resp is defined
-    - zbx_update_resp.json is defined
-    - zbx_update_resp.json.error is defined
-
-- name: Log device result to HMDL audit table
-  include_tasks: hmdl_sync_log.yml
-  vars:
-    hmdl_log_device_id: "{{ netbox_device.id | default('proc') }}"
-    hmdl_log_entry: "{{ _hmdl_log_entry }}"
-  when:
-    - hmdl_log_enabled | bool
-    - _hmdl_log_entry is defined
