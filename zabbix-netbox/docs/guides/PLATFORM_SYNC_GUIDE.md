@@ -68,6 +68,19 @@ When running in AWX/Tower, set `sync_platforms: true` in the **Extra Variables**
 
 ---
 
+## Creating hosts as disabled
+
+Newly created Zabbix hosts can be added as disabled by type. These options are disabled by default and only affect `host.create`; existing hosts processed through `host.update` keep their current Zabbix status.
+
+```yaml
+create_devices_disabled: true
+create_platforms_disabled: true
+```
+
+Use `create_devices_disabled` for NetBox device hosts and `create_platforms_disabled` for NetBox platform hosts. Enable only the type that should be created disabled in the current AWX job.
+
+---
+
 ## Location filter for platforms
 
 The playbook variable `location_filter` (e.g. `DC13`) applies to **platform sync** as well as device sync. When set and non-empty, only platforms whose NetBox custom field **`Site`** contains the filter string (case-insensitive substring) are kept after the izlenmeli-based list is built. Examples: `DC13` matches `DC13-G12` and `DC13-G1-AHV-CLS`; it does not match `AZ11-CLS` or `DC14`.

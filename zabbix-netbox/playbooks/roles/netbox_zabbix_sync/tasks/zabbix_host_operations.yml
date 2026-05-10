@@ -445,6 +445,7 @@
       ZABBIX API CREATE REQUEST
       ========================================
       Host: {{ zbx_record.HOSTNAME }}
+      Host Status: {{ zbx_record.HOST_STATUS | default(0) | int }}
       IP: {{ zbx_record.HOST_IP }}
       Device Type: {{ zbx_record.DEVICE_TYPE | default('N/A') }}
       Templates: {{ zbx_template_id_list | to_nice_json }}
@@ -474,6 +475,7 @@
         interfaces: "{{ _zbx_interface_create }}"
         templates: "{{ zbx_template_id_list }}"
         groups: "{{ zbx_groups_formatted | default([]) }}"
+        status: "{{ zbx_record.HOST_STATUS | default(0) | int }}"
         tags: "{{ zbx_tags | default(omit) }}"
         macros: "{{ zbx_host_macros_formatted if (zbx_host_macros_formatted is defined and zbx_host_macros_formatted | length > 0) else omit }}"
         monitored_by: "{{ zbx_monitored_by }}"

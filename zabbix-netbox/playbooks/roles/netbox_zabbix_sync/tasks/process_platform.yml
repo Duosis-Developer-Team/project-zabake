@@ -266,6 +266,7 @@
               DC_ID: "{{ platform_site_code }}"
               HOST_GROUPS: "{{ platform_host_groups }}"
               TEMPLATE_TYPE: ""
+              HOST_STATUS: "{{ 1 if create_platforms_disabled | bool else 0 }}"
               MACROS: "{{ platform_tags | to_json }}"
               REPORT_LOCATION: "{{ platform_dc | default(platform_site_code, true) | default('', true) }}"
               REPORT_SITE: "{{ platform_site_code | default('', true) }}"

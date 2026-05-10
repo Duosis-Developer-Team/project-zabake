@@ -365,6 +365,7 @@ Nutanix:
     type: snmpv3
     host_groups:
       - "Virtual Infrastructure"
+      - "Nutanix Cluster"
     macros:
       "{$NUTANIX.USER}": "zabbix@blt.vc"
       "{$NUTANIX.PASSWORD}": "2u4Mzf7RJC"

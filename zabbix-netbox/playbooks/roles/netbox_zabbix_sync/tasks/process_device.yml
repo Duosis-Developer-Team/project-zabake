@@ -943,6 +943,7 @@
       DC_ID: "{{ device_info.location }}"
       HOST_GROUPS: "{{ device_info.host_groups }}"
       TEMPLATE_TYPE: ""
+      HOST_STATUS: "{{ 1 if create_devices_disabled | bool else 0 }}"
       MACROS: "{{ device_info.tags | to_json }}"
       REPORT_LOCATION: "{{ device_info.location | default('') }}"
       REPORT_SITE: "{{ device_info.site | default('') }}"

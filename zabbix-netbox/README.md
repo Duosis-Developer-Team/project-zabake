@@ -60,6 +60,7 @@ ansible-playbook playbooks/netbox_zabbix_sync.yaml \
   -e "location_filter=LocationName"
 ```
 
+AWX extra vars ile yeni oluşturulan host'lar Zabbix'e disabled eklenebilir. Device host'ları için `create_devices_disabled: true`, platform host'ları için `create_platforms_disabled: true` kullanın. Bu ayarlar sadece yeni host oluşturma sırasında uygulanır; mevcut host update akışı host status değerini değiştirmez.
 
 ## Dokümantasyon
 

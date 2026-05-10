@@ -23,6 +23,8 @@ only_fetch: false  # When true, only fetch and log NetBox devices/platforms; ski
 # Device and platform synchronization
 sync_devices: true             # When false, skip NetBox device fetch (unless only_fetch), device processing, and device result aggregation
 sync_platforms: false          # Enable NetBox platforms synchronization
+create_devices_disabled: false # When true, newly created device hosts are added to Zabbix as disabled
+create_platforms_disabled: false # When true, newly created platform hosts are added to Zabbix as disabled
 report_izlenmeyecek: true      # Include \"izlenmeyecek\" items in email/CSV report
 
 # Mapping file paths
