@@ -1,0 +1,8 @@
+[
+  {
+    "uuid": "abc-123",
+    "vmname": "cust-a-vm-app-01",
+    "cluster": "km-cluster-01",
+    "customer_code": ""
+  }
+]

@@ -1,0 +1,7 @@
+[
+  {
+    "lparname": "lpar-01",
+    "cluster": "server-01",
+    "customer_code": "cust-a"
+  }
+]

@@ -1,0 +1,37 @@
+---
+- name: Create reconciliation table if needed
+  community.postgresql.postgresql_query:
+    login_host: "{{ reconciliation_db.host }}"
+    login_port: "{{ reconciliation_db.port }}"
+    login_db: "{{ reconciliation_db.name }}"
+    login_user: "{{ reconciliation_db.user }}"
+    login_password: "{{ reconciliation_db.password }}"
+    query: |
+      CREATE TABLE IF NOT EXISTS {{ reconciliation_db.table }} (
+        run_id TEXT NOT NULL,
+        target TEXT NOT NULL,
+        window_days INTEGER NOT NULL,
+        generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        summary JSONB NOT NULL,
+        details JSONB,
+        PRIMARY KEY (run_id, target)
+      );
+
+- name: Upsert reconciliation payload
+  ansible.builtin.command:
+    argv:
+      - python3
+      - "{{ playbook_dir }}/../scripts/main.py"
+      - --mode
+      - upsert-reconciliation
+      - --input-file
+      - "{{ reconciliation_output_file }}"
+      - --table
+      - "{{ reconciliation_db.table }}"
+  changed_when: false
+  environment:
+    RECONCILIATION_DB_HOST: "{{ reconciliation_db.host }}"
+    RECONCILIATION_DB_PORT: "{{ reconciliation_db.port | string }}"
+    RECONCILIATION_DB_NAME: "{{ reconciliation_db.name }}"
+    RECONCILIATION_DB_USER: "{{ reconciliation_db.user }}"
+    RECONCILIATION_DB_PASSWORD: "{{ reconciliation_db.password }}"
