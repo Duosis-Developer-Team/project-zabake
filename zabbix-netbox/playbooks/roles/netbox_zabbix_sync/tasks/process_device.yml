@@ -392,7 +392,7 @@
               tags['Cluster'] = device['cluster_name']
 
           if device.get('rack_name'):
-              tags['Rack'] = device['rack_name']
+              tags['Rack_Name'] = device['rack_name']
 
           # Hall from location_description or location_name
           location_desc = device.get('location_description') or ''
