@@ -391,6 +391,9 @@
           if device.get('cluster_name'):
               tags['Cluster'] = device['cluster_name']
 
+          if device.get('rack_name'):
+              tags['Rack'] = device['rack_name']
+
           # Hall from location_description or location_name
           location_desc = device.get('location_description') or ''
           if location_desc:
@@ -480,6 +483,7 @@
               'ownership': sahiplik,
               'hostname_prefix': hostname_prefix,
               'hostname_suffix': hostname_suffix,
+              'rack_name': device.get('rack_name') or '',
           }
           print(json.dumps(result))
     dest: "/tmp/netbox_device_processor.py"
@@ -794,6 +798,7 @@
       root_location_name: "{{ netbox_device.root_location_name | default('') }}"
       tenant_name: "{{ current_device_result.tenant | default(netbox_device.tenant_name | default('')) }}"
       cluster_name: "{{ netbox_device.cluster_name | default('') }}"
+      rack_name: "{{ netbox_device.rack_name | default('') }}"
       operation: "{{ zbx_scenario | default('none') }}"
       status: "{{ current_device_result.status | default('eklenemedi') }}"
       reason: "{{ current_device_result.reason | default('') }}"

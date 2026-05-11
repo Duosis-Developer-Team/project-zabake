@@ -224,7 +224,8 @@
           d.custom_fields, d.sahiplik, d.kurulum_tarihi,
           d.izlenmeli, d.zabbix_monitoring, d.datalake_monitoring,
           d.tags1_name, d.tags2_name, d.tags3_name, d.tags4_name, d.tags5_name,
-          d.created::text, d.last_updated::text
+          d.created::text, d.last_updated::text,
+          d.rack_name
       FROM public.discovery_netbox_inventory_device d
       LEFT JOIN public.discovery_loki_location l      ON d.location_id = l.id
       LEFT JOIN root_locations rl                     ON d.location_id = rl.start_location_id
@@ -345,7 +346,8 @@
           d.custom_fields, d.sahiplik, d.kurulum_tarihi,
           d.izlenmeli, d.zabbix_monitoring, d.datalake_monitoring,
           d.tags1_name, d.tags2_name, d.tags3_name, d.tags4_name, d.tags5_name,
-          d.created::text, d.last_updated::text
+          d.created::text, d.last_updated::text,
+          d.rack_name
       FROM public.discovery_netbox_inventory_device d
       LEFT JOIN public.discovery_loki_location l      ON d.location_id = l.id
       LEFT JOIN root_locations rl                     ON d.location_id = rl.start_location_id

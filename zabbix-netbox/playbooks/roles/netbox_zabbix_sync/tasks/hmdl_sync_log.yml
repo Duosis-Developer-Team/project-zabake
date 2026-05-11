@@ -71,6 +71,7 @@
           "root_location_name":   nullify(entry.get("root_location_name")),
           "tenant_name":          nullify(entry.get("tenant_name")),
           "cluster_name":         nullify(entry.get("cluster_name")),
+          "rack_name":            nullify(entry.get("rack_name")),
           "operation":            nullify(entry.get("operation")),
           "status":               entry.get("status") or "eklenemedi",
           "reason":               nullify(entry.get("reason")),
@@ -127,6 +128,7 @@
           root_location_name   TEXT NULL,
           tenant_name          TEXT NULL,
           cluster_name         TEXT NULL,
+          rack_name            TEXT NULL,
           operation            VARCHAR(50) NULL,
           status               VARCHAR(50) NOT NULL,
           reason               TEXT NULL,
@@ -193,7 +195,7 @@
               zabbix_hostid, zabbix_hostname, zabbix_host_ip,
               device_type, device_role, manufacturer_name,
               site_name, location_name, location_parent_name,
-              root_location_name, tenant_name, cluster_name,
+              root_location_name, tenant_name, cluster_name, rack_name,
               operation, status, reason,
               request_payload, response_payload, error_payload, extra_data
           ) VALUES (
@@ -202,7 +204,7 @@
               %(zabbix_hostid)s, %(zabbix_hostname)s, %(zabbix_host_ip)s,
               %(device_type)s, %(device_role)s, %(manufacturer_name)s,
               %(site_name)s, %(location_name)s, %(location_parent_name)s,
-              %(root_location_name)s, %(tenant_name)s, %(cluster_name)s,
+              %(root_location_name)s, %(tenant_name)s, %(cluster_name)s, %(rack_name)s,
               %(operation)s, %(status)s, %(reason)s,
               %(request_payload)s::jsonb, %(response_payload)s::jsonb,
               %(error_payload)s::jsonb, %(extra_data)s::jsonb
