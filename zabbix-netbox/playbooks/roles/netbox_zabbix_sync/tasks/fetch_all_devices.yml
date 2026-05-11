@@ -180,13 +180,23 @@
           WHERE parent_id IS NULL
           ORDER BY start_location_id, level DESC
       ),
-      cluster_map AS (
+      cluster_map_id AS (
           SELECT
-              site_name,
+              device_id,
               STRING_AGG(DISTINCT cluster_name, ', ' ORDER BY cluster_name) AS resolved_cluster_name
           FROM public.discovery_netbox_virtualization_vm
-          WHERE cluster_name IS NOT NULL AND site_name IS NOT NULL
-          GROUP BY site_name
+          WHERE cluster_name IS NOT NULL
+            AND device_id IS NOT NULL
+          GROUP BY device_id
+      ),
+      cluster_map_name AS (
+          SELECT
+              LOWER(TRIM(device_name)) AS device_name_norm,
+              STRING_AGG(DISTINCT cluster_name, ', ' ORDER BY cluster_name) AS resolved_cluster_name
+          FROM public.discovery_netbox_virtualization_vm
+          WHERE cluster_name IS NOT NULL
+            AND device_name IS NOT NULL
+          GROUP BY LOWER(TRIM(device_name))
       )
       SELECT
           d.id, d.name,
@@ -210,7 +220,7 @@
           p.cf_ip_addresses    AS platform_cf_ip_addresses,
           p.cf_port            AS platform_cf_port,
           p.cf_url             AS platform_cf_url,
-          cm.resolved_cluster_name AS cluster_name,
+          COALESCE(cmi.resolved_cluster_name, cmn.resolved_cluster_name) AS cluster_name,
           d.custom_fields, d.sahiplik, d.kurulum_tarihi,
           d.izlenmeli, d.zabbix_monitoring, d.datalake_monitoring,
           d.tags1_name, d.tags2_name, d.tags3_name, d.tags4_name, d.tags5_name,
@@ -219,7 +229,8 @@
       LEFT JOIN public.discovery_loki_location l      ON d.location_id = l.id
       LEFT JOIN root_locations rl                     ON d.location_id = rl.start_location_id
       LEFT JOIN public.discovery_netbox_platform p    ON d.platform_id = p.id
-      LEFT JOIN cluster_map cm                        ON d.site_name   = cm.site_name
+      LEFT JOIN cluster_map_id   cmi                  ON cmi.device_id = d.id
+      LEFT JOIN cluster_map_name cmn                  ON cmn.device_name_norm = LOWER(TRIM(d.name))
       WHERE d.status_value = 'active'
         AND (d.izlenmeli IS NULL OR (d.izlenmeli != 'Hayir' AND d.izlenmeli != 'Hayır'))
       {% if location_filter | default('') | trim != '' %}
@@ -290,13 +301,23 @@
           WHERE parent_id IS NULL
           ORDER BY start_location_id, level DESC
       ),
-      cluster_map AS (
+      cluster_map_id AS (
           SELECT
-              site_name,
+              device_id,
               STRING_AGG(DISTINCT cluster_name, ', ' ORDER BY cluster_name) AS resolved_cluster_name
           FROM public.discovery_netbox_virtualization_vm
-          WHERE cluster_name IS NOT NULL AND site_name IS NOT NULL
-          GROUP BY site_name
+          WHERE cluster_name IS NOT NULL
+            AND device_id IS NOT NULL
+          GROUP BY device_id
+      ),
+      cluster_map_name AS (
+          SELECT
+              LOWER(TRIM(device_name)) AS device_name_norm,
+              STRING_AGG(DISTINCT cluster_name, ', ' ORDER BY cluster_name) AS resolved_cluster_name
+          FROM public.discovery_netbox_virtualization_vm
+          WHERE cluster_name IS NOT NULL
+            AND device_name IS NOT NULL
+          GROUP BY LOWER(TRIM(device_name))
       )
       SELECT
           d.id, d.name,
@@ -320,7 +341,7 @@
           p.cf_ip_addresses    AS platform_cf_ip_addresses,
           p.cf_port            AS platform_cf_port,
           p.cf_url             AS platform_cf_url,
-          cm.resolved_cluster_name AS cluster_name,
+          COALESCE(cmi.resolved_cluster_name, cmn.resolved_cluster_name) AS cluster_name,
           d.custom_fields, d.sahiplik, d.kurulum_tarihi,
           d.izlenmeli, d.zabbix_monitoring, d.datalake_monitoring,
           d.tags1_name, d.tags2_name, d.tags3_name, d.tags4_name, d.tags5_name,
@@ -329,7 +350,8 @@
       LEFT JOIN public.discovery_loki_location l      ON d.location_id = l.id
       LEFT JOIN root_locations rl                     ON d.location_id = rl.start_location_id
       LEFT JOIN public.discovery_netbox_platform p    ON d.platform_id = p.id
-      LEFT JOIN cluster_map cm                        ON d.site_name   = cm.site_name
+      LEFT JOIN cluster_map_id   cmi                  ON cmi.device_id = d.id
+      LEFT JOIN cluster_map_name cmn                  ON cmn.device_name_norm = LOWER(TRIM(d.name))
       WHERE d.status_value = 'active'
         AND (d.izlenmeli = 'Hayir' OR d.izlenmeli = 'Hayır')
       {% if location_filter | default('') | trim != '' %}
