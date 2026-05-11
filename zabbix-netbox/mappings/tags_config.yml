@@ -78,6 +78,13 @@ tags:
       enabled: true
       description: "Cluster name resolved by site_name from discovery_netbox_virtualization_vm"
 
+    # Rack Name
+    - tag_name: "Rack_Name"
+      source_type: "netbox_attribute"
+      path: "rack_name"
+      enabled: true
+      description: "Rack name from rack_name column in discovery_netbox_inventory_device"
+
     # === DIRECT DEVICE FIELDS ===
 
     # Ownership (direct column, not custom_field)
