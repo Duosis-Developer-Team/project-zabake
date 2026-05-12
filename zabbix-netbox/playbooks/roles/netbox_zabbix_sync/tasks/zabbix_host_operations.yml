@@ -8,12 +8,10 @@
     _updated_fields: ""
     _tags_needs_update: false
     _groups_needs_update: false
-    _macros_needs_update: false
     _existing_tags_list: []
     _existing_hmdl_tags_map: {}
     _merged_tags_for_update: []
     _tag_change_log: []
-    _macro_change_log: []
     _host_field_changes: []
   run_once: false
 
@@ -664,44 +662,6 @@
     - zbx_existing_host is defined
     - zbx_existing_host.hostid is defined
 
-- name: Get existing host macros for comparison
-  uri:
-    url: "{{ zabbix_url }}"
-    method: POST
-    body_format: json
-    validate_certs: "{{ zabbix_validate_certs | default(false) }}"
-    body:
-      jsonrpc: "2.0"
-      method: "host.get"
-      params:
-        output: ["hostid"]
-        hostids: "{{ zbx_existing_host.hostid }}"
-        selectMacros: "extend"
-      auth: "{{ zabbix_auth }}"
-      id: 1005
-  register: zbx_existing_macros_resp
-  when:
-    - zbx_scenario == 'update'
-    - zbx_existing_host is defined
-    - zbx_existing_host.hostid is defined
-
-- name: Build existing macros map
-  vars:
-    _existing_host_data: "{{ zbx_existing_macros_resp.json.result[0] | default({}) }}"
-    _existing_macros_list: "{{ _existing_host_data.macros | default([]) }}"
-  set_fact:
-    _existing_macros_map: >-
-      {%- set macros = {} -%}
-      {%- for macro in _existing_macros_list -%}
-        {%- set _ = macros.update({macro.macro: macro.value}) -%}
-      {%- endfor -%}
-      {{ macros }}
-  when:
-    - zbx_scenario == 'update'
-    - zbx_existing_host is defined
-    - zbx_existing_host.hostid is defined
-    - zbx_existing_macros_resp.json.result is defined
-
 - name: Build existing tags list and HMDL tag map from zbx_existing_host
   vars:
     _raw_tags: "{{ zbx_existing_host.tags | default([]) }}"
@@ -797,30 +757,6 @@
     - zbx_existing_host is defined
     - zbx_existing_host.hostid is defined
 
-- name: Merge new macros with existing ones (new macros take precedence)
-  vars:
-    _merged_macros: >-
-      {{ _existing_macros_map | default({}) | combine(zbx_host_macros | default({})) }}
-  set_fact:
-    zbx_host_macros_merged: "{{ _merged_macros }}"
-  when:
-    - zbx_scenario == 'update'
-    - zbx_existing_host is defined
-    - zbx_existing_host.hostid is defined
-
-- name: Format merged macros for Zabbix API (update scenario)
-  set_fact:
-    zbx_host_macros_formatted_update: >-
-      {%- set formatted = [] -%}
-      {%- for macro_key, macro_value in (zbx_host_macros_merged | default({})).items() -%}
-        {%- set _ = formatted.append({'macro': macro_key, 'value': macro_value}) -%}
-      {%- endfor -%}
-      {{ formatted }}
-  when:
-    - zbx_scenario == 'update'
-    - zbx_existing_host is defined
-    - zbx_existing_host.hostid is defined
-
 - name: Build interface for update
   set_fact:
     _zbx_interface_update: "{{ [{'interfaceid': _interface_id, 'type': zbx_iface.type, 'main': 1, 'useip': 1, 'ip': zbx_record.HOST_IP, 'dns': zbx_iface.dns | default(''), 'port': (zbx_iface.port | default(161)) | string, 'details': zbx_iface.details | default(omit)}] if (zbx_iface is not none and zbx_iface is mapping and zbx_iface.type is defined) else omit }}"
@@ -832,52 +768,6 @@
     - _interface_id != ''
     - _missing_params | default([]) | length == 0
 
-- name: Check if macros have changed
-  vars:
-    _new_macros_dict: "{{ zbx_host_macros | default({}) }}"
-    _macros_changed: >-
-      {%- set changed = false -%}
-      {%- for macro_key, macro_value in _new_macros_dict.items() -%}
-        {%- if (_existing_macros_map | default({})).get(macro_key, '__NOT_FOUND__') != macro_value -%}
-          {%- set changed = true -%}
-        {%- endif -%}
-      {%- endfor -%}
-      {{ changed }}
-  set_fact:
-    _macros_needs_update: "{{ _macros_changed | bool }}"
-  when:
-    - zbx_scenario == 'update'
-    - zbx_existing_host is defined
-    - zbx_existing_host.hostid is defined
-    - _missing_params | default([]) | length == 0
-
-- name: Build macro change log entries
-  set_fact:
-    _macro_change_log: >-
-      {%- set entries = [] -%}
-      {%- for macro_key, macro_value in (zbx_host_macros | default({})).items() -%}
-        {%- set old_val = (_existing_macros_map | default({})).get(macro_key, None) -%}
-        {%- if old_val is none -%}
-          {%- set action = 'added' -%}
-        {%- elif old_val != macro_value | string -%}
-          {%- set action = 'updated' -%}
-        {%- else -%}
-          {%- set action = 'unchanged' -%}
-        {%- endif -%}
-        {%- set _ = entries.append({
-          'key_name': macro_key,
-          'old_value': old_val,
-          'new_value': macro_value | string,
-          'action': action,
-          'object_type': 'macro'
-        }) -%}
-      {%- endfor -%}
-      {{ entries }}
-  when:
-    - zbx_scenario == 'update'
-    - zbx_existing_host is defined
-    - zbx_existing_host.hostid is defined
-
 - name: Check if update is needed (compare with existing values)
   set_fact:
     _needs_update: >-
@@ -888,7 +778,6 @@
           (zbx_existing_host.name | default('') != zbx_record.HOSTNAME) or
           (zbx_existing_host.monitored_by | default('') | string != zbx_monitored_by | string) or
           (zbx_existing_host.proxy_groupid | default('') | string != zbx_proxy_group_id | string) or
-          (_macros_needs_update | default(false) | bool) or
           (_tags_needs_update | default(false) | bool) or
           (_groups_needs_update | default(false) | bool)
         ) | bool
@@ -958,7 +847,6 @@
       IP: {{ zbx_record.HOST_IP }}
       Device Type: {{ zbx_record.DEVICE_TYPE | default('N/A') }}
       Interface: {{ _zbx_interface_update | to_nice_json }}
-      Macros: {{ zbx_host_macros_formatted_update | to_nice_json }}
       Monitored By: {{ zbx_monitored_by }}
       Proxy Group ID: {{ zbx_proxy_group_id }}
       Needs Update: {{ _needs_update | default(true) | bool }}
@@ -989,7 +877,6 @@
         interfaces: "{{ _zbx_interface_update }}"
         groups: "{{ zbx_groups_formatted | default([]) }}"
         tags: "{{ _merged_tags_for_update | default([]) }}"
-        macros: "{{ zbx_host_macros_formatted_update if (zbx_host_macros_formatted_update is defined and zbx_host_macros_formatted_update | length > 0) else omit }}"
         monitored_by: "{{ zbx_monitored_by | int }}"
         proxy_groupid: "{{ zbx_proxy_group_id | default('0') | int }}"
       auth: "{{ zabbix_auth }}"
@@ -1039,18 +926,6 @@
       {%- endif -%}
       {%- if zbx_existing_host.proxy_groupid | default('') | string != zbx_proxy_group_id | string -%}
         {%- set _ = fields.append('Proxy Group: ' ~ zbx_existing_host.proxy_groupid | default('N/A') ~ ' → ' ~ zbx_proxy_group_id) -%}
-      {%- endif -%}
-      {%- if _macros_needs_update | default(false) | bool -%}
-        {%- set ns_m = namespace(changed_macros=[]) -%}
-        {%- for macro_key, macro_value in (zbx_host_macros | default({})).items() -%}
-          {%- if (_existing_macros_map | default({})).get(macro_key, '__NOT_FOUND__') != macro_value -%}
-            {%- set old_value = (_existing_macros_map | default({})).get(macro_key, 'yok') -%}
-            {%- set ns_m.changed_macros = ns_m.changed_macros + [macro_key ~ ': ' ~ old_value ~ ' → ' ~ macro_value] -%}
-          {%- endif -%}
-        {%- endfor -%}
-        {%- if ns_m.changed_macros | length > 0 -%}
-          {%- set _ = fields.append('Macros: ' ~ (ns_m.changed_macros | join('; '))) -%}
-        {%- endif -%}
       {%- endif -%}
       {%- if _tags_needs_update | default(false) | bool -%}
         {%- set ns_t = namespace(changed_tags=[]) -%}

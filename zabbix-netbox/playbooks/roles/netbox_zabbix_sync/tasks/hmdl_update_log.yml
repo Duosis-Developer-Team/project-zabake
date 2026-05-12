@@ -229,29 +229,25 @@
 
 # ─── Tag/macro change log ─────────────────────────────────────────────────────
 
-- name: Build combined tag and macro change list (exclude unchanged)
+- name: Build tag change list (exclude unchanged)
   set_fact:
-    _hmdl_tag_macro_changes: >-
-      {{
-        ((_tag_change_log | default([]) | selectattr('action', 'ne', 'unchanged') | list) +
-         (_macro_change_log | default([]) | selectattr('action', 'ne', 'unchanged') | list))
-      }}
+    _hmdl_tag_changes: "{{ _tag_change_log | default([]) | selectattr('action', 'ne', 'unchanged') | list }}"
   when:
     - hmdl_log_enabled | bool
     - zbx_scenario | default('') == 'update'
 
-- name: Write tag and macro changes to temp file
+- name: Write tag changes to temp file
   copy:
-    content: "{{ _hmdl_tag_macro_changes | default([]) | to_json }}"
+    content: "{{ _hmdl_tag_changes | default([]) | to_json }}"
     dest: "/tmp/hmdl_tag_changes_{{ netbox_device.id | default('tmp') }}.json"
   delegate_to: localhost
   when:
     - hmdl_log_enabled | bool
     - zbx_scenario | default('') == 'update'
-    - _hmdl_tag_macro_changes is defined
-    - _hmdl_tag_macro_changes | length > 0
+    - _hmdl_tag_changes is defined
+    - _hmdl_tag_changes | length > 0
 
-- name: Prepare tag/macro change log entries
+- name: Prepare tag change log entries
   command: >
     python3 /tmp/hmdl_prepare_update_log.py
     "/tmp/hmdl_tag_changes_{{ netbox_device.id | default('tmp') }}.json"
@@ -269,12 +265,12 @@
   when:
     - hmdl_log_enabled | bool
     - zbx_scenario | default('') == 'update'
-    - _hmdl_tag_macro_changes is defined
-    - _hmdl_tag_macro_changes | length > 0
+    - _hmdl_tag_changes is defined
+    - _hmdl_tag_changes | length > 0
 
-- name: Insert tag/macro change log entries
+- name: Insert tag change log entries
   block:
-    - name: Run tag/macro change log INSERT
+    - name: Run tag change log INSERT
       community.postgresql.postgresql_query:
         db: "{{ hmdl_db_name }}"
         login_host: "{{ hmdl_db_host }}"
@@ -298,7 +294,7 @@
       delegate_to: localhost
       changed_when: false
   rescue:
-    - name: Debug tag/macro change log insert failure
+    - name: Debug tag change log insert failure
       debug:
         msg: >
           HMDL tag update log insert başarısız —
