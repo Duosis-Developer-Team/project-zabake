@@ -169,6 +169,30 @@
     - zbx_dc_number != ''
     - zbx_dc_number | string | upper == pg_dc_num | string | upper
 
+- name: Initialize merged proxy_group_by_dc from templates
+  set_fact:
+    _zbx_merged_pg_by_dc: {}
+
+- name: Merge proxy_group_by_dc from each template row
+  set_fact:
+    _zbx_merged_pg_by_dc: "{{ _zbx_merged_pg_by_dc | combine(item.proxy_group_by_dc) }}"
+  loop: "{{ zbx_templates | default([]) }}"
+  when: item.proxy_group_by_dc is defined
+
+- name: Override proxy group from template static mapping (proxy_group_by_dc)
+  vars:
+    _dc_key: "{{ zbx_dc_number | default('', true) | string | trim | upper }}"
+    _static_pg_name: "{{ _zbx_merged_pg_by_dc[_dc_key] if (_zbx_merged_pg_by_dc is defined and _dc_key != '' and _dc_key in _zbx_merged_pg_by_dc) else '' }}"
+  set_fact:
+    zbx_matched_proxy_group: "{{ _static_pg_name }}"
+    zbx_proxy_group_id: "{{ zbx_proxy_group_map[_static_pg_name] }}"
+    zbx_monitored_by: "2"
+  when:
+    - _static_pg_name is defined
+    - _static_pg_name | string | length > 0
+    - zbx_proxy_group_map is defined
+    - _static_pg_name in zbx_proxy_group_map
+
 - name: Debug proxy group matching
   vars:
     _test_pg_numeric: "Dc14-proxy Group"

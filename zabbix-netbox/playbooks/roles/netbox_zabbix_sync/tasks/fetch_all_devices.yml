@@ -182,8 +182,39 @@
           
           return True
       
+      def mapping_tenant_allowlist(mapping):
+          """
+          Same rules as process_device.yml: optional tenant / tenants on mapping row.
+          If 'tenants' key is present, only that list is used; otherwise 'tenant' if set.
+          """
+          if 'tenants' in mapping and mapping.get('tenants') is not None:
+              raw = mapping.get('tenants')
+              if isinstance(raw, list):
+                  names = [str(x).strip() for x in raw if x is not None and str(x).strip()]
+              else:
+                  names = [str(raw).strip()] if str(raw).strip() else []
+              return names if names else None
+          t1 = mapping.get('tenant')
+          if t1 is not None and str(t1).strip():
+              return [str(t1).strip()]
+          return None
+      
+      def mapping_applies_for_tenant(device, mapping):
+          """If mapping has tenant/tenants, device must have tenant.name in allowlist."""
+          allow = mapping_tenant_allowlist(mapping)
+          if not allow:
+              return True
+          tenant_obj = device.get('tenant') or {}
+          if not isinstance(tenant_obj, dict):
+              return False
+          dev_name = (tenant_obj.get('name') or '').strip()
+          if not dev_name:
+              return False
+          dev_u = dev_name.upper()
+          return any(n.strip().upper() == dev_u for n in allow)
+      
       def device_matches_any_mapping(device):
-          """Check if device matches any mapping condition"""
+          """Check if device matches any mapping (tenant gate + conditions), mirroring process_device."""
           # Debug: Check if this is a HOST device
           role_obj = device.get('role') or device.get('device_role')
           role_name = role_obj.get('name', '') if role_obj and isinstance(role_obj, dict) else ''
@@ -196,6 +227,8 @@
               conditions = mapping.get('conditions', {})
               if is_host:
                   print(f"DEBUG: Checking HOST device against mapping '{mapping.get('device_type', 'N/A')}'", file=sys.stderr)
+              if not mapping_applies_for_tenant(device, mapping):
+                  continue
               if device_matches_conditions(device, conditions):
                   if is_host:
                       print(f"DEBUG: HOST device '{device.get('name', 'N/A')}' MATCHED mapping '{mapping.get('device_type', 'N/A')}'", file=sys.stderr)

@@ -1,6 +1,11 @@
 # Netbox Device Type Mapping
 # This file maps Netbox device attributes to Zabbix DEVICE_TYPE
-# Conditions are evaluated in order, first match wins
+# Conditions are evaluated in order, first match wins (sorted by priority).
+#
+# Optional tenant scope (same level as conditions, not inside conditions):
+#   tenant: "Single Customer"     — only devices with device.tenant.name matching (case-insensitive)
+#   tenants: ["A", "B"]           — if this key is present, only the list is used (not tenant:)
+# If omitted, the row applies to any NetBox tenant (including devices with no tenant).
 
 mappings:
   # Lenovo devices
@@ -27,6 +32,15 @@ mappings:
       manufacturer: ["INSPUR", "Inspur"]
       model_contains: ["M5"]
       model_suffix: "M5"
+    hostname_suffix: " - BMC"
+    priority: 1
+
+  # Moneygram tenant: dedicated device_type for templates.yml (e.g. proxy_group_by_dc)
+  - device_type: "HPE IPMI Moneygram"
+    tenant: "Moneygram"
+    conditions:
+      device_role: "HOST"
+      manufacturer: ["HPE", "HP"]
     hostname_suffix: " - BMC"
     priority: 1
 
