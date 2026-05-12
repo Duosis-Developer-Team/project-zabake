@@ -6,6 +6,36 @@
     _zbx_interface_update: []
     _needs_update: false
     _updated_fields: ""
+    _tags_needs_update: false
+    _groups_needs_update: false
+    _macros_needs_update: false
+    _existing_tags_list: []
+    _existing_hmdl_tags_map: {}
+    _merged_tags_for_update: []
+    _tag_change_log: []
+    _macro_change_log: []
+    _host_field_changes: []
+  run_once: false
+
+- name: Set HMDL managed tag keys
+  set_fact:
+    _hmdl_managed_tag_keys:
+      - "Manufacturer"
+      - "Device_Type"
+      - "Device_Type_Category"
+      - "Location"
+      - "Location_Detail"
+      - "DC_ID"
+      - "City"
+      - "Tenant"
+      - "Loki_ID"
+      - "Contact"
+      - "Kurulum_Tarihi"
+      - "Template_Group"
+      - "Hall"
+      - "Cluster"
+      - "Rack_Name"
+      - "Sorumlu_Ekip"
   run_once: false
 
 - name: Load mappings
@@ -672,6 +702,101 @@
     - zbx_existing_host.hostid is defined
     - zbx_existing_macros_resp.json.result is defined
 
+- name: Build existing tags list and HMDL tag map from zbx_existing_host
+  vars:
+    _raw_tags: "{{ zbx_existing_host.tags | default([]) }}"
+  set_fact:
+    _existing_tags_list: "{{ _raw_tags }}"
+    _existing_hmdl_tags_map: >-
+      {%- set m = {} -%}
+      {%- for t in _raw_tags -%}
+        {%- if t.tag in _hmdl_managed_tag_keys or t.tag.startswith('Loki_Tag_') -%}
+          {%- set _ = m.update({t.tag: t.value}) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ m }}
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host is defined
+    - zbx_existing_host.hostid is defined
+
+- name: Build merged tags for update (preserve user tags, replace HMDL tags)
+  set_fact:
+    _merged_tags_for_update: >-
+      {%- set result = [] -%}
+      {%- for t in (_existing_tags_list | default([])) -%}
+        {%- if t.tag not in (_hmdl_managed_tag_keys | default([])) and not t.tag.startswith('Loki_Tag_') -%}
+          {%- set _ = result.append({'tag': t.tag, 'value': t.value}) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {%- for t in (zbx_tags | default([])) -%}
+        {%- if t.value is defined and t.value | string | trim != '' -%}
+          {%- set _ = result.append({'tag': t.tag, 'value': t.value | string}) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ result }}
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host is defined
+    - zbx_existing_host.hostid is defined
+
+- name: Check if HMDL tags have changed
+  vars:
+    _tags_changed: >-
+      {%- set ns = namespace(changed=false) -%}
+      {%- for t in (zbx_tags | default([])) -%}
+        {%- if (_existing_hmdl_tags_map | default({})).get(t.tag, '__NOT_FOUND__') != t.value | string -%}
+          {%- set ns.changed = true -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ ns.changed }}
+  set_fact:
+    _tags_needs_update: "{{ _tags_changed | bool }}"
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host is defined
+    - zbx_existing_host.hostid is defined
+    - _missing_params | default([]) | length == 0
+
+- name: Check if host groups have changed
+  vars:
+    _current_group_names: "{{ zbx_existing_host.groups | default([]) | map(attribute='name') | list | sort }}"
+    _required_group_names: "{{ zbx_required_groups_for_record | default([]) | sort }}"
+  set_fact:
+    _groups_needs_update: "{{ _current_group_names != _required_group_names }}"
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host is defined
+    - zbx_existing_host.hostid is defined
+    - _missing_params | default([]) | length == 0
+
+- name: Build tag change log entries
+  set_fact:
+    _tag_change_log: >-
+      {%- set entries = [] -%}
+      {%- for t in (zbx_tags | default([])) -%}
+        {%- set old_val = (_existing_hmdl_tags_map | default({})).get(t.tag, None) -%}
+        {%- if old_val is none -%}
+          {%- set action = 'added' -%}
+        {%- elif old_val != t.value | string -%}
+          {%- set action = 'updated' -%}
+        {%- else -%}
+          {%- set action = 'unchanged' -%}
+        {%- endif -%}
+        {%- set _ = entries.append({
+          'key_name': t.tag,
+          'old_value': old_val,
+          'new_value': t.value | string,
+          'action': action,
+          'object_type': 'tag'
+        }) -%}
+      {%- endfor -%}
+      {{ entries }}
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host is defined
+    - zbx_existing_host.hostid is defined
+
 - name: Merge new macros with existing ones (new macros take precedence)
   vars:
     _merged_macros: >-
@@ -726,6 +851,33 @@
     - zbx_existing_host.hostid is defined
     - _missing_params | default([]) | length == 0
 
+- name: Build macro change log entries
+  set_fact:
+    _macro_change_log: >-
+      {%- set entries = [] -%}
+      {%- for macro_key, macro_value in (zbx_host_macros | default({})).items() -%}
+        {%- set old_val = (_existing_macros_map | default({})).get(macro_key, None) -%}
+        {%- if old_val is none -%}
+          {%- set action = 'added' -%}
+        {%- elif old_val != macro_value | string -%}
+          {%- set action = 'updated' -%}
+        {%- else -%}
+          {%- set action = 'unchanged' -%}
+        {%- endif -%}
+        {%- set _ = entries.append({
+          'key_name': macro_key,
+          'old_value': old_val,
+          'new_value': macro_value | string,
+          'action': action,
+          'object_type': 'macro'
+        }) -%}
+      {%- endfor -%}
+      {{ entries }}
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host is defined
+    - zbx_existing_host.hostid is defined
+
 - name: Check if update is needed (compare with existing values)
   set_fact:
     _needs_update: >-
@@ -736,7 +888,9 @@
           (zbx_existing_host.name | default('') != zbx_record.HOSTNAME) or
           (zbx_existing_host.monitored_by | default('') | string != zbx_monitored_by | string) or
           (zbx_existing_host.proxy_groupid | default('') | string != zbx_proxy_group_id | string) or
-          (_macros_needs_update | default(false) | bool)
+          (_macros_needs_update | default(false) | bool) or
+          (_tags_needs_update | default(false) | bool) or
+          (_groups_needs_update | default(false) | bool)
         ) | bool
       }}
   when:
@@ -747,6 +901,38 @@
     - _interface_id != ''
     - _missing_params | default([]) | length == 0
 
+- name: Build host field change log entries
+  set_fact:
+    _host_field_changes: >-
+      {%- set entries = [] -%}
+      {%- if zbx_existing_host.host | default('') != zbx_record.HOSTNAME -%}
+        {%- set _ = entries.append({'field_name': 'hostname', 'old_value': zbx_existing_host.host | default(''), 'new_value': zbx_record.HOSTNAME, 'action': 'updated'}) -%}
+      {%- endif -%}
+      {%- if zbx_existing_host.name | default('') != zbx_record.HOSTNAME -%}
+        {%- set _ = entries.append({'field_name': 'visible_name', 'old_value': zbx_existing_host.name | default(''), 'new_value': zbx_record.HOSTNAME, 'action': 'updated'}) -%}
+      {%- endif -%}
+      {%- if _existing_interface.ip | default('') != zbx_record.HOST_IP -%}
+        {%- set _ = entries.append({'field_name': 'interface_ip', 'old_value': _existing_interface.ip | default(''), 'new_value': zbx_record.HOST_IP, 'action': 'updated'}) -%}
+      {%- endif -%}
+      {%- if zbx_existing_host.monitored_by | default('') | string != zbx_monitored_by | string -%}
+        {%- set _ = entries.append({'field_name': 'monitored_by', 'old_value': zbx_existing_host.monitored_by | default('') | string, 'new_value': zbx_monitored_by | string, 'action': 'updated'}) -%}
+      {%- endif -%}
+      {%- if zbx_existing_host.proxy_groupid | default('') | string != zbx_proxy_group_id | string -%}
+        {%- set _ = entries.append({'field_name': 'proxy_group', 'old_value': zbx_existing_host.proxy_groupid | default('') | string, 'new_value': zbx_proxy_group_id | string, 'action': 'updated'}) -%}
+      {%- endif -%}
+      {%- if _groups_needs_update | default(false) | bool -%}
+        {%- set old_names = (zbx_existing_host.groups | default([]) | map(attribute='name') | sort | join(',')) -%}
+        {%- set new_names = (zbx_required_groups_for_record | default([]) | sort | join(',')) -%}
+        {%- set _ = entries.append({'field_name': 'host_groups', 'old_value': old_names, 'new_value': new_names, 'action': 'updated'}) -%}
+      {%- endif -%}
+      {{ entries }}
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host.hostid is defined
+    - _needs_update is defined
+    - _needs_update | bool
+    - _missing_params | default([]) | length == 0
+
 - name: Debug update check
   debug:
     msg: |
@@ -755,6 +941,8 @@
       Current IP: {{ _existing_interface.ip | default('N/A') }} -> New IP: {{ zbx_record.HOST_IP }}
       Current monitored_by: {{ zbx_existing_host.monitored_by | default('N/A') }} -> New: {{ zbx_monitored_by }}
       Current proxy_groupid: {{ zbx_existing_host.proxy_groupid | default('N/A') }} -> New: {{ zbx_proxy_group_id }}
+      Tags need update: {{ _tags_needs_update | default(false) }}
+      Groups need update: {{ _groups_needs_update | default(false) }}
   when:
     - zbx_scenario == 'update'
     - zbx_existing_host.hostid is defined
@@ -785,7 +973,7 @@
     - _missing_params | default([]) | length == 0
     - _needs_update | default(true) | bool
 
-- name: Update existing host (scenario update - only continuous fields, NO TAGS)
+- name: Update existing host (scenario update)
   uri:
     url: "{{ zabbix_url }}"
     method: POST
@@ -799,6 +987,8 @@
         host: "{{ zbx_record.HOSTNAME }}"
         name: "{{ zbx_record.HOSTNAME }}"
         interfaces: "{{ _zbx_interface_update }}"
+        groups: "{{ zbx_groups_formatted | default([]) }}"
+        tags: "{{ _merged_tags_for_update | default([]) }}"
         macros: "{{ zbx_host_macros_formatted_update if (zbx_host_macros_formatted_update is defined and zbx_host_macros_formatted_update | length > 0) else omit }}"
         monitored_by: "{{ zbx_monitored_by | int }}"
         proxy_groupid: "{{ zbx_proxy_group_id | default('0') | int }}"
@@ -851,16 +1041,33 @@
         {%- set _ = fields.append('Proxy Group: ' ~ zbx_existing_host.proxy_groupid | default('N/A') ~ ' → ' ~ zbx_proxy_group_id) -%}
       {%- endif -%}
       {%- if _macros_needs_update | default(false) | bool -%}
-        {%- set changed_macros = [] -%}
+        {%- set ns_m = namespace(changed_macros=[]) -%}
         {%- for macro_key, macro_value in (zbx_host_macros | default({})).items() -%}
           {%- if (_existing_macros_map | default({})).get(macro_key, '__NOT_FOUND__') != macro_value -%}
             {%- set old_value = (_existing_macros_map | default({})).get(macro_key, 'yok') -%}
-            {%- set _ = changed_macros.append(macro_key ~ ': ' ~ old_value ~ ' → ' ~ macro_value) -%}
+            {%- set ns_m.changed_macros = ns_m.changed_macros + [macro_key ~ ': ' ~ old_value ~ ' → ' ~ macro_value] -%}
           {%- endif -%}
         {%- endfor -%}
-        {%- if changed_macros | length > 0 -%}
-          {%- set _ = fields.append('Macros: ' ~ (changed_macros | join('; '))) -%}
+        {%- if ns_m.changed_macros | length > 0 -%}
+          {%- set _ = fields.append('Macros: ' ~ (ns_m.changed_macros | join('; '))) -%}
         {%- endif -%}
+      {%- endif -%}
+      {%- if _tags_needs_update | default(false) | bool -%}
+        {%- set ns_t = namespace(changed_tags=[]) -%}
+        {%- for entry in (_tag_change_log | default([])) -%}
+          {%- if entry.action in ['added', 'updated'] -%}
+            {%- set old_str = entry.old_value | default('yok') | string -%}
+            {%- set ns_t.changed_tags = ns_t.changed_tags + [entry.key_name ~ ': ' ~ old_str ~ ' → ' ~ entry.new_value] -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {%- if ns_t.changed_tags | length > 0 -%}
+          {%- set _ = fields.append('Tags: ' ~ (ns_t.changed_tags | join('; '))) -%}
+        {%- endif -%}
+      {%- endif -%}
+      {%- if _groups_needs_update | default(false) | bool -%}
+        {%- set old_grp = (zbx_existing_host.groups | default([]) | map(attribute='name') | sort | join(', ')) -%}
+        {%- set new_grp = (zbx_required_groups_for_record | default([]) | sort | join(', ')) -%}
+        {%- set _ = fields.append('Groups: ' ~ old_grp ~ ' → ' ~ new_grp) -%}
       {%- endif -%}
       {{ fields | join(', ') }}
   when:
@@ -954,7 +1161,16 @@
       Monitored By    : {{ zbx_existing_host.monitored_by | default('N/A') }} → {{ zbx_monitored_by }}
       Proxy Group     : {{ zbx_existing_host.proxy_groupid | default('N/A') }} → {{ zbx_proxy_group_id }}
       Macro değişti   : {{ _macros_needs_update | default(false) }}
+      Tag değişti     : {{ _tags_needs_update | default(false) }}
+      Group değişti   : {{ _groups_needs_update | default(false) }}
       DC_ID           : {{ zbx_location_name }} → {{ zbx_matched_proxy_group | default('eşleşme yok') }}
+      ----------------------------------------
+      Tag değişimleri :
+      {% for entry in (_tag_change_log | default([])) if entry.action in ['added', 'updated'] %}
+        {{ entry.action | upper }}: {{ entry.key_name }}: {{ entry.old_value | default('(yok)') }} → {{ entry.new_value }}
+      {% else %}
+        (tag değişikliği yok)
+      {% endfor %}
       ----------------------------------------
       DRY-RUN: host.update çağrısı YAPILMADI.
       ========================================

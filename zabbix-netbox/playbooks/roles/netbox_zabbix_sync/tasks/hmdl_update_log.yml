@@ -1,0 +1,312 @@
+---
+# HMDL Update Log - Field-level and tag/macro change logging.
+#
+# Gereken değişkenler (process_device.yml scope'undan gelir):
+#   _host_field_changes : list — host alanı değişiklikleri
+#   _tag_change_log     : list — HMDL tag değişiklikleri
+#   _macro_change_log   : list — HMDL macro değişiklikleri
+#   zbx_existing_host   : dict — mevcut Zabbix host
+#   zbx_update_resp     : dict — update API yanıtı (varsa)
+#   netbox_device       : dict — işlenen cihaz
+
+- name: Ensure HMDL host update log table exists
+  community.postgresql.postgresql_query:
+    db: "{{ hmdl_db_name }}"
+    login_host: "{{ hmdl_db_host }}"
+    login_port: "{{ hmdl_db_port | int }}"
+    login_user: "{{ hmdl_db_user }}"
+    login_password: "{{ hmdl_db_password }}"
+    query: |
+      CREATE TABLE IF NOT EXISTS {{ hmdl_log_schema }}.zabbix_host_update_log (
+          id                 BIGSERIAL PRIMARY KEY,
+          run_id             VARCHAR(100) NULL,
+          awx_job_id         VARCHAR(100) NULL,
+          source_device_id   BIGINT NULL,
+          source_device_name TEXT NULL,
+          zabbix_hostid      TEXT NULL,
+          zabbix_hostname    TEXT NULL,
+          field_name         TEXT NOT NULL,
+          old_value          TEXT NULL,
+          new_value          TEXT NULL,
+          action             VARCHAR(50) NOT NULL,
+          status             VARCHAR(50) NOT NULL,
+          reason             TEXT NULL,
+          processed_at       TIMESTAMPTZ DEFAULT NOW()
+      )
+  delegate_to: localhost
+  run_once: true
+  changed_when: false
+  when: hmdl_log_enabled | bool
+
+- name: Ensure HMDL tag update log table exists
+  community.postgresql.postgresql_query:
+    db: "{{ hmdl_db_name }}"
+    login_host: "{{ hmdl_db_host }}"
+    login_port: "{{ hmdl_db_port | int }}"
+    login_user: "{{ hmdl_db_user }}"
+    login_password: "{{ hmdl_db_password }}"
+    query: |
+      CREATE TABLE IF NOT EXISTS {{ hmdl_log_schema }}.zabbix_tag_update_log (
+          id                 BIGSERIAL PRIMARY KEY,
+          run_id             VARCHAR(100) NULL,
+          awx_job_id         VARCHAR(100) NULL,
+          source_device_id   BIGINT NULL,
+          source_device_name TEXT NULL,
+          zabbix_hostid      TEXT NULL,
+          zabbix_hostname    TEXT NULL,
+          object_type        VARCHAR(50) NOT NULL,
+          key_name           TEXT NOT NULL,
+          old_value          TEXT NULL,
+          new_value          TEXT NULL,
+          action             VARCHAR(50) NOT NULL,
+          status             VARCHAR(50) NOT NULL,
+          reason             TEXT NULL,
+          processed_at       TIMESTAMPTZ DEFAULT NOW()
+      )
+  delegate_to: localhost
+  run_once: true
+  changed_when: false
+  when: hmdl_log_enabled | bool
+
+- name: Create HMDL update log entry preparer script
+  copy:
+    content: |
+      #!/usr/bin/env python3
+      """
+      Prepares a list of update log entries for DB insert.
+      Input : JSON array of raw entries + common metadata as CLI args
+      Output: JSON array of prepared dicts (null-safe, int-cast)
+      """
+      import json
+      import sys
+
+      def nullify(v):
+          if v is None or str(v).strip() in ('', 'None', 'N/A', 'null'):
+              return None
+          return str(v)
+
+      def to_int_or_none(v):
+          if v is None or str(v).strip() in ('', 'None', 'N/A', 'null'):
+              return None
+          try:
+              return int(v)
+          except (ValueError, TypeError):
+              return None
+
+      entries_file     = sys.argv[1]
+      entry_type       = sys.argv[2] if len(sys.argv) > 2 else 'host'
+      run_id           = sys.argv[3] if len(sys.argv) > 3 else None
+      awx_job_id       = sys.argv[4] if len(sys.argv) > 4 else None
+      device_id        = sys.argv[5] if len(sys.argv) > 5 else None
+      device_name      = sys.argv[6] if len(sys.argv) > 6 else None
+      zabbix_hostid    = sys.argv[7] if len(sys.argv) > 7 else None
+      zabbix_hostname  = sys.argv[8] if len(sys.argv) > 8 else None
+      update_status    = sys.argv[9] if len(sys.argv) > 9 else 'updated'
+
+      with open(entries_file, 'r') as f:
+          entries = json.load(f)
+
+      prepared_list = []
+      for entry in entries:
+          base = {
+              'run_id':             nullify(run_id),
+              'awx_job_id':         nullify(awx_job_id),
+              'source_device_id':   to_int_or_none(device_id),
+              'source_device_name': nullify(device_name),
+              'zabbix_hostid':      nullify(zabbix_hostid),
+              'zabbix_hostname':    nullify(zabbix_hostname),
+              'old_value':          nullify(entry.get('old_value')),
+              'new_value':          nullify(entry.get('new_value')),
+              'action':             entry.get('action', 'updated'),
+              'status':             update_status,
+              'reason':             nullify(entry.get('reason')),
+          }
+          if entry_type == 'host':
+              base['field_name'] = entry.get('field_name', 'unknown')
+          else:
+              base['key_name']    = entry.get('key_name', 'unknown')
+              base['object_type'] = entry.get('object_type', 'tag')
+          prepared_list.append(base)
+
+      print(json.dumps(prepared_list))
+    dest: /tmp/hmdl_prepare_update_log.py
+    mode: '0755'
+  delegate_to: localhost
+  run_once: true
+  when: hmdl_log_enabled | bool
+
+# ─── Determine update status ──────────────────────────────────────────────────
+
+- name: Determine HMDL update log status
+  set_fact:
+    _hmdl_update_log_status: >-
+      {%- if dry_run | default(false) | bool -%}
+      dry_run
+      {%- elif zbx_update_resp is defined and zbx_update_resp.json is defined
+              and zbx_update_resp.json.result is defined
+              and zbx_update_resp.json.error is not defined -%}
+      updated
+      {%- elif zbx_update_resp is defined and zbx_update_resp.json is defined
+              and zbx_update_resp.json.error is defined -%}
+      failed
+      {%- else -%}
+      unknown
+      {%- endif -%}
+  when: hmdl_log_enabled | bool
+
+# ─── Host field change log ────────────────────────────────────────────────────
+
+- name: Write host field changes to temp file
+  copy:
+    content: "{{ _host_field_changes | default([]) | to_json }}"
+    dest: "/tmp/hmdl_host_field_changes_{{ netbox_device.id | default('tmp') }}.json"
+  delegate_to: localhost
+  when:
+    - hmdl_log_enabled | bool
+    - zbx_scenario | default('') == 'update'
+    - _host_field_changes is defined
+    - _host_field_changes | length > 0
+
+- name: Prepare host field change log entries
+  command: >
+    python3 /tmp/hmdl_prepare_update_log.py
+    "/tmp/hmdl_host_field_changes_{{ netbox_device.id | default('tmp') }}.json"
+    host
+    "{{ hmdl_run_id | default('') }}"
+    "{{ lookup('env', 'AWX_JOB_ID') | default('', true) }}"
+    "{{ netbox_device.id | default('') }}"
+    "{{ netbox_device.name | default('') }}"
+    "{{ zbx_existing_host.hostid | default('') }}"
+    "{{ zabbix_hostname_final | default('') }}"
+    "{{ _hmdl_update_log_status | default('unknown') }}"
+  register: _hmdl_host_changes_prepared
+  changed_when: false
+  delegate_to: localhost
+  when:
+    - hmdl_log_enabled | bool
+    - zbx_scenario | default('') == 'update'
+    - _host_field_changes is defined
+    - _host_field_changes | length > 0
+
+- name: Insert host field change log entries
+  block:
+    - name: Run host field change log INSERT
+      community.postgresql.postgresql_query:
+        db: "{{ hmdl_db_name }}"
+        login_host: "{{ hmdl_db_host }}"
+        login_port: "{{ hmdl_db_port | int }}"
+        login_user: "{{ hmdl_db_user }}"
+        login_password: "{{ hmdl_db_password }}"
+        query: |
+          INSERT INTO {{ hmdl_log_schema }}.zabbix_host_update_log (
+              run_id, awx_job_id, source_device_id, source_device_name,
+              zabbix_hostid, zabbix_hostname, field_name,
+              old_value, new_value, action, status, reason
+          ) VALUES (
+              %(run_id)s, %(awx_job_id)s, %(source_device_id)s, %(source_device_name)s,
+              %(zabbix_hostid)s, %(zabbix_hostname)s, %(field_name)s,
+              %(old_value)s, %(new_value)s, %(action)s, %(status)s, %(reason)s
+          )
+        named_args: "{{ host_change_item }}"
+      loop: "{{ _hmdl_host_changes_prepared.stdout | from_json }}"
+      loop_control:
+        loop_var: host_change_item
+      delegate_to: localhost
+      changed_when: false
+  rescue:
+    - name: Debug host field change log insert failure
+      debug:
+        msg: >
+          HMDL host update log insert başarısız —
+          device: {{ netbox_device.name | default('?') }},
+          hata: {{ ansible_failed_result.msg | default('bilinmeyen hata') }}
+  when:
+    - hmdl_log_enabled | bool
+    - zbx_scenario | default('') == 'update'
+    - _hmdl_host_changes_prepared is defined
+    - _hmdl_host_changes_prepared.stdout is defined
+    - (_hmdl_host_changes_prepared.stdout | from_json | default([])) | length > 0
+
+# ─── Tag/macro change log ─────────────────────────────────────────────────────
+
+- name: Build combined tag and macro change list (exclude unchanged)
+  set_fact:
+    _hmdl_tag_macro_changes: >-
+      {{
+        ((_tag_change_log | default([]) | selectattr('action', 'ne', 'unchanged') | list) +
+         (_macro_change_log | default([]) | selectattr('action', 'ne', 'unchanged') | list))
+      }}
+  when:
+    - hmdl_log_enabled | bool
+    - zbx_scenario | default('') == 'update'
+
+- name: Write tag and macro changes to temp file
+  copy:
+    content: "{{ _hmdl_tag_macro_changes | default([]) | to_json }}"
+    dest: "/tmp/hmdl_tag_changes_{{ netbox_device.id | default('tmp') }}.json"
+  delegate_to: localhost
+  when:
+    - hmdl_log_enabled | bool
+    - zbx_scenario | default('') == 'update'
+    - _hmdl_tag_macro_changes is defined
+    - _hmdl_tag_macro_changes | length > 0
+
+- name: Prepare tag/macro change log entries
+  command: >
+    python3 /tmp/hmdl_prepare_update_log.py
+    "/tmp/hmdl_tag_changes_{{ netbox_device.id | default('tmp') }}.json"
+    tag
+    "{{ hmdl_run_id | default('') }}"
+    "{{ lookup('env', 'AWX_JOB_ID') | default('', true) }}"
+    "{{ netbox_device.id | default('') }}"
+    "{{ netbox_device.name | default('') }}"
+    "{{ zbx_existing_host.hostid | default('') }}"
+    "{{ zabbix_hostname_final | default('') }}"
+    "{{ _hmdl_update_log_status | default('unknown') }}"
+  register: _hmdl_tag_changes_prepared
+  changed_when: false
+  delegate_to: localhost
+  when:
+    - hmdl_log_enabled | bool
+    - zbx_scenario | default('') == 'update'
+    - _hmdl_tag_macro_changes is defined
+    - _hmdl_tag_macro_changes | length > 0
+
+- name: Insert tag/macro change log entries
+  block:
+    - name: Run tag/macro change log INSERT
+      community.postgresql.postgresql_query:
+        db: "{{ hmdl_db_name }}"
+        login_host: "{{ hmdl_db_host }}"
+        login_port: "{{ hmdl_db_port | int }}"
+        login_user: "{{ hmdl_db_user }}"
+        login_password: "{{ hmdl_db_password }}"
+        query: |
+          INSERT INTO {{ hmdl_log_schema }}.zabbix_tag_update_log (
+              run_id, awx_job_id, source_device_id, source_device_name,
+              zabbix_hostid, zabbix_hostname, object_type, key_name,
+              old_value, new_value, action, status, reason
+          ) VALUES (
+              %(run_id)s, %(awx_job_id)s, %(source_device_id)s, %(source_device_name)s,
+              %(zabbix_hostid)s, %(zabbix_hostname)s, %(object_type)s, %(key_name)s,
+              %(old_value)s, %(new_value)s, %(action)s, %(status)s, %(reason)s
+          )
+        named_args: "{{ tag_change_item }}"
+      loop: "{{ _hmdl_tag_changes_prepared.stdout | from_json }}"
+      loop_control:
+        loop_var: tag_change_item
+      delegate_to: localhost
+      changed_when: false
+  rescue:
+    - name: Debug tag/macro change log insert failure
+      debug:
+        msg: >
+          HMDL tag update log insert başarısız —
+          device: {{ netbox_device.name | default('?') }},
+          hata: {{ ansible_failed_result.msg | default('bilinmeyen hata') }}
+  when:
+    - hmdl_log_enabled | bool
+    - zbx_scenario | default('') == 'update'
+    - _hmdl_tag_changes_prepared is defined
+    - _hmdl_tag_changes_prepared.stdout is defined
+    - (_hmdl_tag_changes_prepared.stdout | from_json | default([])) | length > 0

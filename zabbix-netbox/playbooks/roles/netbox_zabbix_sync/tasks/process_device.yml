@@ -854,6 +854,12 @@
     - zbx_update_resp.json is defined
     - zbx_update_resp.json.error is defined
 
+- name: Log field and tag/macro changes to HMDL update log tables
+  include_tasks: hmdl_update_log.yml
+  when:
+    - hmdl_log_enabled | bool
+    - zbx_scenario | default('') == 'update'
+
 - name: Log device result to HMDL audit table
   include_tasks: hmdl_sync_log.yml
   vars:
