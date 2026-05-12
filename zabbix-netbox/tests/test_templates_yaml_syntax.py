@@ -74,7 +74,18 @@ class TestTemplatesYAMLSyntax:
                 if 'host_groups' in template:
                     host_groups = template['host_groups']
                     assert isinstance(host_groups, list), f"{device_type}[{idx}]: host_groups should be a list"
-    
+
+                if 'proxy_group_by_dc' in template:
+                    pg = template['proxy_group_by_dc']
+                    assert isinstance(pg, dict), f"{device_type}[{idx}]: proxy_group_by_dc should be a dict"
+                    for k, v in pg.items():
+                        assert isinstance(k, str) and str(k).strip(), (
+                            f"{device_type}[{idx}]: proxy_group_by_dc key must be non-empty str"
+                        )
+                        assert isinstance(v, str) and str(v).strip(), (
+                            f"{device_type}[{idx}]: proxy_group_by_dc value must be non-empty str"
+                        )
+
     def test_hpe_primera_macros(self, templates_file):
         """Specific test for HPE Primera macros (regression test for syntax error)"""
         with open(templates_file, 'r', encoding='utf-8') as f:
@@ -101,7 +112,18 @@ class TestTemplatesYAMLSyntax:
             # Ensure macro key is properly formatted
             assert macro.startswith('{$'), f"Macro {macro} should start with '{{$'"
             assert macro.endswith('}'), f"Macro {macro} should end with '}}'"
-    
+
+    def test_hpe_ipmi_moneygram_proxy_group_by_dc(self, templates_file):
+        """HPE IPMI Moneygram must define DC13 prod / DC16 DR proxy groups (static mapping)."""
+        with open(templates_file, 'r', encoding='utf-8') as f:
+            templates = yaml.safe_load(f)
+        assert 'HPE IPMI Moneygram' in templates
+        row = templates['HPE IPMI Moneygram'][0]
+        assert 'proxy_group_by_dc' in row
+        pg = row['proxy_group_by_dc']
+        assert pg.get('DC13') == 'Moneygram-prod-proxy Group'
+        assert pg.get('DC16') == 'Moneygram-dr-proxy Group'
+
     def test_all_template_types_defined(self, templates_file, template_types_file):
         """Test that all template types used in templates.yml are defined in template_types.yml"""
         with open(templates_file, 'r', encoding='utf-8') as f:

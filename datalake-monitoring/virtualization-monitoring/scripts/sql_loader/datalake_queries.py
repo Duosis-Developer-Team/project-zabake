@@ -30,7 +30,7 @@ def fetch_nutanix_vms(connection, window_days: int) -> list[dict]:
         LEFT JOIN LATERAL (
             SELECT cluster_name
             FROM nutanix_cluster_metrics ncm
-            WHERE ncm.cluster_uuid = nvm.cluster_uuid
+            WHERE ncm.cluster_uuid::text = nvm.cluster_uuid::text
             ORDER BY ncm.collection_time DESC
             LIMIT 1
         ) ncm ON TRUE

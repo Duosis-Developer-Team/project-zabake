@@ -47,11 +47,47 @@ def check_condition(device, condition_key, condition_value):
     return False
 
 
+def mapping_tenant_allowlist(mapping):
+    """
+    Optional tenant restriction on a mapping row (same level as conditions).
+    If 'tenants' key is present, only that list is used; otherwise 'tenant' if set.
+    Returns None when there is no restriction.
+    """
+    if 'tenants' in mapping and mapping.get('tenants') is not None:
+        raw = mapping.get('tenants')
+        if isinstance(raw, list):
+            names = [str(x).strip() for x in raw if x is not None and str(x).strip()]
+        else:
+            names = [str(raw).strip()] if str(raw).strip() else []
+        return names if names else None
+    t1 = mapping.get('tenant')
+    if t1 is not None and str(t1).strip():
+        return [str(t1).strip()]
+    return None
+
+
+def mapping_applies_for_tenant(device, mapping):
+    """If mapping has tenant/tenants, device must have tenant.name in allowlist."""
+    allow = mapping_tenant_allowlist(mapping)
+    if not allow:
+        return True
+    tenant_obj = device.get('tenant') or {}
+    if not isinstance(tenant_obj, dict):
+        return False
+    dev_name = (tenant_obj.get('name') or '').strip()
+    if not dev_name:
+        return False
+    dev_u = dev_name.upper()
+    return any(n.strip().upper() == dev_u for n in allow)
+
+
 def find_matching_mapping(device, device_type_mapping):
     """Return the first matching mapping dict from YAML, or None."""
     mappings = device_type_mapping.get('mappings', [])
     sorted_mappings = sorted(mappings, key=lambda x: x.get('priority', 999))
     for mapping in sorted_mappings:
+        if not mapping_applies_for_tenant(device, mapping):
+            continue
         conditions = mapping.get('conditions', {})
         all_match = True
         for condition_key, condition_value in conditions.items():
@@ -159,6 +195,139 @@ class TestFindMatchingMapping(unittest.TestCase):
         m = find_matching_mapping(device, mapping)
         self.assertEqual(m.get('device_type'), 'Lenovo specific')
         self.assertEqual(m.get('hostname_prefix'), 'LV-')
+
+    def test_tenant_restricted_row_skipped_when_device_has_no_tenant(self):
+        device = {
+            'name': 'srv-01',
+            'role': {'name': 'HOST'},
+            'device_type': {'manufacturer': {'name': 'DELL'}, 'model': 'R740'},
+        }
+        mapping = {
+            'mappings': [
+                {
+                    'device_type': 'Dell Customer',
+                    'tenant': 'ACME',
+                    'conditions': {'device_role': 'HOST', 'manufacturer': 'DELL'},
+                    'priority': 1,
+                },
+                {
+                    'device_type': 'Dell Generic',
+                    'conditions': {'device_role': 'HOST', 'manufacturer': 'DELL'},
+                    'priority': 2,
+                },
+            ]
+        }
+        m = find_matching_mapping(device, mapping)
+        self.assertIsNotNone(m)
+        self.assertEqual(m.get('device_type'), 'Dell Generic')
+
+    def test_tenant_restricted_row_matches_when_tenant_matches_case_insensitive(self):
+        device = {
+            'name': 'srv-01',
+            'role': {'name': 'HOST'},
+            'tenant': {'name': 'acme corp'},
+            'device_type': {'manufacturer': {'name': 'DELL'}, 'model': 'R740'},
+        }
+        mapping = {
+            'mappings': [
+                {
+                    'device_type': 'Dell Customer',
+                    'tenants': ['ACME Corp', 'OtherCo'],
+                    'conditions': {'device_role': 'HOST', 'manufacturer': 'DELL'},
+                    'priority': 1,
+                },
+                {
+                    'device_type': 'Dell Generic',
+                    'conditions': {'device_role': 'HOST', 'manufacturer': 'DELL'},
+                    'priority': 2,
+                },
+            ]
+        }
+        m = find_matching_mapping(device, mapping)
+        self.assertIsNotNone(m)
+        self.assertEqual(m.get('device_type'), 'Dell Customer')
+
+    def test_wrong_tenant_skips_row_then_matches_generic(self):
+        device = {
+            'name': 'srv-01',
+            'role': {'name': 'HOST'},
+            'tenant': {'name': 'InfraTeam'},
+            'device_type': {'manufacturer': {'name': 'DELL'}, 'model': 'R740'},
+        }
+        mapping = {
+            'mappings': [
+                {
+                    'device_type': 'Dell Customer',
+                    'tenant': 'ACME',
+                    'conditions': {'device_role': 'HOST', 'manufacturer': 'DELL'},
+                    'priority': 1,
+                },
+                {
+                    'device_type': 'Dell Generic',
+                    'conditions': {'device_role': 'HOST', 'manufacturer': 'DELL'},
+                    'priority': 2,
+                },
+            ]
+        }
+        m = find_matching_mapping(device, mapping)
+        self.assertEqual(m.get('device_type'), 'Dell Generic')
+
+    def test_tenants_key_takes_precedence_over_tenant_field(self):
+        device = {
+            'role': {'name': 'HOST'},
+            'tenant': {'name': 'FromTenants'},
+            'device_type': {'manufacturer': {'name': 'DELL'}, 'model': 'X'},
+        }
+        mapping = {
+            'mappings': [
+                {
+                    'device_type': 'Dell TenantsList',
+                    'tenants': ['FromTenants'],
+                    'tenant': 'IgnoredSingle',
+                    'conditions': {'device_role': 'HOST', 'manufacturer': 'DELL'},
+                    'priority': 1,
+                },
+            ]
+        }
+        m = find_matching_mapping(device, mapping)
+        self.assertIsNotNone(m)
+        self.assertEqual(m.get('device_type'), 'Dell TenantsList')
+
+
+def merge_proxy_group_by_dc_from_templates(zbx_templates):
+    """
+    Mirror Ansible: _zbx_merged_pg_by_dc initialized to {} then combine each template's proxy_group_by_dc.
+    """
+    merged = {}
+    for item in zbx_templates or []:
+        if isinstance(item, dict) and item.get('proxy_group_by_dc'):
+            sub = item['proxy_group_by_dc']
+            if isinstance(sub, dict):
+                merged = {**merged, **sub}
+    return merged
+
+
+class TestProxyGroupByDcMerge(unittest.TestCase):
+    """Merge semantics for templates.yml proxy_group_by_dc (zabbix_host_operations.yml)."""
+
+    def test_single_template_merge(self):
+        zbx_templates = [
+            {
+                'name': 'T1',
+                'proxy_group_by_dc': {'DC13': 'Moneygram-prod-proxy Group', 'DC16': 'Moneygram-dr-proxy Group'},
+            }
+        ]
+        self.assertEqual(
+            merge_proxy_group_by_dc_from_templates(zbx_templates)['DC13'],
+            'Moneygram-prod-proxy Group',
+        )
+
+    def test_later_template_overwrites_same_dc_key(self):
+        zbx_templates = [
+            {'name': 'A', 'proxy_group_by_dc': {'DC13': 'First'}},
+            {'name': 'B', 'proxy_group_by_dc': {'DC13': 'Second'}},
+        ]
+        self.assertEqual(merge_proxy_group_by_dc_from_templates(zbx_templates)['DC13'], 'Second')
 
 
 if __name__ == '__main__':

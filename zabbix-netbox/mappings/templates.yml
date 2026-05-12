@@ -1,6 +1,8 @@
 # DEVICE_TYPE -> Zabbix template names or IDs
 # macros field supports {HOST.IP} variable which will be replaced with device's IP address
 # host_groups field is optional and will be added to the host groups from Netbox
+# Optional per-template: proxy_group_by_dc maps DC codes (from NetBox location / DC_ID) to
+# exact Zabbix proxy group names when auto DC-regex matching does not apply.
 Lenovo IPMI:
   - name: BLT - Lenovo ICT XCC Monitoring
     type: snmpv3
@@ -29,6 +31,19 @@ HPE IPMI:
       "{$REDFISH.API.URL}": "https://{HOST.IP}/"
       "{$REDFISH.PASSWORD}": "S7G3y9TtmRSm"
       "{$REDFISH.USER}": "zabbix"
+HPE IPMI Moneygram:
+  - name: BLT - HPE ProLiant DL380 by SNMP
+    type: snmpv2
+    host_groups:
+      - "Physical Hosts"
+      - "Moneygram"
+    proxy_group_by_dc:
+      DC13: "Moneygram-prod-proxy Group"
+      DC16: "Moneygram-dr-proxy Group"
+    macros:
+      "{$REDFISH.API.URL}": "https://{HOST.IP}/"
+      "{$REDFISH.PASSWORD}": "S7G3y9TtmRSm"
+      "{$REDFISH.USER}": "zabbix"
 Dell IPMI:
   - name: BLT - Dell iDRAC SNMP
     type: snmpv2
@@ -53,7 +68,7 @@ HPE Primera:
       "{$HPE.PRIMERA.API.PASSWORD}": "gUkUmZ/fh4J$6$eg$DW+"
       "{$HPE.PRIMERA.API.USERNAME}": "monitor"
 Huawei Storage:
-  - name: Huawei OceanStor 5300 V5 by SNMP
+  - name: BLT - Huawei OceanStor 5300 V5 by SNMP
     type: snmpv2
     host_groups: 
       - "Storage Devices"

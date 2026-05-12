@@ -13,12 +13,28 @@ mappings:
       model_contains: ["ICT", "XCC"]  # Model içinde bu stringler var mı?
       model_suffix: "M6"  # Model bu suffix ile bitiyor mu? (koşul alanı)
       name_contains: ["ILO"]  # Device name içinde bu stringler var mı?
+    tenant: "Müşteri A"   # opsiyonel: yalnızca bu NetBox tenant adına sahip cihazlar (bkz. aşağı)
+    # tenants: ["Müşteri A", "Müşteri B"]  # alternatif: liste; key varsa sadece liste kullanılır
     hostname_prefix: "BMC-"   # opsiyonel: Zabbix host adının önüne eklenir
     hostname_suffix: " - BMC"  # opsiyonel: normalize edilmiş NetBox adının sonuna eklenir
     priority: 1  # Düşük sayı = yüksek öncelik
 ```
 
 `hostname_prefix` ve `hostname_suffix`, **`conditions` ile aynı seviyede** (mapping kökünde) tanımlanır; `model_suffix` ise yalnızca eşleştirme koşuludur (cihaz modelinin sonu), Zabbix adını değiştirmez.
+
+## Tenant / tenants (opsiyonel müşteri kapsamı)
+
+Aynı donanım koşulları için **genel** ve **müşteriye özel** Zabbix `device_type` (ve dolayısıyla `templates.yml` anahtarı) ayırmak için mapping kökünde kullanılır; **`conditions` içinde değil**.
+
+- **`tenant`**: Tek NetBox kiracı adı (`device.tenant.name` ile karşılaştırılır, büyük/küçük harf duyumsuz).
+- **`tenants`**: Birden fazla ad. YAML’da **`tenants` anahtarı varsa** yalnızca bu liste kullanılır; aynı satırda `tenant` tanımlı olsa bile göz ardı edilir.
+- **İkisi de yoksa**: Bugünkü davranış — satır, tenant’ı olan veya olmayan tüm cihazlarda yalnızca `conditions` ile değerlendirilir (infra tenant’lı cihazlar genel satırla eşleşmeye devam eder).
+
+Kural: Kiracı kısıtlı bir satır için cihazda **tenant yoksa** veya **ad allowlist’te değilse** o satır atlanır; sıradaki (daha düşük öncelikli / daha yüksek `priority` sayılı) satırlar denenir.
+
+Müşteriye özel satırın genelden önce seçilmesi için **`priority` değerini daha düşük** tutun (ör. müşteri satırı `priority: 1`, genel fallback `priority: 2`).
+
+NetBox’tan aday cihaz listesini süzen [`fetch_all_devices.yml`](../../playbooks/roles/netbox_zabbix_sync/tasks/fetch_all_devices.yml) betiği de **aynı tenant kapısını** uygular; böylece yalnızca `conditions` ile eşleşip tenant ile eşleşmeyen satırlar listeye dahil edilmez (`process_device.yml` ile tutarlı).
 
 ## Koşul Tipleri
 
@@ -103,7 +119,28 @@ mappings:
     priority: 2
 ```
 
-Bu örnekte:
+### Tenant ile örnek (genel + müşteri)
+
+```yaml
+mappings:
+  - device_type: "Dell IPMI Customer A"
+    tenants: ["Customer A"]
+    conditions:
+      device_role: "HOST"
+      manufacturer: "DELL"
+    priority: 1
+
+  - device_type: "Dell IPMI"
+    conditions:
+      device_role: "HOST"
+      manufacturer: "DELL"
+    priority: 2
+```
+
+`Customer A` tenant’lı HOST+DELL cihaz ilk satırla eşleşir; diğer tenant’lar veya tenant’sız cihaz ikinci satıra düşer.
+
+Lenovo örneğinde (tenant alanı yok):
+
 1. Önce "Lenovo ICT" kontrol edilir (priority 1)
    - Device role HOST mu?
    - Manufacturer LENOVO mu?
@@ -136,6 +173,7 @@ Bu örnekte:
 
 - Tüm string karşılaştırmaları case-insensitive'dir
 - Koşullar AND mantığıyla birleştirilir (tümü eşleşmeli)
+- Kiracı kısıtı varsa önce tenant kapısı, sonra `conditions` değerlendirilir
 - İlk eşleşen mapping kullanılır
 - Hiçbir mapping eşleşmezse `None` döner ve device atlanır
 
