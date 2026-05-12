@@ -6,6 +6,7 @@
     _zbx_interface_update: []
     _needs_update: false
     _updated_fields: ""
+    zbx_dup_loki: ""
   run_once: false
 
 - name: Load mappings
@@ -22,6 +23,10 @@
   set_fact:
     zbx_scenario: "{{ zbx_scenario | default('create') }}"
     zbx_existing_host: "{{ zbx_existing_host | default({}) }}"
+
+- name: Resolve Zabbix visible display name for API and reports
+  set_fact:
+    zbx_host_visible_name: "{{ zbx_record.HOST_VISIBLE_NAME | default(zbx_record.HOSTNAME, true) }}"
 
 - name: Parse tags from MACROS field
   vars:
@@ -292,7 +297,7 @@
 - name: Debug - Show group mapping status
   debug:
     msg: |
-      Host: {{ zbx_record.HOSTNAME }}
+      Host: {{ zbx_record.HOSTNAME }} (display: {{ zbx_host_visible_name }})
       Required groups: {{ zbx_required_groups_for_record }}
       Groups already in map: {{ zbx_group_map.keys() | list }}
       Groups to process: {{ zbx_groups_not_in_map }}
@@ -442,7 +447,7 @@
 - name: Record validation failure
   set_fact:
     device_result:
-      hostname: "{{ zbx_record.HOSTNAME | default('N/A') }}"
+      hostname: "{{ zbx_host_visible_name | default('N/A') }}"
       device_role: "{{ zbx_record.DEVICE_ROLE | default('N/A') }}"
       status: "eklenemedi"
       reason: "{{ _validation_errors | join(', ') }}"
@@ -468,7 +473,7 @@
       ========================================
       ZABBIX API CREATE REQUEST
       ========================================
-      Host: {{ zbx_record.HOSTNAME }}
+      Host: {{ zbx_record.HOSTNAME }} (display: {{ zbx_host_visible_name }})
       Host Status: {{ zbx_record.HOST_STATUS | default(0) | int }}
       IP: {{ zbx_record.HOST_IP }}
       Device Type: {{ zbx_record.DEVICE_TYPE | default('N/A') }}
@@ -495,7 +500,7 @@
       method: "host.create"
       params:
         host: "{{ zbx_record.HOSTNAME }}"
-        name: "{{ zbx_record.HOSTNAME }}"
+        name: "{{ zbx_host_visible_name }}"
         interfaces: "{{ _zbx_interface_create }}"
         templates: "{{ zbx_template_id_list }}"
         groups: "{{ zbx_groups_formatted | default([]) }}"
@@ -515,7 +520,7 @@
 - name: Record create success
   set_fact:
     device_result:
-      hostname: "{{ zbx_record.HOSTNAME }}"
+      hostname: "{{ zbx_host_visible_name }}"
       device_role: "{{ zbx_record.DEVICE_ROLE | default('N/A') }}"
       status: "eklendi"
       reason: ""
@@ -533,7 +538,7 @@
 - name: Record create failure
   set_fact:
     device_result:
-      hostname: "{{ zbx_record.HOSTNAME }}"
+      hostname: "{{ zbx_host_visible_name }}"
       device_role: "{{ zbx_record.DEVICE_ROLE | default('N/A') }}"
       status: "eklenemedi"
       reason: "{{ zbx_create_resp.json.error.message | default('Bilinmeyen hata') }}{{ (' — ' ~ (zbx_create_resp.json.error.data | string)) if (zbx_create_resp.json.error.data is defined and (zbx_create_resp.json.error.data | string | length) > 0) else '' }}"
@@ -555,7 +560,7 @@
       ========================================
       ZABBIX API CREATE ERROR
       ========================================
-      Host: {{ zbx_record.HOSTNAME }}
+      Host: {{ zbx_record.HOSTNAME }} (display: {{ zbx_host_visible_name }})
       IP: {{ zbx_record.HOST_IP }}
       Error Message: {{ zbx_create_resp.json.error.message | default('N/A') }}
       Error Code: {{ zbx_create_resp.json.error.code | default('N/A') }}
@@ -569,17 +574,66 @@
     - _missing_params | default([]) | length == 0
     - zbx_create_resp.json.error is defined
 
-- name: Handle create error (host already exists fallback)
+- name: On duplicate host create error, capture Loki_ID from tags for resolution
   set_fact:
-    zbx_scenario: "update"
-    zbx_existing_host: "{{ zabbix_hosts_by_hostname.get(zbx_record.HOSTNAME) | default({}) }}"
+    zbx_dup_loki: "{{ zbx_tags | default([]) | selectattr('tag', 'equalto', 'Loki_ID') | map(attribute='value') | list | first | default('', true) | string }}"
   when:
     - zbx_scenario == 'create'
     - zbx_create_resp.json.error is defined
-    - zabbix_hosts_by_hostname is defined
+    - _missing_params | default([]) | length == 0
     - >-
       (zbx_create_resp.json.error.message | default('')) is search('already exists')
       or (zbx_create_resp.json.error.data | default('') | string) is search('already exists')
+
+- name: Switch to update when duplicate resolved by Loki_ID tag
+  set_fact:
+    zbx_scenario: "update"
+    zbx_existing_host: "{{ zabbix_hosts_by_loki_id.get(zbx_dup_loki) }}"
+  when:
+    - zbx_scenario == 'create'
+    - zbx_create_resp.json.error is defined
+    - _missing_params | default([]) | length == 0
+    - >-
+      (zbx_create_resp.json.error.message | default('')) is search('already exists')
+      or (zbx_create_resp.json.error.data | default('') | string) is search('already exists')
+    - zbx_dup_loki is defined
+    - zbx_dup_loki | string | length > 0
+    - zabbix_hosts_by_loki_id is defined
+    - zabbix_hosts_by_loki_id.get(zbx_dup_loki) is not none
+    - zabbix_hosts_by_loki_id.get(zbx_dup_loki) != None
+    - zabbix_hosts_by_loki_id.get(zbx_dup_loki).hostid is defined
+
+- name: Switch to update when duplicate resolved by technical hostname
+  set_fact:
+    zbx_scenario: "update"
+    zbx_existing_host: "{{ zabbix_hosts_by_hostname.get(zbx_record.HOSTNAME) }}"
+  when:
+    - zbx_scenario == 'create'
+    - zbx_create_resp.json.error is defined
+    - _missing_params | default([]) | length == 0
+    - >-
+      (zbx_create_resp.json.error.message | default('')) is search('already exists')
+      or (zbx_create_resp.json.error.data | default('') | string) is search('already exists')
+    - zabbix_hosts_by_hostname is defined
+    - zabbix_hosts_by_hostname.get(zbx_record.HOSTNAME) is not none
+    - zabbix_hosts_by_hostname.get(zbx_record.HOSTNAME) != None
+    - zabbix_hosts_by_hostname.get(zbx_record.HOSTNAME).hostid is defined
+
+- name: Switch to update when duplicate resolved by visible host name
+  set_fact:
+    zbx_scenario: "update"
+    zbx_existing_host: "{{ zabbix_hosts_by_visible_name.get(zbx_host_visible_name) }}"
+  when:
+    - zbx_scenario == 'create'
+    - zbx_create_resp.json.error is defined
+    - _missing_params | default([]) | length == 0
+    - >-
+      (zbx_create_resp.json.error.message | default('')) is search('already exists')
+      or (zbx_create_resp.json.error.data | default('') | string) is search('already exists')
+    - zabbix_hosts_by_visible_name is defined
+    - zabbix_hosts_by_visible_name.get(zbx_host_visible_name) is not none
+    - zabbix_hosts_by_visible_name.get(zbx_host_visible_name) != None
+    - zabbix_hosts_by_visible_name.get(zbx_host_visible_name).hostid is defined
 
 - name: Validate required parameters before update
   set_fact:
@@ -595,7 +649,7 @@
 - name: Record validation failure (update scenario)
   set_fact:
     device_result:
-      hostname: "{{ zbx_record.HOSTNAME }}"
+      hostname: "{{ zbx_host_visible_name }}"
       device_role: "{{ zbx_record.DEVICE_ROLE | default('N/A') }}"
       status: "eklenemedi"
       reason: "{{ 'Proxy group bulunamadı (DC_ID: ' + zbx_dc_number + ')' if (zbx_dc_number is defined and zbx_dc_number != '' and (zbx_proxy_group_id is not defined or zbx_proxy_group_id == '')) else 'Gerekli parametreler eksik: ' + (_missing_params | default([]) | join(', ')) }}"
@@ -717,7 +771,7 @@
         (
           (_existing_interface.ip | default('') != zbx_record.HOST_IP) or
           (zbx_existing_host.host | default('') != zbx_record.HOSTNAME) or
-          (zbx_existing_host.name | default('') != zbx_record.HOSTNAME) or
+          (zbx_existing_host.name | default('') != zbx_host_visible_name) or
           (zbx_existing_host.monitored_by | default('') | string != zbx_monitored_by | string) or
           (zbx_existing_host.proxy_groupid | default('') | string != zbx_proxy_group_id | string) or
           (_macros_needs_update | default(false) | bool)
@@ -734,7 +788,7 @@
 - name: Debug update check
   debug:
     msg: |
-      Host: {{ zbx_record.HOSTNAME }}
+      Host: {{ zbx_record.HOSTNAME }} (display: {{ zbx_host_visible_name }})
       Needs update: {{ _needs_update | default('not_checked') }}
       Current IP: {{ _existing_interface.ip | default('N/A') }} -> New IP: {{ zbx_record.HOST_IP }}
       Current monitored_by: {{ zbx_existing_host.monitored_by | default('N/A') }} -> New: {{ zbx_monitored_by }}
@@ -749,7 +803,7 @@
       ========================================
       ZABBIX API UPDATE REQUEST
       ========================================
-      Host: {{ zbx_record.HOSTNAME }}
+      Host: {{ zbx_record.HOSTNAME }} (display: {{ zbx_host_visible_name }})
       Host ID: {{ zbx_existing_host.hostid }}
       IP: {{ zbx_record.HOST_IP }}
       Device Type: {{ zbx_record.DEVICE_TYPE | default('N/A') }}
@@ -781,7 +835,7 @@
       params:
         hostid: "{{ zbx_existing_host.hostid }}"
         host: "{{ zbx_record.HOSTNAME }}"
-        name: "{{ zbx_record.HOSTNAME }}"
+        name: "{{ zbx_host_visible_name }}"
         interfaces: "{{ _zbx_interface_update }}"
         macros: "{{ zbx_host_macros_formatted_update if (zbx_host_macros_formatted_update is defined and zbx_host_macros_formatted_update | length > 0) else omit }}"
         monitored_by: "{{ zbx_monitored_by | int }}"
@@ -802,7 +856,7 @@
 - name: Record no update needed (already up-to-date)
   set_fact:
     device_result:
-      hostname: "{{ zbx_record.HOSTNAME }}"
+      hostname: "{{ zbx_host_visible_name }}"
       device_role: "{{ zbx_record.DEVICE_ROLE | default('N/A') }}"
       status: "güncel"
       reason: "Değişiklik yok, güncelleme yapılmadı"
@@ -822,7 +876,10 @@
     _updated_fields: >-
       {%- set fields = [] -%}
       {%- if zbx_existing_host.host | default('') != zbx_record.HOSTNAME -%}
-        {%- set _ = fields.append('Hostname: ' ~ zbx_existing_host.host | default('N/A') ~ ' → ' ~ zbx_record.HOSTNAME) -%}
+        {%- set _ = fields.append('Technical host: ' ~ zbx_existing_host.host | default('N/A') ~ ' → ' ~ zbx_record.HOSTNAME) -%}
+      {%- endif -%}
+      {%- if zbx_existing_host.name | default('') != zbx_host_visible_name -%}
+        {%- set _ = fields.append('Display name: ' ~ zbx_existing_host.name | default('N/A') ~ ' → ' ~ zbx_host_visible_name) -%}
       {%- endif -%}
       {%- if _existing_interface.ip | default('') != zbx_record.HOST_IP -%}
         {%- set _ = fields.append('IP: ' ~ _existing_interface.ip | default('N/A') ~ ' → ' ~ zbx_record.HOST_IP) -%}
@@ -858,7 +915,7 @@
 - name: Record update success
   set_fact:
     device_result:
-      hostname: "{{ zbx_record.HOSTNAME }}"
+      hostname: "{{ zbx_host_visible_name }}"
       device_role: "{{ zbx_record.DEVICE_ROLE | default('N/A') }}"
       status: "güncellendi"
       reason: "{{ _updated_fields | default('Bilinmeyen değişiklikler') }}"
@@ -879,7 +936,7 @@
 - name: Record update failure
   set_fact:
     device_result:
-      hostname: "{{ zbx_record.HOSTNAME }}"
+      hostname: "{{ zbx_host_visible_name }}"
       device_role: "{{ zbx_record.DEVICE_ROLE | default('N/A') }}"
       status: "eklenemedi"
       reason: "Güncelleme hatası: {{ zbx_update_resp.json.error.message | default(zbx_update_resp.json.error.data | default('Bilinmeyen hata')) }}"
@@ -904,7 +961,7 @@
       ========================================
       ZABBIX API UPDATE ERROR
       ========================================
-      Host: {{ zbx_record.HOSTNAME }}
+      Host: {{ zbx_record.HOSTNAME }} (display: {{ zbx_host_visible_name }})
       Host ID: {{ zbx_existing_host.hostid }}
       IP: {{ zbx_record.HOST_IP }}
       Error Message: {{ zbx_update_resp.json.error.message | default('N/A') }}

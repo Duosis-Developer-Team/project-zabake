@@ -262,7 +262,8 @@
               DEVICE_TYPE: "{{ platform_device_type }}"
               DEVICE_ROLE: "PLATFORM"
               HOST_IP: "{{ platform_ip }}"
-              HOSTNAME: "{{ platform_name }}"
+              HOSTNAME: "{{ platform_name | zabbix_technical_hostname('P_' ~ (platform_id | string)) }}"
+              HOST_VISIBLE_NAME: "{{ platform_name }}"
               DC_ID: "{{ platform_site_code }}"
               HOST_GROUPS: "{{ platform_host_groups }}"
               TEMPLATE_TYPE: ""
@@ -308,16 +309,30 @@
     - zbx_record.DEVICE_TYPE is defined
     - zabbix_hosts_by_loki_id is defined
     - zabbix_hosts_by_loki_id.get('P_' ~ (platform_id | string)) is not none
+    - zabbix_hosts_by_loki_id.get('P_' ~ (platform_id | string)) != None
 
-- name: Fallback to hostname matching if Loki_ID not found (platform)
+- name: Fallback to technical hostname if Loki_ID not found (platform)
   set_fact:
-    zbx_existing_host: "{{ zabbix_hosts_by_hostname.get(platform_name) }}"
+    zbx_existing_host: "{{ zabbix_hosts_by_hostname.get(zbx_record.HOSTNAME) }}"
   when:
     - zbx_record is defined
     - zbx_record.DEVICE_TYPE is defined
     - zabbix_hosts_by_hostname is defined
     - zbx_existing_host is not defined or zbx_existing_host == {} or zbx_existing_host.hostid is not defined
-    - zabbix_hosts_by_hostname.get(platform_name) is not none
+    - zabbix_hosts_by_hostname.get(zbx_record.HOSTNAME) is not none
+    - zabbix_hosts_by_hostname.get(zbx_record.HOSTNAME) != None
+
+- name: Fallback to visible host name if still not found (platform)
+  set_fact:
+    zbx_existing_host: "{{ zabbix_hosts_by_visible_name.get(zbx_record.HOST_VISIBLE_NAME) }}"
+  when:
+    - zbx_record is defined
+    - zbx_record.DEVICE_TYPE is defined
+    - zbx_record.HOST_VISIBLE_NAME is defined
+    - zabbix_hosts_by_visible_name is defined
+    - zbx_existing_host is not defined or zbx_existing_host == {} or zbx_existing_host.hostid is not defined
+    - zabbix_hosts_by_visible_name.get(zbx_record.HOST_VISIBLE_NAME) is not none
+    - zabbix_hosts_by_visible_name.get(zbx_record.HOST_VISIBLE_NAME) != None
 
 - name: Determine scenario for platform (create or update)
   set_fact:

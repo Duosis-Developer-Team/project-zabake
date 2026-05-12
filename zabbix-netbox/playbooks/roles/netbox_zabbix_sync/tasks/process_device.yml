@@ -857,6 +857,11 @@
     zabbix_hostname_final: >-
       {{ ((device_info.hostname_prefix | default('', true) | string) ~ zabbix_hostname_base ~ (device_info.hostname_suffix | default('', true) | string)) | trim }}
 
+- name: Compute Zabbix technical hostname (API host field, ASCII-safe)
+  set_fact:
+    zabbix_hostname_technical: >-
+      {{ zabbix_hostname_final | zabbix_technical_hostname(device_info.tags.Loki_ID | default('') | string) }}
+
 - name: Check if host exists in Zabbix by Loki_ID
   set_fact:
     zbx_existing_host: "{{ zabbix_hosts_by_loki_id.get(device_info.tags.Loki_ID | string) }}"
@@ -870,9 +875,9 @@
     - zabbix_hosts_by_loki_id.get(device_info.tags.Loki_ID | string) is not none
     - zabbix_hosts_by_loki_id.get(device_info.tags.Loki_ID | string) != None
 
-- name: Fallback to hostname matching if Loki_ID not found
+- name: Fallback to hostname matching if Loki_ID not found (technical host key)
   set_fact:
-    zbx_existing_host: "{{ zabbix_hosts_by_hostname.get(zabbix_hostname_final) }}"
+    zbx_existing_host: "{{ zabbix_hosts_by_hostname.get(zabbix_hostname_technical) }}"
   when:
     - zbx_existing_host is not defined or zbx_existing_host == {} or zbx_existing_host.hostid is not defined
     - zabbix_hosts_by_hostname is defined
@@ -880,8 +885,21 @@
     - device_info.device_type != ""
     - device_info.primary_ip is not none
     - device_info.primary_ip != ""
-    - zabbix_hosts_by_hostname.get(zabbix_hostname_final) is not none
-    - zabbix_hosts_by_hostname.get(zabbix_hostname_final) != None
+    - zabbix_hosts_by_hostname.get(zabbix_hostname_technical) is not none
+    - zabbix_hosts_by_hostname.get(zabbix_hostname_technical) != None
+
+- name: Fallback to visible host name if technical hostname not found
+  set_fact:
+    zbx_existing_host: "{{ zabbix_hosts_by_visible_name.get(zabbix_hostname_final) }}"
+  when:
+    - zbx_existing_host is not defined or zbx_existing_host == {} or zbx_existing_host.hostid is not defined
+    - zabbix_hosts_by_visible_name is defined
+    - device_info.device_type is not none
+    - device_info.device_type != ""
+    - device_info.primary_ip is not none
+    - device_info.primary_ip != ""
+    - zabbix_hosts_by_visible_name.get(zabbix_hostname_final) is not none
+    - zabbix_hosts_by_visible_name.get(zabbix_hostname_final) != None
 
 - name: Determine scenario (create or update)
   set_fact:
@@ -975,7 +993,8 @@
       DEVICE_TYPE: "{{ device_info.device_type }}"
       DEVICE_ROLE: "{{ device_info.device_role | default('N/A') }}"
       HOST_IP: "{{ device_info.primary_ip }}"
-      HOSTNAME: "{{ zabbix_hostname_final }}"
+      HOSTNAME: "{{ zabbix_hostname_technical }}"
+      HOST_VISIBLE_NAME: "{{ zabbix_hostname_final }}"
       DC_ID: "{{ device_info.location }}"
       HOST_GROUPS: "{{ device_info.host_groups }}"
       TEMPLATE_TYPE: ""

@@ -121,6 +121,21 @@
   delegate_to: localhost
   when: zbx_hosts_resp.json.result is defined
 
+- name: Build visible name to host mapping (fallback for UTF-8 display names)
+  set_fact:
+    zabbix_hosts_by_visible_name: >-
+      {%- set mapping = {} -%}
+      {%- for host in zbx_hosts_resp.json.result | default([]) -%}
+      {%- set vis = host.name | default('') | string -%}
+      {%- if vis | length > 0 -%}
+      {%- set _ = mapping.update({vis: host}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ mapping }}
+  run_once: true
+  delegate_to: localhost
+  when: zbx_hosts_resp.json.result is defined
+
 - name: Display mapping statistics
   debug:
     msg: |
@@ -130,6 +145,7 @@
       Hosts with Loki_ID tag: {{ zabbix_hosts_by_loki_id | default({}) | length }}
       Total hosts: {{ zbx_hosts_resp.json.result | default([]) | length }}
       Hostname mapping size: {{ zabbix_hosts_by_hostname | default({}) | length }}
+      Visible-name mapping size: {{ zabbix_hosts_by_visible_name | default({}) | length }}
       ============================================
   when: zbx_hosts_resp.json.result is defined
 

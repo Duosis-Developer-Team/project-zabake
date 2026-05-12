@@ -27,6 +27,7 @@ NetBox /api/dcim/platforms/
   zabbix_host_operations.yml
   ─ resolves template IDs via template.get
   ─ resolves proxy group by DC code
+  ─ sets Zabbix **technical** `host` (ASCII via `zabbix_technical_hostname` filter) and **visible** `name` (UTF-8 from NetBox)
   ─ calls host.create (or falls back to host.update if already exists)
           │
           ▼
@@ -277,13 +278,16 @@ Each platform synced to Zabbix receives the following tags:
 
 When a platform is synced again after already existing in Zabbix:
 
-1. Before `host.create`, the playbook resolves the Zabbix host by tag `Loki_ID` (`P_<netbox_platform_id>`) using `zabbix_hosts_by_loki_id`, then falls back to hostname via `zabbix_hosts_by_hostname`. If a host is found, `zbx_scenario` is `update`; otherwise `create`.
-2. If `host.create` still runs and fails with a duplicate-host error, the playbook falls back to `zbx_scenario: update`. Zabbix often returns `error.message: Invalid params.` with the real text in `error.data` (e.g. `Host with the same name "..." already exists.`); both `message` and `data` are checked for `already exists`.
-3. The update modifies: IP address, hostname, interface, macros, `monitored_by`, and `proxy_groupid`.
-4. Tags are **not** updated on existing hosts — they are only written during creation.
-5. Templates are **not** updated on existing hosts — only set during creation.
+1. Before `host.create`, the playbook resolves the Zabbix host by tag `Loki_ID` (`P_<netbox_platform_id>`) using `zabbix_hosts_by_loki_id`, then falls back to **`zabbix_hosts_by_hostname`** using the **technical** host key (ASCII slug from the NetBox platform name), then to **`zabbix_hosts_by_visible_name`** using the **visible** name (the original NetBox UTF-8 name). If a host is found, `zbx_scenario` is `update`; otherwise `create`.
+2. Zabbix `host.create` / `host.update` use **`host`** = technical ASCII and **`name`** = visible UTF-8 label (`HOST_VISIBLE_NAME`), so Turkish characters remain in the UI name while the API host key stays valid.
+3. If `host.create` still runs and fails with a duplicate-host error, the playbook falls back to `zbx_scenario: update` by resolving the existing host in order: **Loki_ID from tags**, then **technical hostname map**, then **visible name map**. Zabbix often returns `error.message: Invalid params.` with the real text in `error.data` (e.g. `Host with the same name "..." already exists.`); both `message` and `data` are checked for `already exists`.
+4. The update modifies: IP address, technical host, visible name, interface, macros, `monitored_by`, and `proxy_groupid`.
+5. Tags are **not** updated on existing hosts — they are only written during creation.
+6. Templates are **not** updated on existing hosts — only set during creation.
 
 > To force a template/tag update on an existing platform host, delete it from Zabbix and re-run the sync.
+
+> **Visible name collisions:** `zabbix_hosts_by_visible_name` is keyed by Zabbix `host.name`. If two hosts share the same visible name, the map keeps one entry; rely on `Loki_ID` or unique technical `host` keys for disambiguation.
 
 ---
 
