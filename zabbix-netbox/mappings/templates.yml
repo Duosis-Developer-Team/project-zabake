@@ -44,6 +44,58 @@ HPE IPMI Moneygram:
       "{$REDFISH.API.URL}": "https://{HOST.IP}/"
       "{$REDFISH.PASSWORD}": "S7G3y9TtmRSm"
       "{$REDFISH.USER}": "zabbix"
+# Replace unknown with the real Zabbix template name when MSA (or chosen) template is confirmed.
+HPE Storage Moneygram:
+  - name: unknown
+    type: snmpv2
+    host_groups:
+      - "Storage Devices"
+      - "Moneygram"
+    proxy_group_by_dc:
+      DC13: "Moneygram-prod-proxy Group"
+      DC16: "Moneygram-dr-proxy Group"
+DELL Storage Moneygram:
+  - name: BLT - DELL Storage Template
+    type: snmpv2
+    host_groups:
+      - "Storage Devices"
+      - "Moneygram"
+    proxy_group_by_dc:
+      DC13: "Moneygram-prod-proxy Group"
+      DC16: "Moneygram-dr-proxy Group"
+Fortinet Firewall Moneygram:
+  - name: BLT - FortiGate by HTTP
+    type: API
+    host_groups:
+      - "Network Devices"
+      - "Moneygram"
+    proxy_group_by_dc:
+      DC13: "Moneygram-prod-proxy Group"
+      DC16: "Moneygram-dr-proxy Group"
+    macros:
+      "{$FGATE.API.FQDN}": "{HOST.IP}"
+      "{$FGATE.API.PORT}": "10443"
+      "{$FGATE.SCHEME}": "https"
+      "{$FGATE.API.TOKEN}": "HH58bhNQxkrjhnrss05yxrww086k7t"
+# Replace unknown with the real Zabbix template name when Aruba (or chosen) template is confirmed.
+HPE Management Switch Moneygram:
+  - name: unknown
+    type: snmpv2
+    host_groups:
+      - "Network Devices"
+      - "Moneygram"
+    proxy_group_by_dc:
+      DC13: "Moneygram-prod-proxy Group"
+      DC16: "Moneygram-dr-proxy Group"
+DELL Switch Moneygram:
+  - name: BLT - Dell Emc OS10
+    type: snmpv2
+    host_groups:
+      - "Network Devices"
+      - "Moneygram"
+    proxy_group_by_dc:
+      DC13: "Moneygram-prod-proxy Group"
+      DC16: "Moneygram-dr-proxy Group"
 Dell IPMI:
   - name: BLT - Dell iDRAC SNMP
     type: snmpv2

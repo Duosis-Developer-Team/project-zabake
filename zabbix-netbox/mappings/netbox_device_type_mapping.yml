@@ -44,6 +44,46 @@ mappings:
     hostname_suffix: " - BMC"
     priority: 1
 
+  # Moneygram tenant: HPE Storage (e.g. MSA 2050) proxy assignment
+  - device_type: "HPE Storage Moneygram"
+    tenant: "Moneygram"
+    conditions:
+      device_role: "Storage"
+      manufacturer: ["HPE", "HP"]
+    priority: 1
+
+  # Moneygram tenant: DELL Storage (e.g. Unity) proxy assignment
+  - device_type: "DELL Storage Moneygram"
+    tenant: "Moneygram"
+    conditions:
+      device_role: "Storage"
+      manufacturer: "DELL"
+    priority: 1
+
+  # Moneygram tenant: Fortinet Firewall proxy assignment
+  - device_type: "Fortinet Firewall Moneygram"
+    tenant: "Moneygram"
+    conditions:
+      device_role: "Firewall"
+      manufacturer: "FORTINET"
+    priority: 1
+
+  # Moneygram tenant: HPE management / customer management switch proxy assignment
+  - device_type: "HPE Management Switch Moneygram"
+    tenant: "Moneygram"
+    conditions:
+      device_role: ["Management Switch", "Customer Management Switch"]
+      manufacturer: ["HPE", "HP"]
+    priority: 1
+
+  # Moneygram tenant: DELL switch / customer fiber switch proxy assignment
+  - device_type: "DELL Switch Moneygram"
+    tenant: "Moneygram"
+    conditions:
+      device_role: ["Switch", "Customer Fiber Switch"]
+      manufacturer: "DELL"
+    priority: 1
+
   - device_type: "HPE IPMI"
     conditions:
       device_role: "HOST"

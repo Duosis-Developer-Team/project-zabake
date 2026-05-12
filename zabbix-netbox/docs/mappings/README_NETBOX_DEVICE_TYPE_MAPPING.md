@@ -177,4 +177,10 @@ Lenovo örneğinde (tenant alanı yok):
 - İlk eşleşen mapping kullanılır
 - Hiçbir mapping eşleşmezse `None` döner ve device atlanır
 
+## See also
+
+- Üç dosyanın birlikte akışı ve ortak `device_type` ↔ `templates.yml` kuralı: [README.md](README.md) (English index).
+- Zabbix şablon listesi ve makrolar: [`mappings/templates.yml`](../../mappings/templates.yml) — ayrıntılar için [Template macros guide](../guides/TEMPLATE_MACROS_GUIDE.md), [Multiple templates guide](../guides/MULTIPLE_TEMPLATES_GUIDE.md).
+- Platform senkronu (üretici → `device_type`, `limit_per_dc`): [Platform sync guide](../guides/PLATFORM_SYNC_GUIDE.md), [`mappings/netbox_platform_mapping.yml`](../../mappings/netbox_platform_mapping.yml).
+
 

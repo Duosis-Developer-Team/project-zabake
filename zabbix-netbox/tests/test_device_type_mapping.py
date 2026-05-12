@@ -294,6 +294,163 @@ class TestFindMatchingMapping(unittest.TestCase):
         self.assertEqual(m.get('device_type'), 'Dell TenantsList')
 
 
+class TestMoneygramDeviceTypeMappings(unittest.TestCase):
+    """Moneygram tenant-scoped rows (mirrors netbox_device_type_mapping.yml Moneygram block)."""
+
+    def _moneygram_tenant(self):
+        return {'name': 'Moneygram'}
+
+    def test_hpe_storage_moneygram_matches(self):
+        device = {
+            'name': 'MNY1STR1ANK',
+            'role': {'name': 'STORAGE'},
+            'tenant': self._moneygram_tenant(),
+            'device_type': {'manufacturer': {'name': 'HPE'}, 'model': 'MSA 2050 STORAGE'},
+        }
+        mapping = {
+            'mappings': [
+                {
+                    'device_type': 'HPE Storage Moneygram',
+                    'tenant': 'Moneygram',
+                    'conditions': {'device_role': 'Storage', 'manufacturer': ['HPE', 'HP']},
+                    'priority': 1,
+                },
+                {
+                    'device_type': 'HPE Primera',
+                    'conditions': {'device_role': 'Storage', 'manufacturer': ['HPE', 'HP']},
+                    'priority': 1,
+                },
+            ]
+        }
+        self.assertEqual(determine_device_type(device, mapping), 'HPE Storage Moneygram')
+
+    def test_dell_storage_moneygram_matches(self):
+        device = {
+            'name': 'MNY1STR1IST',
+            'role': {'name': 'STORAGE'},
+            'tenant': self._moneygram_tenant(),
+            'device_type': {'manufacturer': {'name': 'DELL'}, 'model': 'UNITY 480F'},
+        }
+        mapping = {
+            'mappings': [
+                {
+                    'device_type': 'DELL Storage Moneygram',
+                    'tenant': 'Moneygram',
+                    'conditions': {'device_role': 'Storage', 'manufacturer': 'DELL'},
+                    'priority': 1,
+                },
+                {
+                    'device_type': 'DELL Storage',
+                    'conditions': {'device_role': 'Storage', 'manufacturer': 'DELL'},
+                    'priority': 1,
+                },
+            ]
+        }
+        self.assertEqual(determine_device_type(device, mapping), 'DELL Storage Moneygram')
+
+    def test_fortinet_firewall_moneygram_matches(self):
+        device = {
+            'name': 'MNYFW1ANK',
+            'role': {'name': 'FIREWALL'},
+            'tenant': self._moneygram_tenant(),
+            'device_type': {'manufacturer': {'name': 'Fortinet'}, 'model': 'FortiGate 120G'},
+        }
+        mapping = {
+            'mappings': [
+                {
+                    'device_type': 'Fortinet Firewall Moneygram',
+                    'tenant': 'Moneygram',
+                    'conditions': {'device_role': 'Firewall', 'manufacturer': 'FORTINET'},
+                    'priority': 1,
+                },
+                {
+                    'device_type': 'Fortinet Firewall',
+                    'conditions': {'device_role': 'Firewall', 'manufacturer': 'FORTINET'},
+                    'priority': 1,
+                },
+            ]
+        }
+        self.assertEqual(determine_device_type(device, mapping), 'Fortinet Firewall Moneygram')
+
+    def test_fortinet_wrong_tenant_matches_generic(self):
+        device = {
+            'name': 'OTHERFW',
+            'role': {'name': 'FIREWALL'},
+            'tenant': {'name': 'OtherCo'},
+            'device_type': {'manufacturer': {'name': 'Fortinet'}, 'model': 'FG'},
+        }
+        mapping = {
+            'mappings': [
+                {
+                    'device_type': 'Fortinet Firewall Moneygram',
+                    'tenant': 'Moneygram',
+                    'conditions': {'device_role': 'Firewall', 'manufacturer': 'FORTINET'},
+                    'priority': 1,
+                },
+                {
+                    'device_type': 'Fortinet Firewall',
+                    'conditions': {'device_role': 'Firewall', 'manufacturer': 'FORTINET'},
+                    'priority': 1,
+                },
+            ]
+        }
+        self.assertEqual(determine_device_type(device, mapping), 'Fortinet Firewall')
+
+    def test_dell_customer_fiber_switch_moneygram_matches(self):
+        device = {
+            'name': 'MNYSW1IST',
+            'role': {'name': 'CUSTOMER FIBER SWITCH'},
+            'tenant': self._moneygram_tenant(),
+            'device_type': {'manufacturer': {'name': 'DELL'}, 'model': 'S5224F-0N'},
+        }
+        mapping = {
+            'mappings': [
+                {
+                    'device_type': 'DELL Switch Moneygram',
+                    'tenant': 'Moneygram',
+                    'conditions': {
+                        'device_role': ['Switch', 'Customer Fiber Switch'],
+                        'manufacturer': 'DELL',
+                    },
+                    'priority': 1,
+                },
+                {
+                    'device_type': 'DELL Switch',
+                    'conditions': {'device_role': 'Switch', 'manufacturer': 'DELL'},
+                    'priority': 1,
+                },
+            ]
+        }
+        self.assertEqual(determine_device_type(device, mapping), 'DELL Switch Moneygram')
+
+    def test_hpe_customer_management_switch_moneygram_matches(self):
+        device = {
+            'name': 'MNYMGMTSW1IST',
+            'role': {'name': 'CUSTOMER MANAGEMENT SWITCH'},
+            'tenant': self._moneygram_tenant(),
+            'device_type': {'manufacturer': {'name': 'HPE'}, 'model': 'Aruba 2930M-48G'},
+        }
+        mapping = {
+            'mappings': [
+                {
+                    'device_type': 'HPE Management Switch Moneygram',
+                    'tenant': 'Moneygram',
+                    'conditions': {
+                        'device_role': ['Management Switch', 'Customer Management Switch'],
+                        'manufacturer': ['HPE', 'HP'],
+                    },
+                    'priority': 1,
+                },
+                {
+                    'device_type': 'HPE Management Switch',
+                    'conditions': {'device_role': 'Management Switch', 'manufacturer': ['HPE', 'HP']},
+                    'priority': 1,
+                },
+            ]
+        }
+        self.assertEqual(determine_device_type(device, mapping), 'HPE Management Switch Moneygram')
+
+
 def merge_proxy_group_by_dc_from_templates(zbx_templates):
     """
     Mirror Ansible: _zbx_merged_pg_by_dc initialized to {} then combine each template's proxy_group_by_dc.

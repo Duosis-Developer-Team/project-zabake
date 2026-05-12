@@ -88,7 +88,8 @@ AWX extra vars ile yeni oluşturulan host'lar Zabbix'e disabled eklenebilir. Dev
 - Netbox discovery ve analiz scriptleri için dokümantasyon
 
 ### Mapping Dokümanları (`docs/mappings/`)
-- Mapping dosyaları için açıklamalar
+- **[Mapping dosyaları indeksi (İngilizce)](docs/mappings/README.md)**: `netbox_device_type_mapping.yml`, `netbox_platform_mapping.yml`, `templates.yml` akışı ve kurallar
+- [NetBox device type mapping (Türkçe)](docs/mappings/README_NETBOX_DEVICE_TYPE_MAPPING.md)
 
 ## Bileşenler
 
@@ -104,7 +105,9 @@ AWX extra vars ile yeni oluşturulan host'lar Zabbix'e disabled eklenebilir. Dev
 - `mappings/templates.yml`: Template mapping'leri (makro desteği ile!)
 - `mappings/template_types.yml`: Template type tanımları
 - `mappings/datacenters.yml`: Datacenter/proxy mapping'leri
-- `mappings/netbox_device_type_mapping.yml`: Netbox device type filtreleme
+- `mappings/netbox_device_type_mapping.yml`: NetBox cihaz kaydından mantıksal `device_type` eşlemesi
+- `mappings/netbox_platform_mapping.yml`: NetBox platform üreticisi → `device_type` ve DC başına limit
+- Özet ve çapraz linkler: [docs/mappings/README.md](docs/mappings/README.md)
 
 ### Scripts
 - `scripts/netbox_discovery.py`: Netbox API keşif scripti
