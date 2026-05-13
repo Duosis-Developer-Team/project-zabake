@@ -1,6 +1,6 @@
 # NetBox → Zabbix mapping files (index)
 
-This page ties together the three primary YAML files that drive **logical `device_type`** resolution and **Zabbix template assignment** for the `netbox_zabbix_sync` role. Authoritative deep dives live in the linked guides; avoid duplicating long procedures here.
+This page ties together the YAML files that drive **logical `device_type`** resolution and **Zabbix template assignment** for the `netbox_zabbix_sync` role. Authoritative deep dives live in the linked guides; avoid duplicating long procedures here.
 
 ## Data flow
 
@@ -9,10 +9,12 @@ flowchart LR
   subgraph netbox [NetBox]
     Device[DCIM Device]
     Platform[DCIM Platform]
+    VFW[Custom virtual_fws]
   end
   subgraph yaml [YAML mappings]
     DTM[netbox_device_type_mapping.yml]
     PM[netbox_platform_mapping.yml]
+    VFM[virtual_fw_mapping.yml]
     TPL[templates.yml]
   end
   subgraph zbx [Zabbix]
@@ -22,6 +24,8 @@ flowchart LR
   DTM -->|"device_type string"| TPL
   Platform --> PM
   PM -->|"device_type string"| TPL
+  VFW --> VFM
+  VFM -->|"device_type string"| TPL
   TPL --> Host
 ```
 
@@ -31,9 +35,10 @@ flowchart LR
 |------|---------|-----------------|
 | [`mappings/netbox_device_type_mapping.yml`](../../mappings/netbox_device_type_mapping.yml) | Map NetBox **device** records to a logical `device_type` string | New manufacturer / model / role rules; optional `tenant` / `tenants` for customer-specific types; `hostname_prefix` / `hostname_suffix`; `priority` ordering |
 | [`mappings/netbox_platform_mapping.yml`](../../mappings/netbox_platform_mapping.yml) | Map NetBox **`platform.manufacturer.name`** to `device_type` and optional **per-DC limits** | New virtualization / backup platform rows; `limit_per_dc` (`0` or omitted = no limit) |
+| [`mappings/virtual_fw_mapping.yml`](../../mappings/virtual_fw_mapping.yml) | Map NetBox **custom-objects `virtual_fws`** (`vendor.name` + optional model prefix/suffix) to `device_type` | New firewall vendors/models; enable with role flag `sync_virtual_fws` |
 | [`mappings/templates.yml`](../../mappings/templates.yml) | Map `device_type` → list of Zabbix templates, interface `type`, macros, extra host groups | Multiple templates per type; `macros` with `{HOST.IP}` / `{HOST.NAME}`; `host_groups`; `proxy_group_by_dc` |
 
-**Invariant:** Every `device_type` produced by **either** `netbox_device_type_mapping.yml` **or** `netbox_platform_mapping.yml` must exist as a **top-level key** in `templates.yml` with **identical spelling** (keys are case-sensitive). The platform section in `templates.yml` is preceded by an in-file comment marking keys required for platform sync.
+**Invariant:** Every `device_type` produced by **`netbox_device_type_mapping.yml`**, **`netbox_platform_mapping.yml`**, or **`virtual_fw_mapping.yml`** must exist as a **top-level key** in `templates.yml` with **identical spelling** (keys are case-sensitive). The platform section in `templates.yml` is preceded by an in-file comment marking keys required for platform sync.
 
 ## Rule summaries
 
@@ -54,6 +59,12 @@ flowchart LR
 - **Match:** `manufacturer` is matched against NetBox platform manufacturer with a **case-insensitive full-string** regex (`(?i)^...$`) in [`process_platform.yml`](../../playbooks/roles/netbox_zabbix_sync/tasks/process_platform.yml).
 - **Fields:** `manufacturer` (required), `device_type` (required; must match a `templates.yml` key), `limit_per_dc` (optional). DC code extraction for limits follows the comment at the top of the YAML file (first `(DC|AZ|ICT|UZ)[0-9]+` match from the Site/DC label).
 
+### `virtual_fw_mapping.yml`
+
+- **Source API:** `GET /api/plugins/custom-objects/virtual_fws/?fw_status=active` (see [`fetch_all_virtual_fws.yml`](../../playbooks/roles/netbox_zabbix_sync/tasks/fetch_all_virtual_fws.yml)).
+- **Match:** First row where `vendor` equals NetBox `vendor.name` (**case-insensitive**), and optional `model_prefix` / `model_suffix` match `manufacturer_model.model` (see filter `virtual_fw_mapping_match` in [`filter_plugins/zabbix_hostname.py`](../../playbooks/roles/netbox_zabbix_sync/filter_plugins/zabbix_hostname.py)).
+- **Processing:** [`process_virtual_fw.yml`](../../playbooks/roles/netbox_zabbix_sync/tasks/process_virtual_fw.yml); Zabbix role `DEVICE_ROLE=VIRTUAL_FW`; tag merge on update matches platform behavior.
+
 ### `templates.yml`
 
 - **Structure:** Top-level key = `device_type`; value = YAML **list** of template objects. Each object needs at least `name` (exact Zabbix template name) and `type` (must exist in [`template_types.yml`](../../mappings/template_types.yml)).
@@ -68,6 +79,7 @@ Override these in playbook extra vars if files live outside the default layout (
 | `templates_map_path` | `../mappings/templates.yml` |
 | `device_type_mapping_path` | `../mappings/netbox_device_type_mapping.yml` |
 | `platform_mapping_path` | `../mappings/netbox_platform_mapping.yml` |
+| `virtual_fw_mapping_path` | `../mappings/virtual_fw_mapping.yml` |
 
 ## Detailed documentation (read next)
 
@@ -83,4 +95,5 @@ Override these in playbook extra vars if files live outside the default layout (
 
 - Device mapping logic: [`tests/test_device_type_mapping.py`](../../tests/test_device_type_mapping.py)
 - Platform mapping YAML shape: [`tests/test_platforms_feature.py`](../../tests/test_platforms_feature.py)
+- Virtual firewall filters: [`tests/test_virtual_fw_filters.py`](../../tests/test_virtual_fw_filters.py)
 - `templates.yml` syntax / types: [`tests/test_templates_yaml_syntax.py`](../../tests/test_templates_yaml_syntax.py), [`tests/validate_yaml_syntax.py`](../../tests/validate_yaml_syntax.py)

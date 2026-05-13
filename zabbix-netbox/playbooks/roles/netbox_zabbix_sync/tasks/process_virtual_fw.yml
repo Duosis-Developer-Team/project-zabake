@@ -1,0 +1,318 @@
+---
+- name: Reset virtual firewall processing variables
+  set_fact:
+    vfw_result: {}
+    current_vfw_result: {}
+    vfw_mapping_entry: {}
+    vfw_device_type: null
+    zbx_record: {}
+    zbx_existing_host: {}
+    zbx_scenario: "create"
+  run_once: false
+
+- name: Set virtual firewall identity fields
+  set_fact:
+    vfw_id: "{{ netbox_virtual_fw.id }}"
+    vfw_hostname_raw: "{{ netbox_virtual_fw.hostname | default('', true) }}"
+    vfw_ip_port_raw: "{{ netbox_virtual_fw.ip_port | default('', true) }}"
+    vfw_vendor_name: "{{ netbox_virtual_fw.vendor.name if (netbox_virtual_fw.vendor is defined and netbox_virtual_fw.vendor) else '' }}"
+    vfw_model_name: "{{ netbox_virtual_fw.manufacturer_model.model if (netbox_virtual_fw.manufacturer_model is defined and netbox_virtual_fw.manufacturer_model) else '' }}"
+    vfw_manufacturer_name: "{{ netbox_virtual_fw.manufacturer_model.manufacturer.name if (netbox_virtual_fw.manufacturer_model is defined and netbox_virtual_fw.manufacturer_model and netbox_virtual_fw.manufacturer_model.manufacturer is defined and netbox_virtual_fw.manufacturer_model.manufacturer) else '' }}"
+    vfw_location_name: "{{ (netbox_virtual_fw['lokasyon'] | default({})).name | default('', true) }}"
+    vfw_proje: "{{ netbox_virtual_fw.proje | default('', true) }}"
+    vfw_status_val: "{{ netbox_virtual_fw.fw_status | default('', true) }}"
+
+- name: Parse ip_port into IP and management port (port is tag-only; Zabbix interface uses template_types)
+  set_fact:
+    vfw_ip_port_parsed: "{{ vfw_ip_port_raw | string | parse_virtual_fw_ip_port }}"
+    vfw_host_ip: "{{ (vfw_ip_port_raw | string | parse_virtual_fw_ip_port).ip | default('', true) }}"
+    vfw_mgmt_port: "{{ (vfw_ip_port_raw | string | parse_virtual_fw_ip_port).port | default('', true) }}"
+
+- name: Record virtual firewall without IP
+  set_fact:
+    current_vfw_result:
+      hostname: "{{ vfw_hostname_raw | default('N/A', true) }}"
+      device_role: "VIRTUAL_FW"
+      status: "eklenemedi"
+      reason: "IP address is missing or invalid in ip_port"
+      ip: "N/A"
+      location: "{{ vfw_location_name | default('N/A', true) }}"
+      site: "{{ vfw_location_name | default('N/A', true) }}"
+      tenant: "N/A"
+      ownership: "N/A"
+  when: vfw_host_ip is not defined or vfw_host_ip is none or (vfw_host_ip | string | trim | length) == 0
+
+- name: Record virtual firewall without vendor
+  set_fact:
+    current_vfw_result:
+      hostname: "{{ vfw_hostname_raw | default('N/A', true) }}"
+      device_role: "VIRTUAL_FW"
+      status: "eklenemedi"
+      reason: "Vendor is missing on virtual firewall record"
+      ip: "{{ vfw_host_ip | default('N/A') }}"
+      location: "{{ vfw_location_name | default('N/A', true) }}"
+      site: "{{ vfw_location_name | default('N/A', true) }}"
+      tenant: "N/A"
+      ownership: "N/A"
+  when:
+    - vfw_host_ip is defined
+    - (vfw_host_ip | string | trim | length) > 0
+    - vfw_vendor_name is not defined or vfw_vendor_name is none or (vfw_vendor_name | string | trim | length) == 0
+
+- name: Record virtual firewall without location (required for proxy DC_ID)
+  set_fact:
+    current_vfw_result:
+      hostname: "{{ vfw_hostname_raw | default('N/A', true) }}"
+      device_role: "VIRTUAL_FW"
+      status: "eklenemedi"
+      reason: "Location (lokasyon) is missing on virtual firewall record"
+      ip: "{{ vfw_host_ip | default('N/A') }}"
+      location: "N/A"
+      site: "N/A"
+      tenant: "N/A"
+      ownership: "N/A"
+  when:
+    - vfw_host_ip is defined
+    - (vfw_host_ip | string | trim | length) > 0
+    - vfw_vendor_name is defined
+    - (vfw_vendor_name | string | trim | length) > 0
+    - vfw_location_name is not defined or vfw_location_name is none or (vfw_location_name | string | trim | length) == 0
+
+- name: Load virtual firewall mapping config
+  set_fact:
+    virtual_fw_mapping: "{{ lookup('file', virtual_fw_mapping_path | default((playbook_dir | default(ansible_playbook_directory)) + '/../mappings/virtual_fw_mapping.yml')) | from_yaml }}"
+  run_once: true
+  delegate_to: localhost
+
+- name: Resolve mapping entry for vendor and model
+  set_fact:
+    vfw_mapping_entry: "{{ (virtual_fw_mapping.mappings | default([])) | virtual_fw_mapping_match(vfw_vendor_name, vfw_model_name) }}"
+  when:
+    - vfw_host_ip is defined
+    - (vfw_host_ip | string | trim | length) > 0
+    - vfw_vendor_name is defined
+    - (vfw_vendor_name | string | trim | length) > 0
+    - vfw_location_name is defined
+    - (vfw_location_name | string | trim | length) > 0
+
+- name: Record virtual firewall when no mapping matches
+  set_fact:
+    current_vfw_result:
+      hostname: "{{ vfw_hostname_raw | default('N/A', true) }}"
+      device_role: "VIRTUAL_FW"
+      status: "eklenemedi"
+      reason: "No virtual_fw_mapping.yml entry for vendor={{ vfw_vendor_name }} model={{ vfw_model_name }}"
+      ip: "{{ vfw_host_ip | default('N/A') }}"
+      location: "{{ vfw_location_name | default('N/A', true) }}"
+      site: "{{ vfw_location_name | default('N/A', true) }}"
+      tenant: "N/A"
+      ownership: "N/A"
+  when:
+    - vfw_host_ip is defined
+    - (vfw_host_ip | string | trim | length) > 0
+    - vfw_vendor_name is defined
+    - (vfw_vendor_name | string | trim | length) > 0
+    - vfw_location_name is defined
+    - (vfw_location_name | string | trim | length) > 0
+    - (vfw_mapping_entry.device_type | default('', true) | string | length) == 0
+
+- name: Apply virtual firewall mapping and build Zabbix record
+  when:
+    - vfw_mapping_entry is defined
+    - vfw_mapping_entry is mapping
+    - (vfw_mapping_entry.device_type | default('', true) | string | length) > 0
+  block:
+    - name: Set device type from mapping
+      set_fact:
+        vfw_device_type: "{{ vfw_mapping_entry.device_type }}"
+
+    - name: Select templates for virtual firewall from templates map
+      set_fact:
+        vfw_templates: "{{ (templates_map[vfw_device_type] | default([])) }}"
+
+    - name: Record skipped virtual firewall when no templates found
+      set_fact:
+        current_vfw_result:
+          hostname: "{{ vfw_hostname_raw | default('N/A', true) }}"
+          device_role: "VIRTUAL_FW"
+          status: "eklenemedi"
+          reason: "No templates found for device_type {{ vfw_device_type }}"
+          ip: "{{ vfw_host_ip | default('N/A') }}"
+          location: "{{ vfw_location_name | default('N/A', true) }}"
+          site: "{{ vfw_location_name | default('N/A', true) }}"
+          tenant: "N/A"
+          ownership: "N/A"
+      when: vfw_templates | length == 0
+
+    - name: Flatten template host groups for virtual firewall
+      set_fact:
+        vfw_template_host_groups: >-
+          {{
+            vfw_templates
+            | map(attribute='host_groups')
+            | list
+            | flatten
+            | unique
+          }}
+      when: vfw_templates | length > 0
+
+    - name: Compose CSV host groups for Zabbix (virtual firewall)
+      set_fact:
+        vfw_host_groups_csv: >-
+          {{
+            (
+              [vfw_vendor_name, vfw_location_name, vfw_model_name]
+              + (vfw_template_host_groups | default([]))
+            )
+            | map('trim')
+            | reject('equalto', '')
+            | unique
+            | join(',')
+          }}
+      when: vfw_templates | length > 0
+
+    - name: Build Zabbix tags (MACROS JSON) for virtual firewall
+      set_fact:
+        vfw_tags:
+          Vendor: "{{ vfw_vendor_name }}"
+          Location: "{{ vfw_location_name }}"
+          Model: "{{ vfw_model_name }}"
+          Manufacturer: "{{ vfw_manufacturer_name }}"
+          Port: "{{ vfw_mgmt_port | string }}"
+          fw_status: "{{ vfw_status_val | string }}"
+          proje: "{{ vfw_proje | string }}"
+          Loki_ID: "VFW_{{ vfw_id | string }}"
+          Created: "{{ netbox_virtual_fw.created | default('') }}"
+          Last_Updated: "{{ netbox_virtual_fw.last_updated | default('') }}"
+      when: vfw_templates | length > 0
+
+    - name: Create Zabbix record for virtual firewall
+      set_fact:
+        zbx_record:
+          DEVICE_TYPE: "{{ vfw_device_type }}"
+          DEVICE_ROLE: "VIRTUAL_FW"
+          HOST_IP: "{{ vfw_host_ip }}"
+          HOSTNAME: "{{ vfw_hostname_raw | zabbix_vfw_technical_hostname(vfw_id | string) }}"
+          HOST_VISIBLE_NAME: "{{ vfw_hostname_raw }}"
+          DC_ID: "{{ vfw_location_name }}"
+          HOST_GROUPS: "{{ vfw_host_groups_csv }}"
+          TEMPLATE_TYPE: ""
+          HOST_STATUS: "{{ 1 if create_virtual_fws_disabled | bool else 0 }}"
+          MACROS: "{{ vfw_tags | to_json }}"
+          REPORT_LOCATION: "{{ vfw_location_name }}"
+          REPORT_SITE: "{{ vfw_location_name }}"
+          REPORT_TENANT: ""
+          REPORT_OWNERSHIP: ""
+      when: vfw_templates | length > 0
+
+- name: Ensure Zabbix auth token is available for virtual firewalls
+  when: zabbix_auth is not defined
+  block:
+    - name: Zabbix login to obtain auth token for virtual firewalls
+      uri:
+        url: "{{ zabbix_url }}"
+        method: POST
+        body_format: json
+        validate_certs: "{{ zabbix_validate_certs }}"
+        body:
+          jsonrpc: "2.0"
+          method: "user.login"
+          params:
+            username: "{{ zabbix_user }}"
+            password: "{{ zabbix_password }}"
+          id: 0
+      register: zbx_login_resp_vfw
+      delegate_to: localhost
+      run_once: true
+
+    - name: Set zabbix_auth from virtual firewall login
+      set_fact:
+        zabbix_auth: "{{ zbx_login_resp_vfw.json.result }}"
+      when: zbx_login_resp_vfw.json.result is defined
+      delegate_to: localhost
+      run_once: true
+
+- name: Resolve existing Zabbix host for virtual firewall by Loki_ID
+  set_fact:
+    zbx_existing_host: "{{ zabbix_hosts_by_loki_id.get('VFW_' ~ (vfw_id | string)) }}"
+  when:
+    - zbx_record is defined
+    - zbx_record.DEVICE_TYPE is defined
+    - zabbix_hosts_by_loki_id is defined
+    - zabbix_hosts_by_loki_id.get('VFW_' ~ (vfw_id | string)) is not none
+    - zabbix_hosts_by_loki_id.get('VFW_' ~ (vfw_id | string)) != None
+
+- name: Fallback to technical hostname if Loki_ID not found (virtual firewall)
+  set_fact:
+    zbx_existing_host: "{{ zabbix_hosts_by_hostname.get(zbx_record.HOSTNAME) }}"
+  when:
+    - zbx_record is defined
+    - zbx_record.DEVICE_TYPE is defined
+    - zabbix_hosts_by_hostname is defined
+    - zbx_existing_host is not defined or zbx_existing_host == {} or zbx_existing_host.hostid is not defined
+    - zabbix_hosts_by_hostname.get(zbx_record.HOSTNAME) is not none
+    - zabbix_hosts_by_hostname.get(zbx_record.HOSTNAME) != None
+
+- name: Fallback to visible host name if still not found (virtual firewall)
+  set_fact:
+    zbx_existing_host: "{{ zabbix_hosts_by_visible_name.get(zbx_record.HOST_VISIBLE_NAME) }}"
+  when:
+    - zbx_record is defined
+    - zbx_record.DEVICE_TYPE is defined
+    - zbx_record.HOST_VISIBLE_NAME is defined
+    - zabbix_hosts_by_visible_name is defined
+    - zbx_existing_host is not defined or zbx_existing_host == {} or zbx_existing_host.hostid is not defined
+    - zabbix_hosts_by_visible_name.get(zbx_record.HOST_VISIBLE_NAME) is not none
+    - zabbix_hosts_by_visible_name.get(zbx_record.HOST_VISIBLE_NAME) != None
+
+- name: Determine scenario for virtual firewall (create or update)
+  set_fact:
+    zbx_scenario: "{{ 'update' if (zbx_existing_host is defined and zbx_existing_host is not none and zbx_existing_host != None and zbx_existing_host.hostid is defined) else 'create' }}"
+  when:
+    - zbx_record is defined
+    - zbx_record.DEVICE_TYPE is defined
+
+- name: Set variables for virtual firewall role
+  set_fact:
+    _zbx_record_for_vfw: "{{ zbx_record }}"
+    _zabbix_auth_for_vfw: "{{ zabbix_auth }}"
+    _zbx_existing_host_for_vfw: "{{ zbx_existing_host | default({}) }}"
+    _zbx_scenario_for_vfw: "{{ zbx_scenario | default('create') }}"
+  when:
+    - zbx_record is defined
+    - zbx_record.DEVICE_TYPE is defined
+    - zabbix_auth is defined
+
+- name: Process virtual firewall with Zabbix host operations
+  include_tasks: zabbix_host_operations.yml
+  vars:
+    zbx_record: "{{ _zbx_record_for_vfw }}"
+    zabbix_url: "{{ zabbix_url }}"
+    zabbix_user: "{{ zabbix_user }}"
+    zabbix_password: "{{ zabbix_password }}"
+    zabbix_validate_certs: "{{ zabbix_validate_certs }}"
+    zabbix_auth: "{{ _zabbix_auth_for_vfw }}"
+    zbx_existing_host: "{{ _zbx_existing_host_for_vfw }}"
+    zbx_scenario: "{{ _zbx_scenario_for_vfw }}"
+  when:
+    - _zbx_record_for_vfw is defined
+    - _zbx_record_for_vfw.DEVICE_TYPE is defined
+    - _zabbix_auth_for_vfw is defined
+
+- name: Collect virtual firewall result from zabbix host operations (if processed)
+  set_fact:
+    current_vfw_result: "{{ device_result }}"
+  when:
+    - device_result is defined
+    - device_result | length > 0
+    - device_result.hostname is defined
+
+- name: Save virtual firewall result to temporary file
+  copy:
+    content: "{{ current_vfw_result | to_json }}"
+    dest: "/tmp/zabbix_vfw_operation_result_{{ vfw_id | default('unknown') }}.json"
+  when:
+    - current_vfw_result is defined
+    - current_vfw_result | length > 0
+  delegate_to: localhost
+  run_once: false

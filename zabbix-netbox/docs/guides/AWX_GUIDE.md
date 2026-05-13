@@ -1,98 +1,146 @@
-## Zabbix Migration on Ansible AWX - End-to-End Guide
+# Ansible AWX / AAP — NetBox (Loki) ↔ Zabbix senkronu
 
-This guide explains how to run the CSV-driven Zabbix migration pipeline on Ansible AWX, including required credentials, inventories, job templates, variables, and environment-specific parameters.
+Bu kılavuz **`zabbix-netbox`** modülündeki ana playbook [`playbooks/netbox_zabbix_sync.yaml`](../../playbooks/netbox_zabbix_sync.yaml) ve rol `netbox_zabbix_sync` için AWX / Ansible Automation Platform üzerinde çalıştırma adımlarını ve **Extra Variables** parametrelerini tanımlar.
 
-### 1) Prerequisites
-- AWX can reach your Zabbix API endpoint (HTTP/HTTPS) and target `ansible_worker` hosts.
-- The SCM Project is synced (this repository) and the `community.general` collection is available on the AWX execution environment.
-- Zabbix API user with permission to create/update hosts, link templates, and manage macros.
+> **Not:** Bu dosyanın eski sürümünde başka bir repo yoluna (`zabbix-migration`) ait CSV migration anlatılıyordu; o akış bu `zabbix-netbox` dizininde yoktur. NetBox’tan Zabbix’e senkron için aşağıdaki playbook kullanılır.
 
-### 2) Files and Structure
-- Playbook entry: `zabbix-migration/playbooks/zabbix_migration.yaml`
-- Role: `zabbix-migration/roles/zabbix_migration`
-- Mappings:
-  - `zabbix-migration/mappings/templates.yml` (DEVICE_TYPE → templates + type)
-  - `zabbix-migration/mappings/template_types.yml` (type → interface spec)
-  - `zabbix-migration/mappings/datacenters.yml` (DC_ID → proxy/proxy_group)
-- Input CSV: provide path via variable `zbx_migration_csv` (example: `zabbix-migration/examples/hosts.csv`).
+## 1) Ön koşullar
 
-### 3) Inventory
-- Define inventory with a group (or host) matching playbook target: `ansible_worker`.
-- Ensure SSH connectivity if tasks run on remote hosts (usually not required for pure API calls, but kept for consistency).
+- AWX execution environment, NetBox (Loki) API ve Zabbix JSON-RPC URL’ine ağ erişimi sağlar.
+- SCM project bu repository’yi (veya `project-zabake` içinde `zabbix-netbox` yolunu) checkout eder.
+- Playbook **`hosts: localhost`** kullanır; inventory’de `localhost` veya playbook’u çalıştıracak bir grup tanımlanır (çoğu kurulumda “Demo Inventory” + localhost yeterlidir).
 
-### 4) Credentials (AWX)
-- Create a Credential of type “Machine” if you need SSH to target hosts.
-- Create a Credential of type “Custom” or use “Vault/Environment” to store:
-  - `zabbix_user`
-  - `zabbix_password`
-  - Optionally `zabbix_auth` if you prefer pre-generated token instead of login.
+## 2) Playbook ve rol
 
-### 5) Execution Environment
-- Include `community.general` collection. If missing, add to EE image or run:
-  - `ansible-galaxy collection install community.general`
+| Bileşen | Yol |
+|--------|-----|
+| Playbook | `zabbix-netbox/playbooks/netbox_zabbix_sync.yaml` |
+| Rol | `zabbix-netbox/playbooks/roles/netbox_zabbix_sync/` |
+| Varsayılanlar | [`defaults/main.yml`](../../playbooks/roles/netbox_zabbix_sync/defaults/main.yml) |
 
-### 6) AWX Project
-- Add a Project pointing to this repository.
-- Set the playbook to `zabbix-migration/playbooks/zabbix_migration.yaml`.
+## 3) AWX Job Template
 
-### 7) Job Template
-- Inventory: select the inventory that contains `ansible_worker`.
-- Project: select this repository’s project.
-- Playbook: `zabbix-migration/playbooks/zabbix_migration.yaml`.
-- Credentials: add the Zabbix API credential (and Machine credential if needed).
-- Extra Variables (YAML):
-```
-zbx_migration_csv: "/var/lib/awx/projects/project-zabake/zabbix-migration/examples/hosts.csv"
-zabbix_url: "https://your-zabbix.local/zabbix/api_jsonrpc.php"
-zabbix_validate_certs: false
-# If you prefer login:
-zabbix_user: "awx-api-user"
+- **Inventory:** `localhost` içeren bir inventory (veya playbook hedefiyle uyumlu tek host).
+- **Project:** Bu repo / alt modül checkout.
+- **Playbook:** `playbooks/netbox_zabbix_sync.yaml` (project root’u `zabbix-netbox` olarak ayarladıysanız göreli yol buna göre).
+- **Execution Environment:** Ansible 2.12+ önerilir; rol `uri` ve `lookup('file')` kullanır. [`requirements.yml`](../../requirements.yml) içindeki collection’lar EE’de yüklü olmalıdır.
+
+## 4) Zorunlu Extra Variables
+
+Playbook `pre_tasks` içinde doğrulanır; AWX’te **Extra Variables** (YAML veya JSON) ile verilir:
+
+| Değişken | Açıklama |
+|----------|----------|
+| `netbox_url` | NetBox kök URL (örn. `https://loki.example.com`) |
+| `netbox_token` | NetBox API token |
+| `zabbix_url` | Zabbix API JSON-RPC uç noktası (örn. `https://zabbix.example.com/api_jsonrpc.php`) |
+| `zabbix_user` | Zabbix API kullanıcısı |
+| `zabbix_password` | Zabbix API şifresi (Vault / AWX credential önerilir) |
+
+> `only_fetch: true` olsa bile playbook şu an bu alanları doğruladığı için Zabbix bilgileri job’da yine sağlanmalıdır (yalnızca NetBox okuma yapılır, Zabbix API çağrılmaz).
+
+## 5) Senkron kapsamı (boolean bayraklar)
+
+Rol varsayılanları `defaults/main.yml` içindedir; AWX’te ihtiyaca göre override edin:
+
+| Değişken | Varsayılan | Açıklama |
+|----------|-------------|----------|
+| `sync_devices` | `true` | NetBox `dcim/devices` senkronu |
+| `sync_platforms` | `false` | NetBox `dcim/platforms` senkronu |
+| `sync_virtual_fws` | `false` | NetBox Plugins `custom-objects/virtual_fws` (`fw_status=active`) senkronu |
+| `only_fetch` | `false` | `true` ise yalnızca NetBox verisi çekilir ve debug çıktısı üretilir; Zabbix create/update ve e-posta raporu çalışmaz |
+
+En az biri açık olmalıdır: `sync_devices`, `sync_platforms`, `sync_virtual_fws` veya `only_fetch: true`.
+
+## 6) İsteğe bağlı davranış ve filtreler
+
+| Değişken | Varsayılan | Açıklama |
+|----------|-------------|----------|
+| `netbox_verify_ssl` | `false` | NetBox TLS doğrulama |
+| `zabbix_validate_certs` | `false` | Zabbix TLS doğrulama |
+| `location_filter` | `""` | Cihaz ve (virtual FW script’inde) lokasyon adı/slug alt string filtresi |
+| `device_limit` | `0` | `0` = limitsiz; sadece device senkronunda ilk N cihaz |
+| `create_devices_disabled` | `false` | Yeni **device** host’ları Zabbix’te disabled oluşturulsun |
+| `create_platforms_disabled` | `false` | Yeni **platform** host’ları disabled |
+| `create_virtual_fws_disabled` | `false` | Yeni **virtual firewall** host’ları disabled |
+| `report_izlenmeyecek` | `true` | İzlenmeyecek (izlenmeli=Hayır vb.) kayıtların rapora eklenmesi |
+| `mail_recipients` | `[]` | Başarısızlık özet e-postası; boş liste ile e-posta gönderilmez. SMTP varsayılanları `defaults/main.yml` |
+
+## 7) Mapping dosya yolları (override)
+
+Repo içi göreli yol varsayılanları `defaults/main.yml` içindedir. AWX checkout yapısı farklıysa aynı isimlerle override edilebilir:
+
+| Değişken | Varsayılan mantığı |
+|----------|---------------------|
+| `templates_map_path` | `../mappings/templates.yml` (playbook dizinine göre) |
+| `datacenters_map_path` | `../mappings/datacenters.yml` |
+| `device_type_mapping_path` | `../mappings/netbox_device_type_mapping.yml` |
+| `platform_mapping_path` | `../mappings/netbox_platform_mapping.yml` |
+| `virtual_fw_mapping_path` | `../mappings/virtual_fw_mapping.yml` |
+| `host_groups_config_path` | `../mappings/host_groups_config.yml` |
+| `tags_config_path` | `../mappings/tags_config.yml` |
+
+## 8) Örnek Extra Variables (YAML)
+
+Aşağıdaki örnekte cihaz + sanal firewall senkronu birlikte açıktır:
+
+```yaml
+netbox_url: "https://loki.example.com"
+netbox_token: "{{ netbox_token_from_credential }}"
+netbox_verify_ssl: false
+
+zabbix_url: "https://zabbix.example.com/api_jsonrpc.php"
+zabbix_user: "awx-zabbix-api"
 zabbix_password: "{{ vault_zabbix_password }}"
-# Or if you provide a token directly:
-# zabbix_auth: "<existing_token>"
+zabbix_validate_certs: false
+
+sync_devices: true
+sync_platforms: false
+sync_virtual_fws: true
+
+only_fetch: false
+location_filter: ""
+device_limit: 0
+
+create_devices_disabled: false
+create_platforms_disabled: false
+create_virtual_fws_disabled: false
+
+mail_recipients:
+  - "ops@example.com"
 ```
 
-### 8) Run Pipeline
-1. Confirm mappings are correct for your environment:
-   - `mappings/templates.yml` (template names must exist in Zabbix)
-   - `mappings/template_types.yml` (SNMP v2/v3 details match your policy)
-   - `mappings/datacenters.yml` (DC_ID keys match your CSV and Zabbix proxy/proxy groups)
-2. Provide the CSV path via `zbx_migration_csv`.
-3. Launch the Job Template.
+Sadece NetBox’tan virtual firewall listesini görmek (Zabbix’e yazmadan):
 
-### 9) Outputs and Idempotency
-- The role will:
-  - Read CSV rows by header
-  - Login to Zabbix (if `zabbix_auth` not provided) and obtain token
-  - Resolve templates for each `DEVICE_TYPE` via `templates.yml`
-  - Resolve interface spec via `template_types.yml` (SNMP v2/v3/agent/api)
-  - Resolve proxy/proxy group from `datacenters.yml`
-  - Create or update host, link templates, ensure interface and macros
-- Safe to re-run; it will update existing hosts instead of creating duplicates.
+```yaml
+netbox_url: "https://loki.example.com"
+netbox_token: "{{ netbox_token_from_credential }}"
+zabbix_url: "https://zabbix.example.com/api_jsonrpc.php"
+zabbix_user: "dummy"
+zabbix_password: "dummy"
 
-### 10) Environment-specific Parameters (List)
-- Zabbix API:
-  - `zabbix_url` (scheme, host, path)
-  - `zabbix_validate_certs` (true/false; set true in production with proper CA)
-  - `zabbix_user`, `zabbix_password` or `zabbix_auth` (token)
-- Input data:
-  - `zbx_migration_csv` (absolute path within AWX project checkout or accessible path)
-- Inventory and hosts:
-  - Inventory group/host `ansible_worker` presence
-- Mappings:
-  - `templates.yml` template names must match your Zabbix templates
-  - `template_types.yml` SNMP credentials and settings (v2 community; v3 security/auth/priv)
-  - `datacenters.yml` DC_ID keys and proxy/proxy_group IDs
+sync_devices: false
+sync_platforms: false
+sync_virtual_fws: true
+only_fetch: true
+```
 
-### 11) Troubleshooting
-- 401/permission errors: check `zabbix_user` role/permissions or token validity.
-- Template resolution empty: template names in `templates.yml` must match exactly those in Zabbix.
-- DC mapping missing: ensure `DC_ID` in CSV matches a key in `datacenters.yml`.
-- SSL errors: set `zabbix_validate_certs: false` for testing; prefer valid certificates in production.
+## 9) Virtual firewall eşlemesi
 
-### 12) Security Recommendations
-- Store all secrets in AWX Credentials or Ansible Vault.
-- Restrict AWX RBAC for Job Templates that touch Zabbix.
-- Enable logging/auditing on Zabbix for change tracking.
+- Mapping: [`mappings/virtual_fw_mapping.yml`](../../mappings/virtual_fw_mapping.yml)
+- Şablonlar: [`mappings/templates.yml`](../../mappings/templates.yml) içindeki `device_type` anahtarları ile birebir eşleşmeli
+- Ayrıntı: [README_CONFIG.md](../../mappings/README_CONFIG.md) (Virtual firewalls bölümü), [docs/mappings/README.md](../mappings/README.md)
 
+## 10) Sorun giderme
 
+| Belirti | Kontrol |
+|---------|---------|
+| `netbox_url is required` | Extra vars’ta `netbox_url` / token / Zabbix alanları eksik |
+| Şablon bulunamadı | `templates.yml` içindeki şablon adları Zabbix UI ile birebir aynı mı |
+| Virtual FW eşleşmiyor | `virtual_fw_mapping.yml` içindeki `vendor` NetBox `vendor.name` ile aynı mı (büyük/küçük harf duyarsız tam eşleşme) |
+| Proxy atanmıyor | `lokasyon.name` / `DC_ID` ile Zabbix proxy group adındaki DC kodu eşleşiyor mu; gerekirse `templates.yml` içinde `proxy_group_by_dc` |
+
+## 11) Güvenlik
+
+- NetBox ve Zabbix parolalarını AWX **Credentials** veya **Vault** ile verin; SCM’e commit etmeyin.
+- Job Template için RBAC sınırlayın; production’da `*_verify_ssl` / `*_validate_certs` mümkünse `true` yapın.

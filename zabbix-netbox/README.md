@@ -60,7 +60,7 @@ ansible-playbook playbooks/netbox_zabbix_sync.yaml \
   -e "location_filter=LocationName"
 ```
 
-AWX extra vars ile yeni oluşturulan host'lar Zabbix'e disabled eklenebilir. Device host'ları için `create_devices_disabled: true`, platform host'ları için `create_platforms_disabled: true` kullanın. Bu ayarlar sadece yeni host oluşturma sırasında uygulanır; mevcut host update akışı host status değerini değiştirmez.
+AWX extra vars ile yeni oluşturulan host'lar Zabbix'e disabled eklenebilir: `create_devices_disabled`, `create_platforms_disabled`, `create_virtual_fws_disabled`. Sanal firewall senkronu için `sync_virtual_fws: true` verin. Tüm parametreler için bkz. [AWX Kılavuzu](docs/guides/AWX_GUIDE.md).
 
 ## Dokümantasyon
 
@@ -107,6 +107,7 @@ AWX extra vars ile yeni oluşturulan host'lar Zabbix'e disabled eklenebilir. Dev
 - `mappings/datacenters.yml`: Datacenter/proxy mapping'leri
 - `mappings/netbox_device_type_mapping.yml`: NetBox cihaz kaydından mantıksal `device_type` eşlemesi
 - `mappings/netbox_platform_mapping.yml`: NetBox platform üreticisi → `device_type` ve DC başına limit
+- `mappings/virtual_fw_mapping.yml`: NetBox custom-objects `virtual_fws` → `device_type` (AWX’te `sync_virtual_fws: true` ile)
 - Özet ve çapraz linkler: [docs/mappings/README.md](docs/mappings/README.md)
 
 ### Scripts

@@ -1,0 +1,33 @@
+---
+# Map NetBox custom-objects virtual firewalls to Zabbix DEVICE_TYPE (templates.yml keys).
+#
+# Rules (first matching row wins, top to bottom):
+# - vendor: required; matched against NetBox vendor.name (case-insensitive).
+# - model_prefix: optional; manufacturer_model.model must start with this (case-insensitive).
+# - model_suffix: optional; manufacturer_model.model must end with this (case-insensitive).
+#   Both prefix and suffix may be set; either may be omitted.
+# - device_type: required; must exist as a top-level key in mappings/templates.yml.
+#
+# Align vendor strings with NetBox manufacturer display names (e.g. Palo Alto may be
+# "Palo Alto Networks" instead of "PALO ALTO"); add or edit rows as needed.
+
+mappings:
+  # Fortinet virtual FW with model starting with VM → SNMP template
+  - vendor: "FORTINET"
+    model_prefix: "VM"
+    device_type: "Fortinet Virtual Firewall VM"
+
+  # # Other Fortinet virtual FW models → HTTP API template (existing)
+  # - vendor: "FORTINET"
+  #   device_type: "Fortinet Firewall"
+
+  # Sophos → SNMPv2 XG template (see Sophos Firewall in templates.yml)
+  - vendor: "SOPHOS"
+    device_type: "Sophos Virtual Firewall"
+
+  # Palo Alto — use the row that matches NetBox vendor.name (case-insensitive)
+  - vendor: "PALO ALTO"
+    device_type: "Palo Alto Firewall"
+
+  - vendor: "Palo Alto Networks"
+    device_type: "Palo Alto Virtual Firewall"

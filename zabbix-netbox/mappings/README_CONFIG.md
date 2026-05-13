@@ -412,6 +412,26 @@ Common paths you can use:
 - `tags` - Array of tags
 - `custom_fields.FIELD_NAME` - Custom field value
 
+## Virtual firewalls (`virtual_fw_mapping.yml`)
+
+NetBox **custom-objects** endpoint `virtual_fws` (filtered to `fw_status=active` in the fetch script) is mapped to Zabbix `device_type` keys in `templates.yml`.
+
+**Location:** `zabbix-netbox/mappings/virtual_fw_mapping.yml`
+
+**Structure:**
+
+```yaml
+mappings:
+  - vendor: "SOPHOS"           # required; matches NetBox vendor.name (case-insensitive)
+    model_prefix: "XG"        # optional
+    model_suffix: "w"         # optional; both prefix/suffix may be omitted or combined
+    device_type: "Sophos Firewall"   # must match a top-level key in templates.yml
+```
+
+**Runtime flags (role defaults):** `sync_virtual_fws`, `create_virtual_fws_disabled`, `virtual_fw_mapping_path`.
+
+**Zabbix host identity:** technical `host` uses filter `zabbix_vfw_technical_hostname` with suffix `_VFW_<id>`; tag `Loki_ID` is `VFW_<id>`. Interface port follows `template_types.yml` from the chosen template type; NetBox `ip_port` is parsed as **IPv4:port** (first `:` only); the numeric port is stored as a **tag** (`Port`) only, not as the Zabbix interface port.
+
 ## Multiple Zabbix templates (`templates.yml`)
 
 - Top-level keys must match `device_type` values from `netbox_device_type_mapping.yml`.

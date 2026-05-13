@@ -265,6 +265,13 @@ Edge-Core Management Switch:
     type: snmpv2
     host_groups: 
       - "Network Devices"
+# Virtual FortiGate (NetBox virtual_fws) — model prefix VM in virtual_fw_mapping.yml
+Fortinet Virtual Firewall VM:
+  - name: BLT - Template Net Fortinet FortiGate SNMP
+    type: snmpv2
+    host_groups:
+      - "Network Devices"
+      - "Virtual Firewall"
 Fortinet Firewall:
   - name: BLT - FortiGate by HTTP
     type: API
@@ -384,6 +391,12 @@ Palo Alto Firewall:
     type: snmpv2
     host_groups: 
       - "Network Devices"
+Palo Alto Virtual Firewall:
+  - name: BLT - Palo Alto SNMPv2 64-bit counters
+    type: snmpv2
+    host_groups:
+      - "Network Devices"
+      - "Virtual Firewall"
 Raritan Switch:
   - name: unknown
     type: snmpv2
@@ -399,6 +412,12 @@ Sophos Firewall:
     type: snmpv2
     host_groups: 
       - "Network Devices"
+Sophos Virtual Firewall:
+  - name: BLT - Sophos XG FW 18 SNMPv2
+    type: snmpv2
+    host_groups: 
+      - "Network Devices"
+      - "Virtual Firewall"
 Thales Firewall:
   - name: unknown
     type: snmpv2
@@ -502,3 +521,11 @@ Acropolis:
       "{$NUTANIX.PASSWORD}": "2u4Mzf7RJC"
       "{$NUTANIX.PRISM.ELEMENT.IP}": "{HOST.IP}"
       "{$NUTANIX.PRISM.ELEMENT.PORT}": "9440"
+
+# # Placeholder logical type for NetBox custom-objects virtual firewalls (virtual_fw_mapping.yml).
+# # Point new vendor rows to this key until a dedicated Zabbix template is confirmed.
+# Virtual Firewall Default:
+#   - name: unknown
+#     type: agent
+#     host_groups:
+#       - "Network Devices"

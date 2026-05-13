@@ -869,7 +869,7 @@
     - zbx_existing_host.hostid is defined
     - _missing_params | default([]) | length == 0
 
-- name: Build merged host tags for PLATFORM updates (existing Zabbix tags + desired NetBox tags)
+- name: Build merged host tags for PLATFORM or VIRTUAL_FW updates (existing Zabbix tags + desired NetBox tags)
   set_fact:
     zbx_merged_update_tags: >-
       {%- set m = {} -%}
@@ -892,9 +892,9 @@
     - zbx_scenario == 'update'
     - zbx_existing_host is defined
     - zbx_existing_host.hostid is defined
-    - zbx_record.DEVICE_ROLE | default('') == 'PLATFORM'
+    - zbx_record.DEVICE_ROLE | default('') in ['PLATFORM', 'VIRTUAL_FW']
 
-- name: Detect whether PLATFORM host tags differ from merged target
+- name: Detect whether PLATFORM or VIRTUAL_FW host tags differ from merged target
   set_fact:
     _existing_tag_map_for_cmp: >-
       {%- set m = {} -%}
@@ -917,7 +917,7 @@
     - zbx_scenario == 'update'
     - zbx_existing_host is defined
     - zbx_existing_host.hostid is defined
-    - zbx_record.DEVICE_ROLE | default('') == 'PLATFORM'
+    - zbx_record.DEVICE_ROLE | default('') in ['PLATFORM', 'VIRTUAL_FW']
     - zbx_merged_update_tags is defined
 
 - name: Check if update is needed (compare with existing values)
@@ -980,7 +980,7 @@
     - _missing_params | default([]) | length == 0
     - _needs_update | default(true) | bool
 
-- name: Update existing host (scenario update — continuous fields; PLATFORM merges tags)
+- name: Update existing host (scenario update — continuous fields; PLATFORM/VIRTUAL_FW merge tags)
   uri:
     url: "{{ zabbix_url }}"
     method: POST
@@ -997,7 +997,7 @@
         macros: "{{ zbx_host_macros_formatted_update if (zbx_host_macros_formatted_update is defined and zbx_host_macros_formatted_update | length > 0) else omit }}"
         monitored_by: "{{ zbx_monitored_by | int }}"
         proxy_groupid: "{{ zbx_proxy_group_id | default('0') | int }}"
-        tags: "{{ zbx_merged_update_tags if (zbx_record.DEVICE_ROLE | default('') == 'PLATFORM' and (_platform_tags_needs_update | default(false) | bool) and zbx_merged_update_tags is defined and (zbx_merged_update_tags | length) > 0) else omit }}"
+        tags: "{{ zbx_merged_update_tags if (zbx_record.DEVICE_ROLE | default('') in ['PLATFORM', 'VIRTUAL_FW'] and (_platform_tags_needs_update | default(false) | bool) and zbx_merged_update_tags is defined and (zbx_merged_update_tags | length) > 0) else omit }}"
       auth: "{{ zabbix_auth }}"
       id: 2
   register: zbx_update_resp
@@ -1061,7 +1061,7 @@
         {%- endif -%}
       {%- endif -%}
       {%- if _platform_tags_needs_update | default(false) | bool -%}
-        {%- set _ = fields.append('Host tags (PLATFORM)') -%}
+        {%- set _ = fields.append('Host tags (NetBox-managed)') -%}
       {%- endif -%}
       {{ fields | join(', ') }}
   when:

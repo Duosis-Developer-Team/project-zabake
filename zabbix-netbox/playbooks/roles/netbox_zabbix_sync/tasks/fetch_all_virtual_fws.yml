@@ -1,0 +1,115 @@
+---
+- name: Create Python script to fetch virtual firewalls (fw_status=active)
+  copy:
+    content: |
+      #!/usr/bin/env python3
+      import json
+      import sys
+      import requests
+      from urllib3.exceptions import InsecureRequestWarning
+
+      requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+
+      netbox_url = sys.argv[1].rstrip("/")
+      netbox_token = sys.argv[2]
+      verify_ssl = sys.argv[3].lower() == "true"
+      location_filter = (sys.argv[4] if len(sys.argv) > 4 else "").strip()
+
+      session = requests.Session()
+      session.headers.update(
+          {
+              "Authorization": f"Token {netbox_token}",
+              "Accept": "application/json",
+          }
+      )
+
+      def fetch_active_virtual_fws():
+          results = []
+          base_url = (
+              f"{netbox_url}/api/plugins/custom-objects/virtual_fws/"
+              f"?limit=100&fw_status=active"
+          )
+          next_url = base_url
+          print(f"DEBUG: NetBox virtual_fws API URL: {base_url}", file=sys.stderr)
+          while next_url:
+              resp = session.get(next_url, verify=verify_ssl, timeout=30)
+              resp.raise_for_status()
+              data = resp.json()
+              page_results = data.get("results", [])
+              print(
+                  f"DEBUG: Fetched {len(page_results)} virtual firewalls from this page",
+                  file=sys.stderr,
+              )
+              results.extend(page_results)
+              next_url = data.get("next")
+          print(
+              f"DEBUG: Total virtual firewalls (active) from NetBox: {len(results)}",
+              file=sys.stderr,
+          )
+          return results
+
+      def location_matches(fw, needle):
+          if not needle:
+              return True
+          loc = fw.get("lokasyon") or {}
+          name = (loc.get("name") or loc.get("slug") or "").strip().lower()
+          return needle in name
+
+      all_fws = fetch_active_virtual_fws()
+      needle = location_filter.lower()
+      if needle:
+          before = len(all_fws)
+          all_fws = [fw for fw in all_fws if location_matches(fw, needle)]
+          print(
+              f"DEBUG: location_filter='{location_filter}': {before} -> {len(all_fws)} virtual firewalls",
+              file=sys.stderr,
+          )
+
+      seen_ids = set()
+      deduped = []
+      for fw in all_fws:
+          fid = fw.get("id")
+          if fid is None or fid in seen_ids:
+              continue
+          seen_ids.add(fid)
+          deduped.append(fw)
+
+      result = {
+          "virtual_fws": deduped,
+          "virtual_fws_count": len(deduped),
+      }
+      print(json.dumps(result))
+    dest: "/tmp/fetch_all_netbox_virtual_fws.py"
+    mode: "0755"
+  delegate_to: localhost
+  run_once: true
+
+- name: Run virtual firewall fetch script
+  command: >
+    python3 /tmp/fetch_all_netbox_virtual_fws.py
+    "{{ netbox_url }}"
+    "{{ netbox_token }}"
+    "{{ netbox_verify_ssl | string }}"
+    "{{ location_filter | default('') | string }}"
+  register: fetch_virtual_fws_result
+  changed_when: false
+  delegate_to: localhost
+
+- name: Display virtual FW fetch script stderr
+  debug:
+    msg: "{{ fetch_virtual_fws_result.stderr_lines | default([]) | join('\n') }}"
+  when: fetch_virtual_fws_result.stderr_lines is defined and fetch_virtual_fws_result.stderr_lines | length > 0
+
+- name: Parse fetched virtual firewalls
+  set_fact:
+    netbox_virtual_fws_raw: "{{ (fetch_virtual_fws_result.stdout | from_json).virtual_fws }}"
+    netbox_virtual_fws_count: "{{ (fetch_virtual_fws_result.stdout | from_json).virtual_fws_count }}"
+
+- name: Display virtual firewalls fetch results
+  debug:
+    msg: |
+      ============================================
+      NETBOX VIRTUAL FIREWALLS FETCH RESULTS
+      ============================================
+      Active virtual firewalls count: {{ netbox_virtual_fws_count }}
+      ============================================

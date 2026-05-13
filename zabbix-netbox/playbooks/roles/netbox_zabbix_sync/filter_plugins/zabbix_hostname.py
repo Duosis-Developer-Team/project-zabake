@@ -90,6 +90,80 @@ def _truncate_and_sanitize(s: str) -> str:
     return s
 
 
+def parse_virtual_fw_ip_port(value):
+    """
+    Split NetBox virtual_fw ip_port string into IP and port.
+
+    Expected form for management access is ``IPv4:port`` (single colon). If the part
+    after the first colon is all digits, it is returned as ``port``; otherwise the
+    whole string is treated as ``ip`` and ``port`` is empty (e.g. IPv6 literals).
+    """
+    s = (value or "").strip()
+    if not s:
+        return {"ip": "", "port": ""}
+    if ":" not in s:
+        return {"ip": s, "port": ""}
+    host_part, rest = s.split(":", 1)
+    rest = rest.strip()
+    if rest.isdigit() and host_part.strip() != "":
+        return {"ip": host_part.strip(), "port": rest}
+    return {"ip": s, "port": ""}
+
+
+def virtual_fw_mapping_match(entries, vendor_name="", model_name=""):
+    """
+    Return first mapping dict from entries that matches vendor (required, case-insensitive)
+    and optional model_prefix / model_suffix against model_name (case-insensitive).
+    """
+    if not entries:
+        return {}
+    vn = (vendor_name or "").strip().lower()
+    ml = (model_name or "").strip().lower()
+    for e in entries:
+        if not isinstance(e, dict):
+            continue
+        v = str(e.get("vendor", "")).strip().lower()
+        if v != vn:
+            continue
+        prefix = e.get("model_prefix")
+        suffix = e.get("model_suffix")
+        ok = True
+        if prefix is not None and str(prefix).strip() != "":
+            if not ml.startswith(str(prefix).strip().lower()):
+                ok = False
+        if ok and suffix is not None and str(suffix).strip() != "":
+            if not ml.endswith(str(suffix).strip().lower()):
+                ok = False
+        if ok:
+            return e
+    return {}
+
+
+def zabbix_vfw_technical_hostname(text, vfw_id=""):
+    """
+    Zabbix technical host for NetBox virtual firewalls: ASCII slug plus _VFW_<id> suffix.
+    """
+    sid = str(vfw_id).strip() if vfw_id is not None else ""
+    suffix = f"_VFW_{sid}" if sid else ""
+    base_slug = zabbix_technical_hostname(text, "")
+    if not suffix:
+        return base_slug or "host"
+    if not base_slug:
+        return zabbix_technical_hostname("", f"VFW_{sid}")
+    suf_low = suffix.lower()
+    if base_slug.lower().endswith(suf_low):
+        out = _truncate_and_sanitize(base_slug)
+        return out[:_MAX_HOST_LEN]
+    max_base = _MAX_HOST_LEN - len(suffix)
+    if max_base < 1:
+        return _truncate_and_sanitize(suffix)[:_MAX_HOST_LEN]
+    truncated = base_slug[:max_base].rstrip("._-")
+    if not truncated:
+        return zabbix_technical_hostname("", f"VFW_{sid}")
+    merged = truncated + suffix
+    return _truncate_and_sanitize(merged)[:_MAX_HOST_LEN]
+
+
 def zabbix_platform_technical_hostname(text, platform_id=""):
     """
     Zabbix technical host for NetBox platforms: ASCII slug from name plus _P_<id> suffix
@@ -123,6 +197,9 @@ class FilterModule:
         return {
             "zabbix_technical_hostname": self._filter_zabbix_technical_hostname,
             "zabbix_platform_technical_hostname": self._filter_zabbix_platform_technical_hostname,
+            "zabbix_vfw_technical_hostname": self._filter_zabbix_vfw_technical_hostname,
+            "parse_virtual_fw_ip_port": self._filter_parse_virtual_fw_ip_port,
+            "virtual_fw_mapping_match": self._filter_virtual_fw_mapping_match,
         }
 
     def _filter_zabbix_technical_hostname(self, value, fallback_id=""):
@@ -130,3 +207,12 @@ class FilterModule:
 
     def _filter_zabbix_platform_technical_hostname(self, value, platform_id=""):
         return zabbix_platform_technical_hostname(value, platform_id)
+
+    def _filter_zabbix_vfw_technical_hostname(self, value, vfw_id=""):
+        return zabbix_vfw_technical_hostname(value, vfw_id)
+
+    def _filter_parse_virtual_fw_ip_port(self, value):
+        return parse_virtual_fw_ip_port(value)
+
+    def _filter_virtual_fw_mapping_match(self, entries, vendor_name="", model_name=""):
+        return virtual_fw_mapping_match(entries, vendor_name, model_name)

@@ -20,6 +20,8 @@
     # Optional: create hosts as disabled in Zabbix
     _create_devices_disabled: "{{ create_devices_disabled | default(false) }}"
     _create_platforms_disabled: "{{ create_platforms_disabled | default(false) }}"
+    _create_virtual_fws_disabled: "{{ create_virtual_fws_disabled | default(false) }}"
+    _sync_virtual_fws: "{{ sync_virtual_fws | default(false) }}"
     
     # Email notification settings (optional)
     _mail_recipients: "{{ mail_recipients | default([]) }}"
@@ -67,5 +69,7 @@
         location_filter: "{{ _location_filter }}"
         create_devices_disabled: "{{ _create_devices_disabled }}"
         create_platforms_disabled: "{{ _create_platforms_disabled }}"
+        create_virtual_fws_disabled: "{{ _create_virtual_fws_disabled }}"
+        sync_virtual_fws: "{{ _sync_virtual_fws }}"
         mail_recipients: "{{ _mail_recipients }}"
         # Note: Device filtering is now based on conditions in netbox_device_type_mapping.yml
