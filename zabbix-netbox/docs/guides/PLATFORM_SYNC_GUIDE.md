@@ -20,7 +20,7 @@ NetBox /api/dcim/platforms/
           │
           ▼
   process_platform.yml
-  ─ reads netbox_platform_mapping.yml  → resolves device_type + limit_per_dc
+  ─ reads netbox_platform_mapping.yml  → resolves device_type + limit_per_dc (+ optional name/site + priority)
   ─ reads templates.yml                → resolves Zabbix template list
   ─ validates IP, site code, DC limit
           │
@@ -42,7 +42,7 @@ NetBox /api/dcim/platforms/
 
 | File | Role |
 |------|------|
-| `mappings/netbox_platform_mapping.yml` | Maps NetBox platform manufacturer → Zabbix device_type and per-DC limit |
+| `mappings/netbox_platform_mapping.yml` | Maps NetBox platform manufacturer (+ optional name/site rules) → Zabbix device_type and per-DC limit |
 | `mappings/templates.yml` | Maps device_type → list of Zabbix templates to assign |
 | `mappings/template_types.yml` | Maps template type string (e.g. `snmpv2`) → Zabbix interface definition |
 | `playbooks/roles/netbox_zabbix_sync/defaults/main.yml` | Contains `sync_devices: true`, `sync_platforms: false` defaults |
@@ -136,10 +136,13 @@ Located at `mappings/netbox_platform_mapping.yml`.
 # - manufacturer: NetBox platform.manufacturer.name (case-insensitive match)
 # - device_type:  Key in templates.yml that defines Zabbix templates
 # - limit_per_dc: Maximum number of platforms per DC for this device_type (0 or missing = no limit)
+# - priority: Lower number = evaluated first (recommended explicit value per row)
+# - name_contains / site_contains / match_logic: optional substring rules (platforms have no tenant field)
 
 mappings:
   - manufacturer: "Nutanix"
     device_type: "Nutanix"
+    priority: 999
     limit_per_dc: 1
 ```
 
@@ -150,8 +153,16 @@ mappings:
 | `manufacturer` | string | Yes | Must match `platform.manufacturer.name` in NetBox (case-insensitive) |
 | `device_type` | string | Yes | Must exactly match a top-level key in `templates.yml` |
 | `limit_per_dc` | integer | No | Maximum platforms of this type per **normalized** DC code (first `(DC|AZ|ICT|UZ)[0-9]+` from Site/DC). `0` or omitted = no limit |
+| `priority` | integer | No | Lower = evaluated first. Default in Ansible logic is `999` if omitted |
+| `name_contains` | string | No | Case-insensitive substring on NetBox platform **name**; omit or empty = no constraint |
+| `site_contains` | string | No | Case-insensitive substring on **Site** label (`custom_fields.Site` → `platform_site_code`); omit or empty = no constraint |
+| `match_logic` | string | No | `and` (default) or `or` — combines `name_contains` and `site_contains` when both are set |
 
 > **Important:** The `device_type` value must have a corresponding top-level key in `templates.yml`, otherwise the platform will fail with: `No templates found for device_type <value>`.
+
+### Customer-specific platforms (e.g. Moneygram) without a NetBox tenant
+
+NetBox **Platform** objects do not expose a tenant field like devices. For customer-specific Zabbix templates and **`proxy_group_by_dc`** (prod `DC13` vs DR `DC16`), add **two rows** for the same manufacturer: a **narrow** row with `name_contains` / `site_contains` / `match_logic: or` and **`priority: 1`**, plus a **fallback** row with only `manufacturer` + `device_type` and **`priority: 999`**. Example: `VMware` → `VMware Moneygram` vs `VMware` in [`mappings/netbox_platform_mapping.yml`](../../mappings/netbox_platform_mapping.yml) and `VMware Moneygram` in [`mappings/templates.yml`](../../mappings/templates.yml). Keep mapping selection in sync with [`tests/test_platform_mapping.py`](../../tests/test_platform_mapping.py).
 
 ---
 

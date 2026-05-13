@@ -145,9 +145,35 @@
   run_once: true
   delegate_to: localhost
 
-- name: Find mapping for platform manufacturer
+- name: Find mapping for platform manufacturer (with optional name/site conditions and priority)
   set_fact:
-    platform_mapping_entry: "{{ (platform_mapping.mappings | default([]) | selectattr('manufacturer', 'defined') | selectattr('manufacturer', 'match', '(?i)^' + (platform_manufacturer_name | string | regex_escape) + '$') | list | first) | default(none, true) }}"
+    platform_mapping_entry: >-
+      {%- set ns = namespace(entry=none) -%}
+      {%- set _name = (platform_name | default('', true) | string) | lower -%}
+      {%- set _site = (platform_site_code | default('', true) | string) | lower -%}
+      {%- set candidates = platform_mapping.mappings | default([])
+          | selectattr('manufacturer', 'defined')
+          | selectattr('manufacturer', 'match', '(?i)^' + (platform_manufacturer_name | string | regex_escape) + '$')
+          | list
+          | sort(attribute='priority') -%}
+      {%- for m in candidates -%}
+        {%- if ns.entry is none -%}
+          {%- set nc = (m.name_contains | default('')) | string | lower -%}
+          {%- set sc = (m.site_contains | default('')) | string | lower -%}
+          {%- set name_match = (nc == '') or (nc in _name) -%}
+          {%- set site_match = (sc == '') or (sc in _site) -%}
+          {%- set logic = (m.match_logic | default('and')) | string | lower -%}
+          {%- if logic == 'or' -%}
+            {%- set passes = name_match or site_match -%}
+          {%- else -%}
+            {%- set passes = name_match and site_match -%}
+          {%- endif -%}
+          {%- if passes -%}
+            {%- set ns.entry = m -%}
+          {%- endif -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ ns.entry }}
 
 - name: Record skipped platform when no mapping entry found
   set_fact:

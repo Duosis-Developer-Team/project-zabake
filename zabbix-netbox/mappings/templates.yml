@@ -487,6 +487,20 @@ Veeam:
       "{$VEEAM.USER}": "zabbix@blt.vc"
       "{$VEEAM.PASSWORD}": "2u4Mzf7RJC"
 
+VMware Moneygram:
+  - name: BLT - Intel Virtualization
+    type: API
+    host_groups:
+      - "Virtual Infrastructure"
+      - "Moneygram"
+    proxy_group_by_dc:
+      DC13: "Moneygram-prod-proxy Group"
+      DC16: "Moneygram-dr-proxy Group"
+    macros:
+      "{$VMWARE.URL}": "https://{HOST.IP}/sdk"
+      "{$VMWARE.USERNAME}": "zabbix@blt.vc"
+      "{$VMWARE.PASSWORD}": "2u4Mzf7RJC"
+
 VMware:
   - name: BLT - Intel Virtualization
     type: API

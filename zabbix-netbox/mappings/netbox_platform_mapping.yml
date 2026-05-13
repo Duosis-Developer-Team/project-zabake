@@ -5,33 +5,51 @@
 # - device_type:  Key in templates.yml that defines Zabbix templates
 # - limit_per_dc: Max platforms per logical DC for this device_type (0 or missing = no limit).
 #   Counting uses the first (DC|AZ|ICT|UZ)[0-9]+ match from Site/DC (e.g. DC13-G12 -> DC13), not the full Site string.
+# - priority: Lower number = evaluated first (default 999 if omitted in Ansible; prefer explicit for clarity).
+# - name_contains / site_contains: Optional case-insensitive substring checks on platform name and custom_fields Site.
+# - match_logic: "and" (default) or "or" — how name_contains and site_contains combine when both are non-empty.
 
 mappings:
   - manufacturer: "Nutanix"
     device_type: "Nutanix"
+    priority: 999
     limit_per_dc: 0
 
   - manufacturer: "Acropolis"
     device_type: "Acropolis"
+    priority: 999
     limit_per_dc: 0
 
   - manufacturer: "Zerto"
     device_type: "Zerto"
+    priority: 999
     limit_per_dc: 0
 
   - manufacturer: "Netbackup"
     device_type: "NetBackup"
+    priority: 999
     limit_per_dc: 0
 
   - manufacturer: "Veeam"
     device_type: "Veeam"
+    priority: 999
+    limit_per_dc: 0
+
+  # Moneygram: no tenant on platforms — match by name OR custom_fields Site substring (see process_platform.yml).
+  - manufacturer: "VMware"
+    device_type: "VMware Moneygram"
+    name_contains: "moneygram"
+    site_contains: "moneygram"
+    match_logic: "or"
+    priority: 1
     limit_per_dc: 0
 
   - manufacturer: "VMware"
     device_type: "VMware"
+    priority: 999
     limit_per_dc: 0
 
   - manufacturer: "IBM HMC"
     device_type: "IBM Virtualization"
+    priority: 999
     limit_per_dc: 0
-

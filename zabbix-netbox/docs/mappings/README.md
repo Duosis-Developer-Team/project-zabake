@@ -34,7 +34,7 @@ flowchart LR
 | File | Purpose | Typical changes |
 |------|---------|-----------------|
 | [`mappings/netbox_device_type_mapping.yml`](../../mappings/netbox_device_type_mapping.yml) | Map NetBox **device** records to a logical `device_type` string | New manufacturer / model / role rules; optional `tenant` / `tenants` for customer-specific types; `hostname_prefix` / `hostname_suffix`; `priority` ordering |
-| [`mappings/netbox_platform_mapping.yml`](../../mappings/netbox_platform_mapping.yml) | Map NetBox **`platform.manufacturer.name`** to `device_type` and optional **per-DC limits** | New virtualization / backup platform rows; `limit_per_dc` (`0` or omitted = no limit) |
+| [`mappings/netbox_platform_mapping.yml`](../../mappings/netbox_platform_mapping.yml) | Map NetBox **`platform.manufacturer.name`** to `device_type` and optional **per-DC limits**; optional **name/site** substring rules and **priority** (e.g. Moneygram-specific VMware row) | New virtualization / backup platform rows; `limit_per_dc` (`0` or omitted = no limit); `priority`, `name_contains`, `site_contains`, `match_logic` |
 | [`mappings/virtual_fw_mapping.yml`](../../mappings/virtual_fw_mapping.yml) | Map NetBox **custom-objects `virtual_fws`** (`vendor.name` + optional model prefix/suffix) to `device_type` | New firewall vendors/models; enable with role flag `sync_virtual_fws` |
 | [`mappings/templates.yml`](../../mappings/templates.yml) | Map `device_type` → list of Zabbix templates, interface `type`, macros, extra host groups | Multiple templates per type; `macros` with `{HOST.IP}` / `{HOST.NAME}`; `host_groups`; `proxy_group_by_dc` |
 
@@ -56,8 +56,11 @@ flowchart LR
 
 ### `netbox_platform_mapping.yml`
 
-- **Match:** `manufacturer` is matched against NetBox platform manufacturer with a **case-insensitive full-string** regex (`(?i)^...$`) in [`process_platform.yml`](../../playbooks/roles/netbox_zabbix_sync/tasks/process_platform.yml).
-- **Fields:** `manufacturer` (required), `device_type` (required; must match a `templates.yml` key), `limit_per_dc` (optional). DC code extraction for limits follows the comment at the top of the YAML file (first `(DC|AZ|ICT|UZ)[0-9]+` match from the Site/DC label).
+- **Manufacturer match:** `manufacturer` is matched against NetBox platform manufacturer with a **case-insensitive full-string** regex (`(?i)^...$`) in [`process_platform.yml`](../../playbooks/roles/netbox_zabbix_sync/tasks/process_platform.yml).
+- **Evaluation order:** Rows for the same manufacturer are sorted by **`priority`** (**lower number = evaluated first**). The **first** row whose optional name/site rules pass wins (same idea as device mapping `priority`).
+- **Optional name/site scope (no NetBox tenant on platforms):** When set, `name_contains` / `site_contains` are **case-insensitive substrings** on platform `name` and on the Site label used for Zabbix (`custom_fields.Site` resolved to `platform_site_code`). Empty/missing filter on a field means “no constraint” for that field. **`match_logic`:** `and` (default) or `or` — how the two substring checks combine when both are non-empty.
+- **Fields:** `manufacturer` (required), `device_type` (required; must match a `templates.yml` key), `limit_per_dc` (optional), `priority` (optional; default `999` in playbooks if omitted), `name_contains`, `site_contains`, `match_logic` (optional). DC code extraction for limits follows the comment at the top of the YAML file (first `(DC|AZ|ICT|UZ)[0-9]+` match from the Site/DC label).
+- **Moneygram / prod vs DR:** Use a dedicated `device_type` (e.g. `VMware Moneygram`) with matching [`templates.yml`](../../mappings/templates.yml) rows that define **`proxy_group_by_dc`** (`DC13` prod, `DC16` DR). `DC_ID` for platforms is the Site/DC string; [`zabbix_host_operations.yml`](../../playbooks/roles/netbox_zabbix_sync/tasks/zabbix_host_operations.yml) extracts the DC code for proxy selection. Tests: [`tests/test_platform_mapping.py`](../../tests/test_platform_mapping.py).
 
 ### `virtual_fw_mapping.yml`
 
@@ -94,6 +97,7 @@ Override these in playbook extra vars if files live outside the default layout (
 ## Related tests
 
 - Device mapping logic: [`tests/test_device_type_mapping.py`](../../tests/test_device_type_mapping.py)
+- Platform mapping logic (name/site, priority, DC code for proxy): [`tests/test_platform_mapping.py`](../../tests/test_platform_mapping.py)
 - Platform mapping YAML shape: [`tests/test_platforms_feature.py`](../../tests/test_platforms_feature.py)
 - Virtual firewall filters: [`tests/test_virtual_fw_filters.py`](../../tests/test_virtual_fw_filters.py)
 - `templates.yml` syntax / types: [`tests/test_templates_yaml_syntax.py`](../../tests/test_templates_yaml_syntax.py), [`tests/validate_yaml_syntax.py`](../../tests/validate_yaml_syntax.py)
