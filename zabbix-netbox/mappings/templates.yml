@@ -120,7 +120,7 @@ HPE Primera:
       "{$HPE.PRIMERA.API.PASSWORD}": "gUkUmZ/fh4J$6$eg$DW+"
       "{$HPE.PRIMERA.API.USERNAME}": "monitor"
 Huawei Storage:
-  - name: BLT - Huawei OceanStor 5300 V5 by SNMP
+  - name: BLT - Huawei OceanStor 5300 V5 by SNMP Original
     type: snmpv2
     host_groups: 
       - "Storage Devices"

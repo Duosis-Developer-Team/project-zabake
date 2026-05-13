@@ -262,7 +262,7 @@
               DEVICE_TYPE: "{{ platform_device_type }}"
               DEVICE_ROLE: "PLATFORM"
               HOST_IP: "{{ platform_ip }}"
-              HOSTNAME: "{{ platform_name | zabbix_technical_hostname('P_' ~ (platform_id | string)) }}"
+              HOSTNAME: "{{ platform_name | zabbix_platform_technical_hostname(platform_id | string) }}"
               HOST_VISIBLE_NAME: "{{ platform_name }}"
               DC_ID: "{{ platform_site_code }}"
               HOST_GROUPS: "{{ platform_host_groups }}"

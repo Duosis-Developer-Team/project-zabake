@@ -122,6 +122,16 @@
               file=sys.stderr,
           )
       
+      seen_ids = set()
+      deduped_platforms = []
+      for platform in output_platforms:
+          pid = platform.get("id")
+          if pid is None or pid in seen_ids:
+              continue
+          seen_ids.add(pid)
+          deduped_platforms.append(platform)
+      output_platforms = deduped_platforms
+      
       result = {
           "platforms": output_platforms,
           "platforms_count": len(output_platforms),

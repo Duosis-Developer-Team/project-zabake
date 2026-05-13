@@ -90,13 +90,43 @@ def _truncate_and_sanitize(s: str) -> str:
     return s
 
 
+def zabbix_platform_technical_hostname(text, platform_id=""):
+    """
+    Zabbix technical host for NetBox platforms: ASCII slug from name plus _P_<id> suffix
+    within max length so each platform id maps to a unique host key.
+    """
+    sid = str(platform_id).strip() if platform_id is not None else ""
+    suffix = f"_P_{sid}" if sid else ""
+    base_slug = zabbix_technical_hostname(text, "")
+    if not suffix:
+        return base_slug or "host"
+    if not base_slug:
+        return zabbix_technical_hostname("", f"P_{sid}")
+    suf_low = suffix.lower()
+    if base_slug.lower().endswith(suf_low):
+        out = _truncate_and_sanitize(base_slug)
+        return out[:_MAX_HOST_LEN]
+    max_base = _MAX_HOST_LEN - len(suffix)
+    if max_base < 1:
+        return _truncate_and_sanitize(suffix)[:_MAX_HOST_LEN]
+    truncated = base_slug[:max_base].rstrip("._-")
+    if not truncated:
+        return zabbix_technical_hostname("", f"P_{sid}")
+    merged = truncated + suffix
+    return _truncate_and_sanitize(merged)[:_MAX_HOST_LEN]
+
+
 class FilterModule:
     """Ansible filter plugin registration."""
 
     def filters(self):
         return {
             "zabbix_technical_hostname": self._filter_zabbix_technical_hostname,
+            "zabbix_platform_technical_hostname": self._filter_zabbix_platform_technical_hostname,
         }
 
     def _filter_zabbix_technical_hostname(self, value, fallback_id=""):
         return zabbix_technical_hostname(value, fallback_id)
+
+    def _filter_zabbix_platform_technical_hostname(self, value, platform_id=""):
+        return zabbix_platform_technical_hostname(value, platform_id)

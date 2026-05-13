@@ -55,3 +55,30 @@ def test_filter_module_registers():
     mod = _load_module()
     fm = mod.FilterModule()
     assert "zabbix_technical_hostname" in fm.filters()
+    assert "zabbix_platform_technical_hostname" in fm.filters()
+
+
+def test_platform_technical_hostname_appends_id_suffix():
+    mod = _load_module()
+    fn = mod.zabbix_platform_technical_hostname
+    out = fn("My-Cluster-Name", "117")
+    assert out.endswith("_P_117")
+    assert len(out) <= 128
+
+
+def test_platform_technical_hostname_unique_for_same_name_different_id():
+    mod = _load_module()
+    fn = mod.zabbix_platform_technical_hostname
+    a = fn("Same-Name", "1")
+    b = fn("Same-Name", "2")
+    assert a != b
+    assert a.endswith("_P_1")
+    assert b.endswith("_P_2")
+
+
+def test_platform_technical_hostname_idempotent_when_suffix_present():
+    mod = _load_module()
+    fn = mod.zabbix_platform_technical_hostname
+    base = fn("Short", "99")
+    assert base.endswith("_P_99")
+    assert fn(base, "99") == base

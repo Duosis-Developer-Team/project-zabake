@@ -7,6 +7,8 @@
     _needs_update: false
     _updated_fields: ""
     zbx_dup_loki: ""
+    _platform_tags_needs_update: false
+    zbx_merged_update_tags: []
   run_once: false
 
 - name: Load mappings
@@ -535,45 +537,6 @@
     - zbx_create_resp.json.result is defined
     - zbx_create_resp.json.error is not defined
 
-- name: Record create failure
-  set_fact:
-    device_result:
-      hostname: "{{ zbx_host_visible_name }}"
-      device_role: "{{ zbx_record.DEVICE_ROLE | default('N/A') }}"
-      status: "eklenemedi"
-      reason: "{{ zbx_create_resp.json.error.message | default('Bilinmeyen hata') }}{{ (' — ' ~ (zbx_create_resp.json.error.data | string)) if (zbx_create_resp.json.error.data is defined and (zbx_create_resp.json.error.data | string | length) > 0) else '' }}"
-      error_data: "{{ zbx_create_resp.json.error.data | default('') }}"
-      error_code: "{{ zbx_create_resp.json.error.code | default('') }}"
-      ip: "{{ zbx_record.HOST_IP }}"
-      location: "{{ zbx_record.REPORT_LOCATION | default('N/A', true) }}"
-      site: "{{ zbx_record.REPORT_SITE | default('N/A', true) }}"
-      tenant: "{{ zbx_record.REPORT_TENANT | default('N/A', true) }}"
-      ownership: "{{ zbx_record.REPORT_OWNERSHIP | default('N/A', true) }}"
-  when:
-    - zbx_scenario == 'create'
-    - _missing_params | default([]) | length == 0
-    - zbx_create_resp.json.error is defined
-
-- name: Debug - Show detailed create error
-  debug:
-    msg: |
-      ========================================
-      ZABBIX API CREATE ERROR
-      ========================================
-      Host: {{ zbx_record.HOSTNAME }} (display: {{ zbx_host_visible_name }})
-      IP: {{ zbx_record.HOST_IP }}
-      Error Message: {{ zbx_create_resp.json.error.message | default('N/A') }}
-      Error Code: {{ zbx_create_resp.json.error.code | default('N/A') }}
-      Error Data: {{ zbx_create_resp.json.error.data | default('N/A') | to_nice_json }}
-      ========================================
-      FULL RESPONSE:
-      {{ zbx_create_resp.json | to_nice_json }}
-      ========================================
-  when:
-    - zbx_scenario == 'create'
-    - _missing_params | default([]) | length == 0
-    - zbx_create_resp.json.error is defined
-
 - name: On duplicate host create error, capture Loki_ID from tags for resolution
   set_fact:
     zbx_dup_loki: "{{ zbx_tags | default([]) | selectattr('tag', 'equalto', 'Loki_ID') | map(attribute='value') | list | first | default('', true) | string }}"
@@ -634,6 +597,148 @@
     - zabbix_hosts_by_visible_name.get(zbx_host_visible_name) is not none
     - zabbix_hosts_by_visible_name.get(zbx_host_visible_name) != None
     - zabbix_hosts_by_visible_name.get(zbx_host_visible_name).hostid is defined
+
+- name: Duplicate create recovery — query Zabbix host by technical name (live API)
+  uri:
+    url: "{{ zabbix_url }}"
+    method: POST
+    body_format: json
+    validate_certs: "{{ zabbix_validate_certs | default(false) }}"
+    body:
+      jsonrpc: "2.0"
+      method: "host.get"
+      params:
+        output: ["hostid", "host", "name", "monitored_by", "proxy_groupid"]
+        selectInterfaces: "extend"
+        selectTags: "extend"
+        selectGroups: ["groupid", "name"]
+        filter:
+          host:
+            - "{{ zbx_record.HOSTNAME }}"
+      auth: "{{ zabbix_auth }}"
+      id: 101
+  register: zbx_dup_lookup_tech
+  failed_when: false
+  when:
+    - zbx_scenario == 'create'
+    - zbx_create_resp.json.error is defined
+    - _missing_params | default([]) | length == 0
+    - >-
+      (zbx_create_resp.json.error.message | default('')) is search('already exists')
+      or (zbx_create_resp.json.error.data | default('') | string) is search('already exists')
+    - zbx_record.HOSTNAME is defined
+    - zbx_record.HOSTNAME | string | length > 0
+
+- name: Duplicate create recovery — apply technical name host.get result
+  set_fact:
+    zbx_scenario: "update"
+    zbx_existing_host: "{{ zbx_dup_lookup_tech.json.result[0] }}"
+  when:
+    - zbx_scenario == 'create'
+    - zbx_create_resp.json.error is defined
+    - _missing_params | default([]) | length == 0
+    - >-
+      (zbx_create_resp.json.error.message | default('')) is search('already exists')
+      or (zbx_create_resp.json.error.data | default('') | string) is search('already exists')
+    - zbx_dup_lookup_tech is defined
+    - zbx_dup_lookup_tech.json is defined
+    - zbx_dup_lookup_tech.json.result is defined
+    - (zbx_dup_lookup_tech.json.result | length) > 0
+    - zbx_dup_lookup_tech.json.result[0].hostid is defined
+
+- name: Duplicate create recovery — query Zabbix host by visible name (live API)
+  uri:
+    url: "{{ zabbix_url }}"
+    method: POST
+    body_format: json
+    validate_certs: "{{ zabbix_validate_certs | default(false) }}"
+    body:
+      jsonrpc: "2.0"
+      method: "host.get"
+      params:
+        output: ["hostid", "host", "name", "monitored_by", "proxy_groupid"]
+        selectInterfaces: "extend"
+        selectTags: "extend"
+        selectGroups: ["groupid", "name"]
+        filter:
+          name:
+            - "{{ zbx_host_visible_name }}"
+      auth: "{{ zabbix_auth }}"
+      id: 102
+  register: zbx_dup_lookup_vis
+  failed_when: false
+  when:
+    - zbx_scenario == 'create'
+    - zbx_create_resp.json.error is defined
+    - _missing_params | default([]) | length == 0
+    - >-
+      (zbx_create_resp.json.error.message | default('')) is search('already exists')
+      or (zbx_create_resp.json.error.data | default('') | string) is search('already exists')
+    - zbx_host_visible_name is defined
+    - zbx_host_visible_name | string | length > 0
+    - >-
+      (zbx_dup_lookup_tech.skipped | default(false)) | bool
+      or (
+        zbx_dup_lookup_tech.json is defined
+        and zbx_dup_lookup_tech.json.result is defined
+        and (zbx_dup_lookup_tech.json.result | length) == 0
+      )
+
+- name: Duplicate create recovery — apply visible name host.get result
+  set_fact:
+    zbx_scenario: "update"
+    zbx_existing_host: "{{ zbx_dup_lookup_vis.json.result[0] }}"
+  when:
+    - zbx_scenario == 'create'
+    - zbx_create_resp.json.error is defined
+    - _missing_params | default([]) | length == 0
+    - >-
+      (zbx_create_resp.json.error.message | default('')) is search('already exists')
+      or (zbx_create_resp.json.error.data | default('') | string) is search('already exists')
+    - zbx_dup_lookup_vis is defined
+    - zbx_dup_lookup_vis.json is defined
+    - zbx_dup_lookup_vis.json.result is defined
+    - (zbx_dup_lookup_vis.json.result | length) > 0
+    - zbx_dup_lookup_vis.json.result[0].hostid is defined
+
+- name: Record create failure (after duplicate recovery attempts)
+  set_fact:
+    device_result:
+      hostname: "{{ zbx_host_visible_name }}"
+      device_role: "{{ zbx_record.DEVICE_ROLE | default('N/A') }}"
+      status: "eklenemedi"
+      reason: "{{ zbx_create_resp.json.error.message | default('Bilinmeyen hata') }}{{ (' — ' ~ (zbx_create_resp.json.error.data | string)) if (zbx_create_resp.json.error.data is defined and (zbx_create_resp.json.error.data | string | length) > 0) else '' }}"
+      error_data: "{{ zbx_create_resp.json.error.data | default('') }}"
+      error_code: "{{ zbx_create_resp.json.error.code | default('') }}"
+      ip: "{{ zbx_record.HOST_IP }}"
+      location: "{{ zbx_record.REPORT_LOCATION | default('N/A', true) }}"
+      site: "{{ zbx_record.REPORT_SITE | default('N/A', true) }}"
+      tenant: "{{ zbx_record.REPORT_TENANT | default('N/A', true) }}"
+      ownership: "{{ zbx_record.REPORT_OWNERSHIP | default('N/A', true) }}"
+  when:
+    - zbx_scenario == 'create'
+    - _missing_params | default([]) | length == 0
+    - zbx_create_resp.json.error is defined
+
+- name: Debug - Show detailed create error
+  debug:
+    msg: |
+      ========================================
+      ZABBIX API CREATE ERROR
+      ========================================
+      Host: {{ zbx_record.HOSTNAME }} (display: {{ zbx_host_visible_name }})
+      IP: {{ zbx_record.HOST_IP }}
+      Error Message: {{ zbx_create_resp.json.error.message | default('N/A') }}
+      Error Code: {{ zbx_create_resp.json.error.code | default('N/A') }}
+      Error Data: {{ zbx_create_resp.json.error.data | default('N/A') | to_nice_json }}
+      ========================================
+      FULL RESPONSE:
+      {{ zbx_create_resp.json | to_nice_json }}
+      ========================================
+  when:
+    - zbx_scenario == 'create'
+    - _missing_params | default([]) | length == 0
+    - zbx_create_resp.json.error is defined
 
 - name: Validate required parameters before update
   set_fact:
@@ -764,6 +869,57 @@
     - zbx_existing_host.hostid is defined
     - _missing_params | default([]) | length == 0
 
+- name: Build merged host tags for PLATFORM updates (existing Zabbix tags + desired NetBox tags)
+  set_fact:
+    zbx_merged_update_tags: >-
+      {%- set m = {} -%}
+      {%- for t in (zbx_existing_host.tags | default([])) -%}
+      {%- if t.tag is defined and t.value is defined -%}
+      {%- set _ = m.update({t.tag | string: t.value | string}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- for t in (zbx_tags | default([])) -%}
+      {%- if t.tag is defined and t.value is defined -%}
+      {%- set _ = m.update({t.tag | string: t.value | string}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- set out = [] -%}
+      {%- for k, v in m | dictsort -%}
+      {%- set _ = out.append({'tag': k, 'value': v}) -%}
+      {%- endfor -%}
+      {{ out }}
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host is defined
+    - zbx_existing_host.hostid is defined
+    - zbx_record.DEVICE_ROLE | default('') == 'PLATFORM'
+
+- name: Detect whether PLATFORM host tags differ from merged target
+  set_fact:
+    _existing_tag_map_for_cmp: >-
+      {%- set m = {} -%}
+      {%- for t in (zbx_existing_host.tags | default([])) -%}
+      {%- if t.tag is defined and t.value is defined -%}
+      {%- set _ = m.update({t.tag | string: t.value | string}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ m }}
+    _merged_tag_map_for_cmp: >-
+      {%- set m = {} -%}
+      {%- for item in (zbx_merged_update_tags | default([])) -%}
+      {%- if item.tag is defined and item.value is defined -%}
+      {%- set _ = m.update({item.tag | string: item.value | string}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ m }}
+    _platform_tags_needs_update: "{{ (_existing_tag_map_for_cmp | default({})) != (_merged_tag_map_for_cmp | default({})) }}"
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host is defined
+    - zbx_existing_host.hostid is defined
+    - zbx_record.DEVICE_ROLE | default('') == 'PLATFORM'
+    - zbx_merged_update_tags is defined
+
 - name: Check if update is needed (compare with existing values)
   set_fact:
     _needs_update: >-
@@ -774,7 +930,8 @@
           (zbx_existing_host.name | default('') != zbx_host_visible_name) or
           (zbx_existing_host.monitored_by | default('') | string != zbx_monitored_by | string) or
           (zbx_existing_host.proxy_groupid | default('') | string != zbx_proxy_group_id | string) or
-          (_macros_needs_update | default(false) | bool)
+          (_macros_needs_update | default(false) | bool) or
+          (_platform_tags_needs_update | default(false) | bool)
         ) | bool
       }}
   when:
@@ -823,7 +980,7 @@
     - _missing_params | default([]) | length == 0
     - _needs_update | default(true) | bool
 
-- name: Update existing host (scenario update - only continuous fields, NO TAGS)
+- name: Update existing host (scenario update — continuous fields; PLATFORM merges tags)
   uri:
     url: "{{ zabbix_url }}"
     method: POST
@@ -840,6 +997,7 @@
         macros: "{{ zbx_host_macros_formatted_update if (zbx_host_macros_formatted_update is defined and zbx_host_macros_formatted_update | length > 0) else omit }}"
         monitored_by: "{{ zbx_monitored_by | int }}"
         proxy_groupid: "{{ zbx_proxy_group_id | default('0') | int }}"
+        tags: "{{ zbx_merged_update_tags if (zbx_record.DEVICE_ROLE | default('') == 'PLATFORM' and (_platform_tags_needs_update | default(false) | bool) and zbx_merged_update_tags is defined and (zbx_merged_update_tags | length) > 0) else omit }}"
       auth: "{{ zabbix_auth }}"
       id: 2
   register: zbx_update_resp
@@ -901,6 +1059,9 @@
         {%- if changed_macros | length > 0 -%}
           {%- set _ = fields.append('Macros: ' ~ (changed_macros | join('; '))) -%}
         {%- endif -%}
+      {%- endif -%}
+      {%- if _platform_tags_needs_update | default(false) | bool -%}
+        {%- set _ = fields.append('Host tags (PLATFORM)') -%}
       {%- endif -%}
       {{ fields | join(', ') }}
   when:

@@ -48,9 +48,10 @@ def test_host_create_uses_status_but_host_update_does_not():
         "- name: Record create success",
         1,
     )[0]
-    update_block = operations.split("- name: Update existing host (scenario update - only continuous fields, NO TAGS)", 1)[
-        1
-    ].split("- name: Record no update needed", 1)[0]
+    update_block = operations.split("- name: Update existing host (scenario update", 1)[1].split(
+        "- name: Record no update needed",
+        1,
+    )[0]
 
     assert 'status: "{{ zbx_record.HOST_STATUS | default(0) | int }}"' in create_block
     assert "HOST_STATUS" not in update_block

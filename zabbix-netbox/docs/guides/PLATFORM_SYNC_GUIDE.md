@@ -16,6 +16,7 @@ NetBox /api/dcim/platforms/
   ─ filters by cf_izlenmeli at API (monitor: Evet+null; skip: Hayır)
   ─ excludes platforms only when izlenmeli means do-not-monitor (Hayır / false); Zabbix CF is not used for inclusion
   ─ optional: location_filter substring match on custom_fields.Site (same playbook var as devices)
+  ─ deduplicates the monitor list by NetBox platform `id` (first occurrence wins)
           │
           ▼
   process_platform.yml
@@ -27,8 +28,8 @@ NetBox /api/dcim/platforms/
   zabbix_host_operations.yml
   ─ resolves template IDs via template.get
   ─ resolves proxy group by DC code
-  ─ sets Zabbix **technical** `host` (ASCII via `zabbix_technical_hostname` filter) and **visible** `name` (UTF-8 from NetBox)
-  ─ calls host.create (or falls back to host.update if already exists)
+  ─ sets Zabbix **technical** `host` (ASCII via `zabbix_platform_technical_hostname` — name slug plus `_P_<netbox_platform_id>` within 128 chars) and **visible** `name` (UTF-8 from NetBox)
+  ─ calls host.create (or host.update when host already exists — prefetch maps, duplicate-error recovery, or live host.get)
           │
           ▼
   Zabbix Host
@@ -45,7 +46,7 @@ NetBox /api/dcim/platforms/
 | `mappings/templates.yml` | Maps device_type → list of Zabbix templates to assign |
 | `mappings/template_types.yml` | Maps template type string (e.g. `snmpv2`) → Zabbix interface definition |
 | `playbooks/roles/netbox_zabbix_sync/defaults/main.yml` | Contains `sync_devices: true`, `sync_platforms: false` defaults |
-| `playbooks/roles/netbox_zabbix_sync/tasks/fetch_all_platforms.yml` | Fetches platforms from NetBox API with pagination |
+| `playbooks/roles/netbox_zabbix_sync/tasks/fetch_all_platforms.yml` | Fetches platforms from NetBox API with pagination; **deduplicates by NetBox platform `id`** before returning the monitor list |
 | `playbooks/roles/netbox_zabbix_sync/tasks/process_platform.yml` | Processes each platform: validates, maps, builds Zabbix record |
 | `playbooks/roles/netbox_zabbix_sync/tasks/zabbix_host_operations.yml` | Shared task: creates or updates Zabbix host |
 
@@ -278,20 +279,28 @@ Each platform synced to Zabbix receives the following tags:
 
 When a platform is synced again after already existing in Zabbix:
 
-1. Before `host.create`, the playbook resolves the Zabbix host by tag `Loki_ID` (`P_<netbox_platform_id>`) using `zabbix_hosts_by_loki_id`, then falls back to **`zabbix_hosts_by_hostname`** using the **technical** host key (ASCII slug from the NetBox platform name), then to **`zabbix_hosts_by_visible_name`** using the **visible** name (the original NetBox UTF-8 name). If a host is found, `zbx_scenario` is `update`; otherwise `create`.
-2. Zabbix `host.create` / `host.update` use **`host`** = technical ASCII and **`name`** = visible UTF-8 label (`HOST_VISIBLE_NAME`), so Turkish characters remain in the UI name while the API host key stays valid.
-3. If `host.create` still runs and fails with a duplicate-host error, the playbook falls back to `zbx_scenario: update` by resolving the existing host in order: **Loki_ID from tags**, then **technical hostname map**, then **visible name map**. Zabbix often returns `error.message: Invalid params.` with the real text in `error.data` (e.g. `Host with the same name "..." already exists.`); both `message` and `data` are checked for `already exists`.
-4. The update modifies: IP address, technical host, visible name, interface, macros, `monitored_by`, and `proxy_groupid`.
-5. Tags are **not** updated on existing hosts — they are only written during creation.
+1. Before `host.create`, the playbook resolves the Zabbix host by tag `Loki_ID` (`P_<netbox_platform_id>`) using `zabbix_hosts_by_loki_id`, then falls back to **`zabbix_hosts_by_hostname`** using the **technical** host key, then to **`zabbix_hosts_by_visible_name`** using the **visible** name (the original NetBox UTF-8 name). If a host is found, `zbx_scenario` is `update`; otherwise `create`.
+2. Zabbix `host.create` / `host.update` use **`host`** = technical ASCII (platforms: transliterated name plus `_P_<id>` suffix) and **`name`** = visible UTF-8 label (`HOST_VISIBLE_NAME`), so Turkish characters remain in the UI name while the API host key stays valid and unique per NetBox platform id.
+3. If `host.create` still runs and fails with a duplicate-host error, the playbook falls back to `zbx_scenario: update` by resolving the existing host in order: **Loki_ID from intended tags**, then **technical hostname map**, then **visible name map**, then **live `host.get` by technical `host`**, then **live `host.get` by visible `name`**. This covers a **stale prefetch** (a host created earlier in the same playbook run is not in the in-memory maps) and legacy hosts missing `Loki_ID`. Zabbix often returns `error.message: Invalid params.` with the real text in `error.data` (e.g. `Host with the same name "..." already exists.`); both `message` and `data` are checked for `already exists`.
+4. The update modifies: IP address, technical host, visible name, interface, macros, `monitored_by`, and `proxy_groupid`. For **`DEVICE_ROLE: PLATFORM`**, when merged tags differ from Zabbix, **`host.update` also sends merged host tags** (existing Zabbix tags plus desired NetBox tags; same keys are overwritten) so `Loki_ID` and related tags stay aligned for the next run.
+5. For non-platform hosts, tags are still only applied on **create** (unchanged).
 6. Templates are **not** updated on existing hosts — only set during creation.
 
-> To force a template/tag update on an existing platform host, delete it from Zabbix and re-run the sync.
+> To force a full template reassignment on an existing platform host, delete it from Zabbix and re-run the sync.
 
-> **Visible name collisions:** `zabbix_hosts_by_visible_name` is keyed by Zabbix `host.name`. If two hosts share the same visible name, the map keeps one entry; rely on `Loki_ID` or unique technical `host` keys for disambiguation.
+> **Visible name collisions:** `zabbix_hosts_by_visible_name` is keyed by Zabbix `host.name`. If two hosts share the same visible name, the map keeps one entry; rely on `Loki_ID`, unique technical `host` keys (`_P_<id>` suffix on platforms), or the live `host.get` duplicate recovery for disambiguation.
 
 ---
 
 ## Troubleshooting
+
+### "Host with the same name ... already exists" (platform rows, same run)
+
+**Cause:** Zabbix host maps from the start of the play do not include hosts created **earlier in the same run**, or the existing host was created without a `Loki_ID` tag / under a different technical name.
+
+**Fix (built-in):** Duplicate `host.create` errors trigger live `host.get` by technical host and by visible name, then `host.update`. Platforms use a `_P_<id>` technical suffix and tag merge on update so the next run resolves by `Loki_ID` from prefetch.
+
+---
 
 ### "No platform mapping found for manufacturer X"
 

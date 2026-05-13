@@ -278,3 +278,21 @@ def test_platform_loki_id_key_for_zabbix_map():
     platform_id = 160
     assert f"P_{platform_id}" == "P_160"
 
+
+def test_platform_fetch_dedupes_by_netbox_id():
+    """Mirror fetch_all_platforms.yml: keep first occurrence per platform id."""
+    rows = [
+        {"id": 1, "name": "A"},
+        {"id": 1, "name": "A-dup"},
+        {"id": 2, "name": "B"},
+    ]
+    seen_ids = set()
+    deduped = []
+    for platform in rows:
+        pid = platform.get("id")
+        if pid is None or pid in seen_ids:
+            continue
+        seen_ids.add(pid)
+        deduped.append(platform)
+    assert [p["id"] for p in deduped] == [1, 2]
+
