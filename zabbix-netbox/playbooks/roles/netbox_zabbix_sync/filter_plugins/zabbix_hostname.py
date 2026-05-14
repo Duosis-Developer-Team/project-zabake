@@ -139,6 +139,41 @@ def virtual_fw_mapping_match(entries, vendor_name="", model_name=""):
     return {}
 
 
+_VFW_VISIBLE_SUFFIX = " - Firewall"
+
+
+def zabbix_vfw_display_name(hostname_raw):
+    """
+    Zabbix visible (UTF-8) name for NetBox virtual_fw hostname: append suffix idempotently.
+
+    Trims input; does not append when empty. If the trimmed value already ends with
+    `` - Firewall``, returns it unchanged.
+    """
+    raw = str(hostname_raw or "").strip()
+    if not raw:
+        return ""
+    if raw.endswith(_VFW_VISIBLE_SUFFIX):
+        return raw
+    return raw + _VFW_VISIBLE_SUFFIX
+
+
+def vfw_hostname_prefix_hostgroup(hostname_raw):
+    """
+    Host group label from NetBox virtual_fw hostname: first segment before ASCII hyphen.
+
+    When ``hostname_raw`` contains at least one ``-``, returns the substring before the
+    first ``-``, stripped, then ``str.title()`` (e.g. ``UNIVERA`` -> ``Univera``).
+    Returns empty string when there is no hyphen, the prefix is empty, or input is blank.
+    """
+    s = str(hostname_raw or "").strip()
+    if "-" not in s:
+        return ""
+    first = s.split("-", 1)[0].strip()
+    if not first:
+        return ""
+    return first.title()
+
+
 def zabbix_vfw_technical_hostname(text, vfw_id=""):
     """
     Zabbix technical host for NetBox virtual firewalls: ASCII slug plus _VFW_<id> suffix.
@@ -198,6 +233,8 @@ class FilterModule:
             "zabbix_technical_hostname": self._filter_zabbix_technical_hostname,
             "zabbix_platform_technical_hostname": self._filter_zabbix_platform_technical_hostname,
             "zabbix_vfw_technical_hostname": self._filter_zabbix_vfw_technical_hostname,
+            "zabbix_vfw_display_name": self._filter_zabbix_vfw_display_name,
+            "vfw_hostname_prefix_hostgroup": self._filter_vfw_hostname_prefix_hostgroup,
             "parse_virtual_fw_ip_port": self._filter_parse_virtual_fw_ip_port,
             "virtual_fw_mapping_match": self._filter_virtual_fw_mapping_match,
         }
@@ -210,6 +247,12 @@ class FilterModule:
 
     def _filter_zabbix_vfw_technical_hostname(self, value, vfw_id=""):
         return zabbix_vfw_technical_hostname(value, vfw_id)
+
+    def _filter_zabbix_vfw_display_name(self, value):
+        return zabbix_vfw_display_name(value)
+
+    def _filter_vfw_hostname_prefix_hostgroup(self, value):
+        return vfw_hostname_prefix_hostgroup(value)
 
     def _filter_parse_virtual_fw_ip_port(self, value):
         return parse_virtual_fw_ip_port(value)

@@ -469,3 +469,9 @@ mappings:
       device_role: "Load Balancer"
       manufacturer: "Citrix"
     priority: 1
+
+  - device_type: "KVM"
+    conditions:
+      device_role: "KVM OVER IP"
+      manufacturer: "Avocent"
+    priority: 1

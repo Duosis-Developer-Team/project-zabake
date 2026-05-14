@@ -536,6 +536,11 @@ Acropolis:
       "{$NUTANIX.PRISM.ELEMENT.IP}": "{HOST.IP}"
       "{$NUTANIX.PRISM.ELEMENT.PORT}": "9440"
 
+KVM:
+  - name: BLT - Template Module ICMP Ping
+    type: agent
+
+
 # # Placeholder logical type for NetBox custom-objects virtual firewalls (virtual_fw_mapping.yml).
 # # Point new vendor rows to this key until a dedicated Zabbix template is confirmed.
 # Virtual Firewall Default:

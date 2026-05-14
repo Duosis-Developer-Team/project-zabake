@@ -73,10 +73,44 @@ def test_zabbix_vfw_technical_hostname_suffix():
     assert len(out) <= 128
 
 
+def test_zabbix_vfw_display_name_appends_suffix():
+    mod = _load_module()
+    assert mod.zabbix_vfw_display_name("UNIVERA-FINROTA") == "UNIVERA-FINROTA - Firewall"
+
+
+def test_zabbix_vfw_display_name_idempotent():
+    mod = _load_module()
+    s = "UNIVERA-FINROTA - Firewall"
+    assert mod.zabbix_vfw_display_name(s) == s
+
+
+def test_zabbix_vfw_display_name_empty():
+    mod = _load_module()
+    assert mod.zabbix_vfw_display_name("") == ""
+    assert mod.zabbix_vfw_display_name(None) == ""
+
+
+def test_vfw_hostname_prefix_hostgroup():
+    mod = _load_module()
+    assert mod.vfw_hostname_prefix_hostgroup("UNIVERA-FINROTA") == "Univera"
+
+
+def test_vfw_hostname_prefix_hostgroup_no_hyphen():
+    mod = _load_module()
+    assert mod.vfw_hostname_prefix_hostgroup("SINGLE") == ""
+
+
+def test_vfw_hostname_prefix_hostgroup_empty_prefix():
+    mod = _load_module()
+    assert mod.vfw_hostname_prefix_hostgroup("-foo") == ""
+
+
 def test_filter_module_registers_virtual_fw_filters():
     mod = _load_module()
     fm = mod.FilterModule()
     names = fm.filters()
     assert "zabbix_vfw_technical_hostname" in names
+    assert "zabbix_vfw_display_name" in names
+    assert "vfw_hostname_prefix_hostgroup" in names
     assert "parse_virtual_fw_ip_port" in names
     assert "virtual_fw_mapping_match" in names

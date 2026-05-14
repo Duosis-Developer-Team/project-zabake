@@ -8,6 +8,8 @@
     zbx_record: {}
     zbx_existing_host: {}
     zbx_scenario: "create"
+    vfw_hostname_visible: ""
+    vfw_name_prefix_hostgroup: ""
   run_once: false
 
 - name: Set virtual firewall identity fields
@@ -22,6 +24,11 @@
     vfw_proje: "{{ netbox_virtual_fw.proje | default('', true) }}"
     vfw_status_val: "{{ netbox_virtual_fw.fw_status | default('', true) }}"
 
+- name: Derive Zabbix visible hostname and hostname-prefix host group for virtual firewall
+  set_fact:
+    vfw_hostname_visible: "{{ vfw_hostname_raw | default('', true) | string | zabbix_vfw_display_name }}"
+    vfw_name_prefix_hostgroup: "{{ vfw_hostname_raw | default('', true) | string | vfw_hostname_prefix_hostgroup }}"
+
 - name: Parse ip_port into IP and management port (port is tag-only; Zabbix interface uses template_types)
   set_fact:
     vfw_ip_port_parsed: "{{ vfw_ip_port_raw | string | parse_virtual_fw_ip_port }}"
@@ -31,7 +38,7 @@
 - name: Record virtual firewall without IP
   set_fact:
     current_vfw_result:
-      hostname: "{{ vfw_hostname_raw | default('N/A', true) }}"
+      hostname: "{{ vfw_hostname_visible if (vfw_hostname_visible | default('', true) | string | trim | length) > 0 else (vfw_hostname_raw | default('N/A', true)) }}"
       device_role: "VIRTUAL_FW"
       status: "eklenemedi"
       reason: "IP address is missing or invalid in ip_port"
@@ -45,7 +52,7 @@
 - name: Record virtual firewall without vendor
   set_fact:
     current_vfw_result:
-      hostname: "{{ vfw_hostname_raw | default('N/A', true) }}"
+      hostname: "{{ vfw_hostname_visible if (vfw_hostname_visible | default('', true) | string | trim | length) > 0 else (vfw_hostname_raw | default('N/A', true)) }}"
       device_role: "VIRTUAL_FW"
       status: "eklenemedi"
       reason: "Vendor is missing on virtual firewall record"
@@ -62,7 +69,7 @@
 - name: Record virtual firewall without location (required for proxy DC_ID)
   set_fact:
     current_vfw_result:
-      hostname: "{{ vfw_hostname_raw | default('N/A', true) }}"
+      hostname: "{{ vfw_hostname_visible if (vfw_hostname_visible | default('', true) | string | trim | length) > 0 else (vfw_hostname_raw | default('N/A', true)) }}"
       device_role: "VIRTUAL_FW"
       status: "eklenemedi"
       reason: "Location (lokasyon) is missing on virtual firewall record"
@@ -98,7 +105,7 @@
 - name: Record virtual firewall when no mapping matches
   set_fact:
     current_vfw_result:
-      hostname: "{{ vfw_hostname_raw | default('N/A', true) }}"
+      hostname: "{{ vfw_hostname_visible if (vfw_hostname_visible | default('', true) | string | trim | length) > 0 else (vfw_hostname_raw | default('N/A', true)) }}"
       device_role: "VIRTUAL_FW"
       status: "eklenemedi"
       reason: "No virtual_fw_mapping.yml entry for vendor={{ vfw_vendor_name }} model={{ vfw_model_name }}"
@@ -133,7 +140,7 @@
     - name: Record skipped virtual firewall when no templates found
       set_fact:
         current_vfw_result:
-          hostname: "{{ vfw_hostname_raw | default('N/A', true) }}"
+          hostname: "{{ vfw_hostname_visible if (vfw_hostname_visible | default('', true) | string | trim | length) > 0 else (vfw_hostname_raw | default('N/A', true)) }}"
           device_role: "VIRTUAL_FW"
           status: "eklenemedi"
           reason: "No templates found for device_type {{ vfw_device_type }}"
@@ -161,7 +168,7 @@
         vfw_host_groups_csv: >-
           {{
             (
-              [vfw_vendor_name, vfw_location_name, vfw_model_name]
+              [vfw_vendor_name, vfw_name_prefix_hostgroup, vfw_location_name, vfw_model_name]
               + (vfw_template_host_groups | default([]))
             )
             | map('trim')
@@ -193,7 +200,7 @@
           DEVICE_ROLE: "VIRTUAL_FW"
           HOST_IP: "{{ vfw_host_ip }}"
           HOSTNAME: "{{ vfw_hostname_raw | zabbix_vfw_technical_hostname(vfw_id | string) }}"
-          HOST_VISIBLE_NAME: "{{ vfw_hostname_raw }}"
+          HOST_VISIBLE_NAME: "{{ vfw_hostname_visible }}"
           DC_ID: "{{ vfw_location_name }}"
           HOST_GROUPS: "{{ vfw_host_groups_csv }}"
           TEMPLATE_TYPE: ""
@@ -264,6 +271,19 @@
     - zbx_existing_host is not defined or zbx_existing_host == {} or zbx_existing_host.hostid is not defined
     - zabbix_hosts_by_visible_name.get(zbx_record.HOST_VISIBLE_NAME) is not none
     - zabbix_hosts_by_visible_name.get(zbx_record.HOST_VISIBLE_NAME) != None
+
+- name: Fallback to legacy NetBox hostname as Zabbix visible name (virtual firewall)
+  set_fact:
+    zbx_existing_host: "{{ zabbix_hosts_by_visible_name.get(vfw_hostname_raw) }}"
+  when:
+    - zbx_record is defined
+    - zbx_record.DEVICE_TYPE is defined
+    - vfw_hostname_raw is defined
+    - (vfw_hostname_raw | string | trim | length) > 0
+    - zabbix_hosts_by_visible_name is defined
+    - zbx_existing_host is not defined or zbx_existing_host == {} or zbx_existing_host.hostid is not defined
+    - zabbix_hosts_by_visible_name.get(vfw_hostname_raw) is not none
+    - zabbix_hosts_by_visible_name.get(vfw_hostname_raw) != None
 
 - name: Determine scenario for virtual firewall (create or update)
   set_fact:

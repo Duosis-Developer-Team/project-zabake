@@ -432,6 +432,8 @@ mappings:
 
 **Zabbix host identity:** technical `host` uses filter `zabbix_vfw_technical_hostname` with suffix `_VFW_<id>`; tag `Loki_ID` is `VFW_<id>`. Interface port follows `template_types.yml` from the chosen template type; NetBox `ip_port` is parsed as **IPv4:port** (first `:` only); the numeric port is stored as a **tag** (`Port`) only, not as the Zabbix interface port.
 
+**Zabbix visible name:** filter `zabbix_vfw_display_name` sets Zabbix `host.name` (visible) from NetBox `hostname` by appending ` - Firewall` once (idempotent if the suffix is already present). **Extra host group:** when NetBox `hostname` contains ASCII `-`, filter `vfw_hostname_prefix_hostgroup` adds the substring before the first hyphen, `str.title()`-cased (e.g. `UNIVERA-FINROTA` → group `Univera`), merged with vendor/location/model and template host groups. Sync falls back to matching an existing Zabbix host by legacy visible name equal to the raw NetBox `hostname` when the new visible name does not match.
+
 ## Multiple Zabbix templates (`templates.yml`)
 
 - Top-level keys must match `device_type` values from `netbox_device_type_mapping.yml`.
