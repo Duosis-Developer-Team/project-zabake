@@ -81,3 +81,8 @@ Used by proxy-group logic in `hmdl_read_last_sync.yml` and `zabbix_host_operatio
 2. New environments: run the three `*.sql` files in order (sync_log → host_update_log → tag_update_log).
 
 Playbooks also run `CREATE TABLE IF NOT EXISTS` and `ADD COLUMN IF NOT EXISTS` at runtime when `hmdl_log_enabled: true`.
+
+## Related documentation
+
+- AWX job inputs (TR): [`zabbix-netbox/docs/guides/AWX_KULLANIM_REHBERI.md`](../../zabbix-netbox/docs/guides/AWX_KULLANIM_REHBERI.md)
+- Data flow and smart merge: [`zabbix-netbox/docs/design/SYNC_DATA_FLOW.md`](../../zabbix-netbox/docs/design/SYNC_DATA_FLOW.md)

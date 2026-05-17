@@ -47,34 +47,74 @@ zabbix-netbox/
 
 ## Hızlı Başlangıç
 
-### Netbox'tan Zabbix'e Senkronizasyon
+### AWX (önerilen)
+
+Tüm job input’ları, Survey önerisi ve senaryolar: **[AWX Kullanım Rehberi](docs/guides/AWX_KULLANIM_REHBERI.md)**.
+
+Veri akışı ve smart merge diyagramları: **[SYNC_DATA_FLOW](docs/design/SYNC_DATA_FLOW.md)**.
+
+Minimum örnek (cihazlar discovery DB, platform Loki):
+
+```yaml
+discovery_db_host: "postgresql.example.com"
+discovery_db_port: 5432
+discovery_db_name: "bulutlake"
+discovery_db_user: "zabbix_sync"
+discovery_db_password: "<secret>"
+
+zabbix_url: "https://zabbix.example.com/api_jsonrpc.php"
+zabbix_user: "api_sync"
+zabbix_password: "<secret>"
+
+device_source: datalake
+platform_source: loki
+netbox_url: "https://loki.example.com"
+netbox_token: "<token>"
+
+sync_devices: true
+hmdl_log_enabled: true
+dry_run: true          # ilk çalıştırmada
+device_limit: 10
+```
+
+### CLI (ansible-playbook)
 
 ```bash
 ansible-playbook playbooks/netbox_zabbix_sync.yaml \
-  -e "netbox_url=https://loki.bulutistan.com/" \
-  -e "netbox_token=YOUR_TOKEN" \
+  -e "discovery_db_host=postgresql.example.com" \
+  -e "discovery_db_name=bulutlake" \
+  -e "discovery_db_user=zabbix_sync" \
+  -e "discovery_db_password=SECRET" \
   -e "zabbix_url=https://zabbix.example.com/api_jsonrpc.php" \
-  -e "zabbix_user=admin" \
-  -e "zabbix_password=password" \
-  -e "mail_recipients=['user@example.com']" \
-  -e "location_filter=LocationName"
+  -e "zabbix_user=api_sync" \
+  -e "zabbix_password=SECRET" \
+  -e "device_source=datalake" \
+  -e "dry_run=true" \
+  -e "device_limit=10"
 ```
 
-AWX extra vars ile yeni oluşturulan host'lar Zabbix'e disabled eklenebilir: `create_devices_disabled`, `create_platforms_disabled`, `create_virtual_fws_disabled`. Sanal firewall senkronu için `sync_virtual_fws: true` verin. Tüm parametreler için bkz. [AWX Kılavuzu](docs/guides/AWX_GUIDE.md).
+Loki-only (NetBox API) için ekleyin: `netbox_url`, `netbox_token`. Kaynak seçimi: `device_source`, `platform_source`, `virtual_fw_source` (`loki` | `datalake`).
 
 ## Dokümantasyon
 
+Tam indeks: **[docs/guides/00-DOCUMENTATION_INDEX.md](docs/guides/00-DOCUMENTATION_INDEX.md)**
+
 ### Kılavuzlar (`docs/guides/`)
+- **[AWX Kullanım Rehberi](docs/guides/AWX_KULLANIM_REHBERI.md)**: AWX Extra Variables, Survey, senaryolar, HMDL sorguları (TR)
+- **[AWX Guide](docs/guides/AWX_GUIDE.md)**: AWX summary (EN)
 - **[Netbox to Zabbix Kılavuzu](docs/guides/NETBOX_TO_ZABBIX_README.md)**: Netbox entegrasyonu detaylı kullanım kılavuzu
-- **[Template Macros Kılavuzu](docs/guides/TEMPLATE_MACROS_GUIDE.md)**: API-tabanlı template'ler için makro konfigürasyonu (yeni!)
+- **[Template Macros Kılavuzu](docs/guides/TEMPLATE_MACROS_GUIDE.md)**: API-tabanlı template'ler için makro konfigürasyonu
 - **[Email Bildirimleri](docs/guides/EMAIL_NOTIFICATION_GUIDE.md)**: Email bildirim sistemi konfigürasyonu
-- **[AWX Kılavuzu](docs/guides/AWX_GUIDE.md)**: AWX/AAP ile kullanım
 
 ### Tasarım (`docs/design/`)
-- **[Tasarım Dokümanı](docs/design/DESIGN.md)**: Sistem tasarımı ve idempotency kuralları
+- **[Sync data flow](docs/design/SYNC_DATA_FLOW.md)**: Envanter fetch, smart merge, proxy, HMDL (diyagramlar)
+- **[Tasarım Dokümanı](docs/design/DESIGN.md)**: Legacy CSV migration tasarımı (tarihsel)
 - **[Şema](docs/design/SCHEMA.md)**: Veri şeması ve yapıları
 - **[Host Groups ve Tags](docs/design/HOST_GROUPS_AND_TAGS_IMPLEMENTATION.md)**: Tag ve grup yönetimi
-- **[Location hierarchy resolution](docs/design/LOCATION_HIERARCHY_RESOLUTION.md)**: NetBox `dcim/locations` kök çözümlemesi ve lokasyon filtresi (BFS); referans kod: [`scripts/netbox_location_hierarchy.py`](scripts/netbox_location_hierarchy.py)
+- **[Location hierarchy resolution](docs/design/LOCATION_HIERARCHY_RESOLUTION.md)**: NetBox `dcim/locations` kök çözümlemesi ve lokasyon filtresi (BFS)
+
+### SQL (`SQL/zabbix-netbox/`)
+- **[HMDL audit tables](../SQL/zabbix-netbox/README.md)**: DDL, migration, smart-merge kolonları
 
 ### Analiz (`docs/analysis/`)
 - **[Netbox API Endpoints](docs/analysis/NETBOX_API_ENDPOINTS_DECISION.md)**: API endpoint kararları

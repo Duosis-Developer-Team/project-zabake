@@ -1,5 +1,10 @@
 ## Zabbix Migration - Design
 
+> **Note:** This document describes the **legacy CSV import** flow (`legacy/playbooks/zabbix_csv_import.yaml`).  
+> For the current **NetBox / Datalake → Zabbix** sync (AWX, smart merge, HMDL), see:
+> - [SYNC_DATA_FLOW.md](SYNC_DATA_FLOW.md)
+> - [AWX_KULLANIM_REHBERI.md](../guides/AWX_KULLANIM_REHBERI.md)
+
 ### Goal
 Automate creation or update of Zabbix hosts from CSV input with flexible template assignment, proxy routing by DC, interface handling per template type, and host macro upsert.
 
