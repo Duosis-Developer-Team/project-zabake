@@ -46,6 +46,12 @@
     - device_izlenmeyecek | default(false) | bool
     - report_izlenmeyecek | default(true) | bool
 
+- name: Copy NetBox device normalize helper for process step
+  copy:
+    src: netbox_device_normalize.py
+    dest: /tmp/netbox_device_normalize.py
+    mode: '0644'
+
 - name: Create temporary Python script for device processing
   copy:
     content: |
@@ -53,6 +59,53 @@
       import json
       import sys
       import os
+      sys.path.insert(0, '/tmp')
+      try:
+          from netbox_device_normalize import (
+              device_role_name,
+              manufacturer_name,
+              device_model,
+              extract_primary_ip_address,
+          )
+      except ImportError:
+          def device_role_name(device):
+              flat = device.get('device_role_name') or ''
+              if flat:
+                  return str(flat).strip()
+              obj = device.get('role') or device.get('device_role')
+              return obj.get('name', '').strip() if isinstance(obj, dict) else ''
+
+          def manufacturer_name(device):
+              flat = device.get('manufacturer_name') or ''
+              if flat:
+                  return str(flat).strip()
+              dt = device.get('device_type') or {}
+              if isinstance(dt, dict):
+                  mfr = dt.get('manufacturer') or {}
+                  return mfr.get('name', '').strip() if isinstance(mfr, dict) else ''
+              return ''
+
+          def device_model(device):
+              flat = device.get('device_model') or ''
+              if flat:
+                  return str(flat).strip()
+              dt = device.get('device_type') or {}
+              return str(dt.get('model') or '').strip() if isinstance(dt, dict) else ''
+
+          def extract_primary_ip_address(device):
+              ip = device.get('primary_ip_address')
+              if ip:
+                  text = str(ip).strip()
+                  return text.split('/')[0] if '/' in text else text
+              for key in ('primary_ip4', 'primary_ip6'):
+                  pip = device.get(key)
+                  if isinstance(pip, dict):
+                      addr = pip.get('address') or pip.get('display') or ''
+                      if addr:
+                          text = str(addr).strip()
+                          return text.split('/')[0] if '/' in text else text
+              return ''
+
       import yaml
 
       # ============= YAML CONFIG LOADING =============
@@ -100,25 +153,25 @@
 
       def check_condition(device, condition_key, condition_value):
           if condition_key == 'device_role':
-              role = (device.get('device_role_name') or '').upper()
+              role = device_role_name(device).upper()
               if isinstance(condition_value, list):
                   return role in [v.upper() for v in condition_value]
               return role == condition_value.upper()
 
           elif condition_key == 'manufacturer':
-              manufacturer = (device.get('manufacturer_name') or '').upper()
+              manufacturer = manufacturer_name(device).upper()
               if isinstance(condition_value, list):
                   return manufacturer in [v.upper() for v in condition_value]
               return manufacturer == condition_value.upper()
 
           elif condition_key == 'model_contains':
-              model = (device.get('device_model') or '').upper()
+              model = device_model(device).upper()
               if isinstance(condition_value, list):
                   return any(item.upper() in model for item in condition_value)
               return condition_value.upper() in model
 
           elif condition_key == 'model_suffix':
-              model = (device.get('device_model') or '').upper()
+              model = device_model(device).upper()
               if isinstance(condition_value, list):
                   return any(model.endswith(item.upper()) for item in condition_value)
               return model.endswith(condition_value.upper())
@@ -147,25 +200,35 @@
       # ============= DB-NATIVE FIELD EXTRACTORS =============
 
       def get_primary_ip(device):
-          """Read primary IP directly from flat DB field."""
-          ip = device.get('primary_ip_address')
-          if not ip:
-              return None
-          ip = str(ip).strip()
-          return ip.split('/')[0] if '/' in ip else ip
+          """Read primary IP from flat field or nested NetBox API objects."""
+          ip = extract_primary_ip_address(device)
+          return ip if ip else None
 
       def get_location_name(device):
           """
-          Return the DC_ID location label using DB fallback chain:
-          root_location_name → location_parent_name → location_name → site_name
+          Return the DC_ID location label using flat fields or nested NetBox API.
           """
-          return (
+          flat = (
               device.get('root_location_name') or
               device.get('location_parent_name') or
               device.get('location_name') or
               device.get('site_name') or
               ''
           )
+          if flat:
+              return str(flat).strip()
+          location_obj = device.get('location')
+          if isinstance(location_obj, dict):
+              parent = location_obj.get('parent')
+              if isinstance(parent, dict) and parent.get('name'):
+                  return str(parent.get('name')).strip()
+              name = location_obj.get('name')
+              if name:
+                  return str(name).strip()
+          site_obj = device.get('site')
+          if isinstance(site_obj, dict) and site_obj.get('name'):
+              return str(site_obj.get('name')).strip()
+          return ''
 
       def normalize_netbox_choice_field(value):
           if value is None:

@@ -104,10 +104,10 @@
         - Name: {{ device.name | default('N/A') }}
         - ID: {{ device.id | default('N/A') }}
         - Site: {{ device.site_name | default('N/A') }}
-        - Role: {{ device.device_role_name | default('N/A') }}
-        - Manufacturer: {{ device.manufacturer_name | default('N/A') }}
-        - Model: {{ device.device_model | default('N/A') }}
-        - Primary IP: {{ device.primary_ip_address | default('N/A') }}
+        - Role: {{ device.device_role_name | default(device.role.name | default(device.device_role.name | default('N/A'))) }}
+        - Manufacturer: {{ device.manufacturer_name | default(device.device_type.manufacturer.name | default('N/A')) }}
+        - Model: {{ device.device_model | default(device.device_type.model | default('N/A')) }}
+        - Primary IP: {{ device.primary_ip_address | default(device.primary_ip4.address | default(device.primary_ip4.display | default('N/A'))) }}
         - Location: {{ device.location_name | default('N/A') }}
         - Root Location (DC_ID): {{ device.root_location_name | default('N/A') }}
         - Tenant: {{ device.tenant_name | default('N/A') }}

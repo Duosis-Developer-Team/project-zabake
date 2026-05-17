@@ -8,32 +8,43 @@ import unittest
 
 
 def check_condition(device, condition_key, condition_value):
-    """Check if device matches a condition"""
+    """Check if device matches a condition (flat datalake fields or nested NetBox API)."""
     if condition_key == 'device_role':
-        role_obj = device.get('role') or device.get('device_role')
-        role = role_obj.get('name', '') if role_obj and isinstance(role_obj, dict) else ''
+        role = (device.get('device_role_name') or '').strip()
+        if not role:
+            role_obj = device.get('role') or device.get('device_role')
+            role = role_obj.get('name', '') if role_obj and isinstance(role_obj, dict) else ''
         if isinstance(condition_value, list):
             return role.upper() in [v.upper() for v in condition_value]
         return role.upper() == condition_value.upper()
 
     elif condition_key == 'manufacturer':
-        device_type = device.get('device_type') or {}
-        manufacturer_obj = device_type.get('manufacturer') or {}
-        manufacturer = manufacturer_obj.get('name', '').upper()
+        manufacturer = (device.get('manufacturer_name') or '').strip()
+        if not manufacturer:
+            device_type = device.get('device_type') or {}
+            manufacturer_obj = device_type.get('manufacturer') or {}
+            manufacturer = manufacturer_obj.get('name', '') if isinstance(manufacturer_obj, dict) else ''
+        manufacturer = manufacturer.upper()
         if isinstance(condition_value, list):
             return manufacturer in [v.upper() for v in condition_value]
         return manufacturer == condition_value.upper()
 
     elif condition_key == 'model_contains':
-        device_type = device.get('device_type') or {}
-        model = device_type.get('model', '').upper()
+        model = (device.get('device_model') or '').strip()
+        if not model:
+            device_type = device.get('device_type') or {}
+            model = device_type.get('model', '') or ''
+        model = model.upper()
         if isinstance(condition_value, list):
             return any(item.upper() in model for item in condition_value)
         return condition_value.upper() in model
 
     elif condition_key == 'model_suffix':
-        device_type = device.get('device_type') or {}
-        model = device_type.get('model', '').upper()
+        model = (device.get('device_model') or '').strip()
+        if not model:
+            device_type = device.get('device_type') or {}
+            model = device_type.get('model', '') or ''
+        model = model.upper()
         if isinstance(condition_value, list):
             return any(model.endswith(item.upper()) for item in condition_value)
         return model.endswith(condition_value.upper())

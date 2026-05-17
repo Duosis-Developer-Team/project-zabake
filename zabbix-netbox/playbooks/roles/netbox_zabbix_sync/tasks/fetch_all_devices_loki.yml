@@ -1,4 +1,10 @@
 ---
+- name: Copy NetBox device normalize helper
+  copy:
+    src: netbox_device_normalize.py
+    dest: /tmp/netbox_device_normalize.py
+    mode: '0644'
+
 - name: Create Python script to fetch all devices with mapping-based filtering
   copy:
     content: |
@@ -6,6 +12,13 @@
       import json
       import sys
       import requests
+      sys.path.insert(0, '/tmp')
+      try:
+          from netbox_device_normalize import normalize_device_record
+      except ImportError:
+          def normalize_device_record(device, location_filter=''):
+              return device
+
       from collections import Counter, deque
       from urllib3.exceptions import InsecureRequestWarning
       
@@ -418,7 +431,7 @@
                   
                   # Mapping-based filters
                   if device_matches_any_mapping(device):
-                      filtered_devices.append(device)
+                      filtered_devices.append(normalize_device_record(device, location_filter))
                   else:
                       unmatched_count += 1
                       device_type = device.get('device_type') or {}

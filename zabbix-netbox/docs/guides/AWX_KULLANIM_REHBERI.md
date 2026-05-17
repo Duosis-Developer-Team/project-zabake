@@ -136,6 +136,19 @@ Her kategori bağımsız seçilir: **`loki`** (NetBox REST) veya **`datalake`** 
 
 Log kolonu `inventory_source` bu değeri yansıtır (`device` işlemlerinde `device_source`).
 
+#### Loki vs datalake — cihaz şeması (`device_source`)
+
+`process_device` ve HMDL çıktısı **datalake düz kolonlarını** bekler: `device_role_name`, `manufacturer_name`, `device_model`, `primary_ip_address`, `location_name`, `root_location_name`, `site_name`, `tenant_name`.
+
+| Kaynak | Fetch çıktısı | Process uyumu |
+|--------|---------------|---------------|
+| **datalake** | SQL satırları zaten düz kolonlu | Doğrudan uyumlu |
+| **loki** | NetBox REST iç içe JSON (`role`, `device_type`, `primary_ip4`, …) | Fetch sonrası `netbox_device_normalize.py` ile düz alanlara çevrilir; process tarafında da aynı modül ile yedek (nested) okuma vardır |
+
+`device_source: loki` kullanırken eski sürümlerde görülen **`Device type bulunamadı`** hatası genelde NetBox’ta role eksikliği değil, process’in boş `device_role_name` görmesinden kaynaklanırdı. Güncel rol: Loki fetch eşleşen her cihazı normalize ederek `netbox_devices_final` listesine yazar.
+
+Geçici workaround (kod güncellenemiyorsa): discovery DB güncelse `device_source: datalake`.
+
 ---
 
 ### 3.5 Senkron kapsamı ve çalışma modu
