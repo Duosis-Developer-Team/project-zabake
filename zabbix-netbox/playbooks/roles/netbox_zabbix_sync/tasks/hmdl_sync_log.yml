@@ -1,0 +1,257 @@
+---
+# HMDL Sync Log - hmdl.zabbix_sync_log tablosuna kayıt atar.
+#
+# Çağıran task'ın sağlaması gereken değişkenler:
+#   hmdl_log_entry       : log alanlarını içeren dict
+#   hmdl_log_device_id   : temp dosya adı için benzersiz ID (örn. device.id)
+#
+# DB bağlantı değişkenleri defaults/main.yml'den gelir:
+#   hmdl_db_host, hmdl_db_port, hmdl_db_name, hmdl_db_user, hmdl_db_password
+#   hmdl_log_schema, hmdl_log_table
+
+- name: Create HMDL value preparer script
+  copy:
+    content: |
+      #!/usr/bin/env python3
+      """
+      Prepares HMDL log entry values for DB insert.
+      No database connection — value normalization and JSON serialization only.
+      """
+      import json
+      import sys
+
+      def nullify(v):
+          if v is None or v == "" or v == "N/A":
+              return None
+          return v
+
+      def to_int_or_none(v):
+          if v is None or v == "" or v == "N/A":
+              return None
+          try:
+              return int(v)
+          except (ValueError, TypeError):
+              return None
+
+      def to_jsonb_str(v):
+          """Returns a JSON string for JSONB fields, or None for empty/null values."""
+          if v is None or v == "" or v == {} or v == []:
+              return None
+          if isinstance(v, (dict, list)):
+              return json.dumps(v, default=str)
+          if isinstance(v, str):
+              try:
+                  parsed = json.loads(v)
+                  if parsed == {} or parsed == []:
+                      return None
+                  return json.dumps(parsed, default=str)
+              except (ValueError, TypeError):
+                  return None
+          return None
+
+      entry_file = sys.argv[1]
+      with open(entry_file, 'r') as f:
+          entry = json.load(f)
+
+      prepared = {
+          "run_id":               nullify(entry.get("run_id")),
+          "awx_job_id":           nullify(entry.get("awx_job_id")),
+          "playbook_name":        nullify(entry.get("playbook_name")),
+          "source_device_id":     to_int_or_none(entry.get("source_device_id")),
+          "source_device_name":   nullify(entry.get("source_device_name")),
+          "zabbix_hostid":        nullify(entry.get("zabbix_hostid")),
+          "zabbix_hostname":      nullify(entry.get("zabbix_hostname")),
+          "zabbix_host_ip":       nullify(entry.get("zabbix_host_ip")),
+          "device_type":          nullify(entry.get("device_type")),
+          "device_role":          nullify(entry.get("device_role")),
+          "manufacturer_name":    nullify(entry.get("manufacturer_name")),
+          "site_name":            nullify(entry.get("site_name")),
+          "location_name":        nullify(entry.get("location_name")),
+          "location_parent_name": nullify(entry.get("location_parent_name")),
+          "root_location_name":   nullify(entry.get("root_location_name")),
+          "tenant_name":          nullify(entry.get("tenant_name")),
+          "cluster_name":         nullify(entry.get("cluster_name")),
+          "operation":            nullify(entry.get("operation")),
+          "status":               entry.get("status") or "eklenemedi",
+          "reason":               nullify(entry.get("reason")),
+          "request_payload":      to_jsonb_str(entry.get("request_payload")),
+          "response_payload":     to_jsonb_str(entry.get("response_payload")),
+          "error_payload":        to_jsonb_str(entry.get("error_payload")),
+          "extra_data":           to_jsonb_str(entry.get("extra_data")),
+          "last_location":        nullify(entry.get("last_location")),
+          "last_proxy_group_id":  nullify(entry.get("last_proxy_group_id")),
+          "proxy_manual_change_detected": bool(entry.get("proxy_manual_change_detected", False)),
+          "field_merge_actions":  to_jsonb_str(entry.get("field_merge_actions")),
+      }
+      print(json.dumps(prepared))
+    dest: /tmp/hmdl_prepare_values.py
+    mode: '0755'
+  delegate_to: localhost
+  run_once: true
+  when: hmdl_log_enabled | bool
+
+- name: Ensure HMDL log schema exists
+  community.postgresql.postgresql_query:
+    db: "{{ hmdl_db_name }}"
+    login_host: "{{ hmdl_db_host }}"
+    login_port: "{{ hmdl_db_port | int }}"
+    login_user: "{{ hmdl_db_user }}"
+    login_password: "{{ hmdl_db_password }}"
+    query: "CREATE SCHEMA IF NOT EXISTS {{ hmdl_log_schema }}"
+  delegate_to: localhost
+  run_once: true
+  changed_when: false
+  when: hmdl_log_enabled | bool
+
+- name: Ensure HMDL log table exists
+  community.postgresql.postgresql_query:
+    db: "{{ hmdl_db_name }}"
+    login_host: "{{ hmdl_db_host }}"
+    login_port: "{{ hmdl_db_port | int }}"
+    login_user: "{{ hmdl_db_user }}"
+    login_password: "{{ hmdl_db_password }}"
+    query: |
+      CREATE TABLE IF NOT EXISTS {{ hmdl_log_schema }}.{{ hmdl_log_table }} (
+          id                   BIGSERIAL PRIMARY KEY,
+          run_id               VARCHAR(100) NULL,
+          awx_job_id           VARCHAR(100) NULL,
+          playbook_name        TEXT NULL,
+          source_device_id     BIGINT NULL,
+          source_device_name   TEXT NULL,
+          source_table         TEXT DEFAULT 'discovery_netbox_inventory_device',
+          zabbix_hostid        TEXT NULL,
+          zabbix_hostname      TEXT NULL,
+          zabbix_host_ip       TEXT NULL,
+          device_type          TEXT NULL,
+          device_role          TEXT NULL,
+          manufacturer_name    TEXT NULL,
+          site_name            TEXT NULL,
+          location_name        TEXT NULL,
+          location_parent_name TEXT NULL,
+          root_location_name   TEXT NULL,
+          tenant_name          TEXT NULL,
+          cluster_name         TEXT NULL,
+          operation            VARCHAR(50) NULL,
+          status               VARCHAR(50) NOT NULL,
+          reason               TEXT NULL,
+          request_payload      JSONB NULL,
+          response_payload     JSONB NULL,
+          error_payload        JSONB NULL,
+          extra_data           JSONB NULL,
+          last_location        TEXT NULL,
+          last_proxy_group_id  TEXT NULL,
+          proxy_manual_change_detected BOOLEAN DEFAULT FALSE,
+          field_merge_actions  JSONB NULL,
+          processed_at         TIMESTAMPTZ DEFAULT NOW(),
+          created_at           TIMESTAMPTZ DEFAULT NOW()
+      )
+  delegate_to: localhost
+  run_once: true
+  changed_when: false
+  when: hmdl_log_enabled | bool
+
+- name: Ensure HMDL log table has merge/proxy audit columns
+  community.postgresql.postgresql_query:
+    db: "{{ hmdl_db_name }}"
+    login_host: "{{ hmdl_db_host }}"
+    login_port: "{{ hmdl_db_port | int }}"
+    login_user: "{{ hmdl_db_user }}"
+    login_password: "{{ hmdl_db_password }}"
+    query: "{{ item }}"
+  loop:
+    - "ALTER TABLE {{ hmdl_log_schema }}.{{ hmdl_log_table }} ADD COLUMN IF NOT EXISTS last_location TEXT NULL"
+    - "ALTER TABLE {{ hmdl_log_schema }}.{{ hmdl_log_table }} ADD COLUMN IF NOT EXISTS last_proxy_group_id TEXT NULL"
+    - "ALTER TABLE {{ hmdl_log_schema }}.{{ hmdl_log_table }} ADD COLUMN IF NOT EXISTS proxy_manual_change_detected BOOLEAN DEFAULT FALSE"
+    - "ALTER TABLE {{ hmdl_log_schema }}.{{ hmdl_log_table }} ADD COLUMN IF NOT EXISTS field_merge_actions JSONB NULL"
+  delegate_to: localhost
+  run_once: true
+  changed_when: false
+  when: hmdl_log_enabled | bool
+
+- name: Ensure HMDL log table indexes exist
+  community.postgresql.postgresql_query:
+    db: "{{ hmdl_db_name }}"
+    login_host: "{{ hmdl_db_host }}"
+    login_port: "{{ hmdl_db_port | int }}"
+    login_user: "{{ hmdl_db_user }}"
+    login_password: "{{ hmdl_db_password }}"
+    query: "{{ item }}"
+  loop:
+    - "CREATE INDEX IF NOT EXISTS idx_{{ hmdl_log_table }}_processed_at ON {{ hmdl_log_schema }}.{{ hmdl_log_table }} (processed_at)"
+    - "CREATE INDEX IF NOT EXISTS idx_{{ hmdl_log_table }}_status ON {{ hmdl_log_schema }}.{{ hmdl_log_table }} (status)"
+    - "CREATE INDEX IF NOT EXISTS idx_{{ hmdl_log_table }}_source_device_id ON {{ hmdl_log_schema }}.{{ hmdl_log_table }} (source_device_id)"
+    - "CREATE INDEX IF NOT EXISTS idx_{{ hmdl_log_table }}_run_id ON {{ hmdl_log_schema }}.{{ hmdl_log_table }} (run_id)"
+    - "CREATE INDEX IF NOT EXISTS idx_{{ hmdl_log_table }}_zabbix_hostname ON {{ hmdl_log_schema }}.{{ hmdl_log_table }} (zabbix_hostname)"
+  delegate_to: localhost
+  run_once: true
+  changed_when: false
+  when: hmdl_log_enabled | bool
+
+- name: Write HMDL log entry to temp file
+  copy:
+    content: "{{ hmdl_log_entry | to_json }}"
+    dest: "/tmp/hmdl_log_entry_{{ hmdl_log_device_id | default('tmp') }}.json"
+  delegate_to: localhost
+  when: hmdl_log_enabled | bool
+
+- name: Prepare HMDL log entry values
+  command: >
+    python3 /tmp/hmdl_prepare_values.py
+    "/tmp/hmdl_log_entry_{{ hmdl_log_device_id | default('tmp') }}.json"
+  register: _hmdl_prepared
+  changed_when: false
+  delegate_to: localhost
+  when: hmdl_log_enabled | bool
+
+- name: Insert HMDL log entry into database
+  block:
+    - name: Run HMDL log INSERT
+      community.postgresql.postgresql_query:
+        db: "{{ hmdl_db_name }}"
+        login_host: "{{ hmdl_db_host }}"
+        login_port: "{{ hmdl_db_port | int }}"
+        login_user: "{{ hmdl_db_user }}"
+        login_password: "{{ hmdl_db_password }}"
+        query: |
+          INSERT INTO {{ hmdl_log_schema }}.{{ hmdl_log_table }} (
+              run_id, awx_job_id, playbook_name,
+              source_device_id, source_device_name,
+              zabbix_hostid, zabbix_hostname, zabbix_host_ip,
+              device_type, device_role, manufacturer_name,
+              site_name, location_name, location_parent_name,
+              root_location_name, tenant_name, cluster_name,
+              operation, status, reason,
+              request_payload, response_payload, error_payload, extra_data,
+              last_location, last_proxy_group_id, proxy_manual_change_detected,
+              field_merge_actions
+          ) VALUES (
+              %(run_id)s, %(awx_job_id)s, %(playbook_name)s,
+              %(source_device_id)s, %(source_device_name)s,
+              %(zabbix_hostid)s, %(zabbix_hostname)s, %(zabbix_host_ip)s,
+              %(device_type)s, %(device_role)s, %(manufacturer_name)s,
+              %(site_name)s, %(location_name)s, %(location_parent_name)s,
+              %(root_location_name)s, %(tenant_name)s, %(cluster_name)s,
+              %(operation)s, %(status)s, %(reason)s,
+              %(request_payload)s::jsonb, %(response_payload)s::jsonb,
+              %(error_payload)s::jsonb, %(extra_data)s::jsonb,
+              %(last_location)s, %(last_proxy_group_id)s,
+              %(proxy_manual_change_detected)s, %(field_merge_actions)s::jsonb
+          )
+        named_args: "{{ _hmdl_prepared.stdout | from_json }}"
+      delegate_to: localhost
+      changed_when: false
+
+    - name: Debug HMDL log insert success
+      debug:
+        msg: "HMDL_LOG_OK: {{ hmdl_log_entry.zabbix_hostname | default('?') }} / status={{ hmdl_log_entry.status | default('?') }}"
+
+  rescue:
+    - name: Debug HMDL log insert failure (rescued)
+      debug:
+        msg: >
+          HMDL log insert başarısız oldu —
+          device: {{ hmdl_log_entry.source_device_name | default('unknown') }},
+          status: {{ hmdl_log_entry.status | default('unknown') }},
+          hata: {{ ansible_failed_result.msg | default('bilinmeyen hata') }}
+
+  when: hmdl_log_enabled | bool
