@@ -11,7 +11,7 @@
   run_once: true
   when: hmdl_log_enabled | bool
 
-- name: Fetch all devices (source: {{ device_source }})
+- name: "Fetch all devices (source: {{ device_source }})"
   include_tasks: fetch_all_devices.yml
   when: (sync_devices | bool) or (only_fetch | bool)
 
@@ -31,7 +31,7 @@
     netbox_virtual_fws_count: 0
   when: not (sync_virtual_fws | bool)
 
-- name: Fetch virtual firewalls (source: {{ virtual_fw_source }})
+- name: "Fetch virtual firewalls (source: {{ virtual_fw_source }})"
   include_tasks: fetch_all_virtual_fws.yml
   when: sync_virtual_fws | bool
 
@@ -186,7 +186,7 @@
       ============================================
   when: sync_virtual_fws | bool
 
-- name: Fetch all platforms (source: {{ platform_source }})
+- name: "Fetch all platforms (source: {{ platform_source }})"
   include_tasks: fetch_all_platforms.yml
   when: sync_platforms | bool
 
