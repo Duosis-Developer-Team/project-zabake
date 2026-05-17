@@ -576,6 +576,19 @@
     - zabbix_hosts_by_hostname.get(zabbix_hostname_final) is not none
     - zabbix_hosts_by_hostname.get(zabbix_hostname_final) != None
 
+- name: Fallback to visible name matching if Loki_ID and hostname not found
+  set_fact:
+    zbx_existing_host: "{{ zabbix_hosts_by_visible_name.get(zabbix_hostname_final) }}"
+  when:
+    - zbx_existing_host is not defined or zbx_existing_host == {} or zbx_existing_host.hostid is not defined
+    - zabbix_hosts_by_visible_name is defined
+    - device_info.device_type is not none
+    - device_info.device_type != ""
+    - device_info.primary_ip is not none
+    - device_info.primary_ip != ""
+    - zabbix_hosts_by_visible_name.get(zabbix_hostname_final) is not none
+    - zabbix_hosts_by_visible_name.get(zabbix_hostname_final) != None
+
 - name: Determine scenario (create or update)
   set_fact:
     zbx_scenario: "{{ 'update' if (zbx_existing_host is defined and zbx_existing_host is not none and zbx_existing_host != None and zbx_existing_host.hostid is defined) else 'create' }}"
@@ -669,6 +682,9 @@
       DEVICE_ROLE: "{{ device_info.device_role | default('N/A') }}"
       HOST_IP: "{{ device_info.primary_ip }}"
       HOSTNAME: "{{ zabbix_hostname_final }}"
+      HOST_VISIBLE_NAME: "{{ zabbix_hostname_final }}"
+      HOST_STATUS: "{{ 1 if not (create_devices_disabled | default(false) | bool) else 0 }}"
+      LOKI_DEVICE_ID: "{{ netbox_device.id | default('') }}"
       DC_ID: "{{ device_info.location }}"
       HOST_GROUPS: "{{ device_info.host_groups }}"
       TEMPLATE_TYPE: ""
@@ -730,6 +746,15 @@
     - device_info.primary_ip != ""
     - zbx_record is defined
     - zabbix_auth is defined
+
+- name: Read HMDL baseline before Zabbix host operations (update path)
+  include_tasks: hmdl_read_last_sync.yml
+  vars:
+    hmdl_read_device_id: "{{ netbox_device.id | default('') }}"
+  when:
+    - hmdl_log_enabled | bool
+    - zbx_scenario | default('create') == 'update'
+    - netbox_device.id is defined
 
 - name: Process device with Zabbix host operations
   include_tasks: zabbix_host_operations.yml
@@ -800,7 +825,20 @@
       cluster_name: "{{ netbox_device.cluster_name | default('') }}"
       operation: "{{ zbx_scenario | default('none') }}"
       status: "{{ current_device_result.status | default('eklenemedi') }}"
-      reason: "{{ current_device_result.reason | default('') }}"
+      reason: >-
+        {{ current_device_result.reason | default('') }}
+        {% if _manual_change_notes is defined and (_manual_change_notes | length > 0) %}
+        | Manuel koruma: {{ _manual_change_notes | join('; ') }}
+        {% endif %}
+      last_location: "{{ netbox_device.root_location_name | default(device_info.location | default('')) }}"
+      last_proxy_group_id: "{{ zbx_proxy_group_id | default('') }}"
+      proxy_manual_change_detected: "{{ _proxy_manual_change_detected | default(false) | bool }}"
+      field_merge_actions: "{{ _field_merge_actions | default({}) }}"
+      extra_data:
+        last_proxy_group_id: "{{ zbx_proxy_group_id | default('') }}"
+        last_visible_name: "{{ zbx_host_visible_name | default(zbx_record.HOSTNAME | default('')) }}"
+        proxy_manual_change_detected: "{{ _proxy_manual_change_detected | default(false) | bool }}"
+        field_merge_actions: "{{ _field_merge_actions | default({}) }}"
       request_payload: "{{ zbx_record | default({}) }}"
       response_payload: {}
       error_payload: {}

@@ -11,7 +11,7 @@
   run_once: true
   when: hmdl_log_enabled | bool
 
-- name: Fetch all devices from Netbox API (with pagination and mapping-based filtering)
+- name: Fetch all devices (source: {{ device_source }})
   include_tasks: fetch_all_devices.yml
   when: (sync_devices | bool) or (only_fetch | bool)
 
@@ -25,11 +25,21 @@
     netbox_devices_count: 0
   when: not ((sync_devices | bool) or (only_fetch | bool))
 
+- name: Set empty NetBox virtual firewall list when virtual FW sync is disabled
+  set_fact:
+    netbox_virtual_fws_raw: []
+    netbox_virtual_fws_count: 0
+  when: not (sync_virtual_fws | bool)
+
+- name: Fetch virtual firewalls (source: {{ virtual_fw_source }})
+  include_tasks: fetch_all_virtual_fws.yml
+  when: sync_virtual_fws | bool
+
 - name: Fetch all hosts from Zabbix API (for mapping and update detection)
   include_tasks: fetch_all_zabbix_hosts.yml
   when:
     - not only_fetch | bool
-    - (sync_devices | bool) or (sync_platforms | bool)
+    - (sync_devices | bool) or (sync_platforms | bool) or (sync_virtual_fws | bool)
 
 - name: Set filtered devices (mapping-based filters already applied in Python script)
   set_fact:
@@ -52,12 +62,13 @@
 - name: Fail when no sync mode is enabled
   fail:
     msg: >-
-      No work selected: enable sync_devices and/or sync_platforms, or set only_fetch: true
-      for NetBox-only inspection.
+      No work selected: enable sync_devices and/or sync_platforms and/or sync_virtual_fws,
+      or set only_fetch: true for inventory-only inspection.
   when:
     - not only_fetch | bool
     - not (sync_devices | bool)
     - not (sync_platforms | bool)
+    - not (sync_virtual_fws | bool)
 
 - name: Summary of fetched devices from Netbox (monitor vs skip)
   debug:
@@ -164,7 +175,18 @@
     - sync_devices | bool
     - result_files.files is defined
 
-- name: Fetch all platforms from Netbox API (izlenmeli and optional location filtering)
+- name: Summary of fetched virtual firewalls
+  debug:
+    msg: |
+      ============================================
+      VIRTUAL FIREWALLS FETCH SUMMARY
+      ============================================
+      Active virtual firewalls count: {{ netbox_virtual_fws_count | default(0) }}
+      Source: {{ virtual_fw_source }}
+      ============================================
+  when: sync_virtual_fws | bool
+
+- name: Fetch all platforms (source: {{ platform_source }})
   include_tasks: fetch_all_platforms.yml
   when: sync_platforms | bool
 
@@ -233,6 +255,61 @@
   when:
     - sync_platforms | bool
     - platform_result_files.files is defined
+
+- name: Display virtual firewall count for Zabbix
+  debug:
+    msg: >-
+      Found {{ netbox_virtual_fws_raw | default([]) | length }} virtual firewalls to process
+      (sync_virtual_fws={{ sync_virtual_fws | bool }}, source={{ virtual_fw_source }})
+  when: sync_virtual_fws | bool
+
+- name: Process each virtual firewall
+  include_tasks: process_virtual_fw.yml
+  loop: "{{ netbox_virtual_fws_raw | default([]) }}"
+  loop_control:
+    loop_var: outer_virtual_fw_item
+    label: "{{ outer_virtual_fw_item.hostname | default(outer_virtual_fw_item.name | default('Unknown')) }}"
+  vars:
+    netbox_virtual_fw: "{{ outer_virtual_fw_item }}"
+  when: sync_virtual_fws | bool
+
+- name: Collect all virtual firewall results from temporary files
+  find:
+    paths: /tmp
+    patterns: "zabbix_vfw_operation_result_*.json"
+  register: vfw_result_files
+  delegate_to: localhost
+  run_once: true
+  when: sync_virtual_fws | bool
+
+- name: Append virtual firewall results to processing_results
+  set_fact:
+    processing_results: >-
+      {%- set results = processing_results | default([]) | list -%}
+      {%- for file in vfw_result_files.files | default([]) -%}
+      {%- set file_content = lookup('file', file.path) | from_json -%}
+      {%- if file_content -%}
+      {%- set _ = results.append(file_content) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ results }}
+  delegate_to: localhost
+  run_once: true
+  when:
+    - sync_virtual_fws | bool
+    - vfw_result_files.files is defined
+    - vfw_result_files.files | length > 0
+
+- name: Clean up temporary virtual firewall result files
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ vfw_result_files.files | default([]) }}"
+  delegate_to: localhost
+  run_once: true
+  when:
+    - sync_virtual_fws | bool
+    - vfw_result_files.files is defined
 
 - name: Add skipped devices (izlenmeli=Hayır) to processing results
   set_fact:

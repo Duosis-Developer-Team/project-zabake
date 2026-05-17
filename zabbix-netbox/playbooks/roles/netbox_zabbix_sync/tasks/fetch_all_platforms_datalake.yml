@@ -1,0 +1,102 @@
+---
+# Fetch NetBox platforms from PostgreSQL discovery_netbox_platform table.
+
+- name: Fail when discovery DB credentials are missing for platform datalake fetch
+  fail:
+    msg: >-
+      platform_source=datalake requires discovery_db_host, discovery_db_name,
+      discovery_db_user, and discovery_db_password.
+  when:
+    - discovery_db_host | default('') | trim == ''
+    - or discovery_db_name | default('') | trim == ''
+    - or discovery_db_user | default('') | trim == ''
+
+- name: Fetch monitor platforms from discovery database
+  community.postgresql.postgresql_query:
+    db: "{{ discovery_db_name }}"
+    login_host: "{{ discovery_db_host }}"
+    login_port: "{{ discovery_db_port | int }}"
+    login_user: "{{ discovery_db_user }}"
+    login_password: "{{ discovery_db_password }}"
+    query: |
+      SELECT
+          p.id,
+          p.name,
+          p.display,
+          p.manufacturer_name,
+          p.parent_name,
+          p.cf_dc,
+          p.cf_site,
+          p.cf_ip_addresses,
+          p.cf_port,
+          p.cf_url,
+          p.cf_izlenmeli AS izlenmeli,
+          jsonb_build_object(
+              'DC', p.cf_dc,
+              'Site', p.cf_site,
+              'ip_addresses', p.cf_ip_addresses,
+              'port', p.cf_port,
+              'url', p.cf_url,
+              'izlenmeli', p.cf_izlenmeli
+          ) AS custom_fields
+      FROM public.discovery_netbox_platform p
+      WHERE (p.cf_izlenmeli IS NULL OR p.cf_izlenmeli NOT IN ('Hayir', 'Hayır'))
+      {% if location_filter | default('') | trim != '' %}
+        AND (
+          COALESCE(p.cf_dc, '') ILIKE '%{{ location_filter }}%'
+          OR COALESCE(p.cf_site, '') ILIKE '%{{ location_filter }}%'
+        )
+      {% endif %}
+  register: _pg_platforms_monitor
+  changed_when: false
+  delegate_to: localhost
+  run_once: true
+
+- name: Fetch skip platforms from discovery database
+  community.postgresql.postgresql_query:
+    db: "{{ discovery_db_name }}"
+    login_host: "{{ discovery_db_host }}"
+    login_port: "{{ discovery_db_port | int }}"
+    login_user: "{{ discovery_db_user }}"
+    login_password: "{{ discovery_db_password }}"
+    query: |
+      SELECT
+          p.id,
+          p.name,
+          p.display,
+          p.manufacturer_name,
+          p.parent_name,
+          p.cf_dc,
+          p.cf_site,
+          p.cf_ip_addresses,
+          p.cf_port,
+          p.cf_url,
+          p.cf_izlenmeli AS izlenmeli,
+          jsonb_build_object(
+              'DC', p.cf_dc,
+              'Site', p.cf_site,
+              'ip_addresses', p.cf_ip_addresses,
+              'port', p.cf_port,
+              'url', p.cf_url,
+              'izlenmeli', p.cf_izlenmeli
+          ) AS custom_fields
+      FROM public.discovery_netbox_platform p
+      WHERE p.cf_izlenmeli IN ('Hayir', 'Hayır')
+      {% if location_filter | default('') | trim != '' %}
+        AND (
+          COALESCE(p.cf_dc, '') ILIKE '%{{ location_filter }}%'
+          OR COALESCE(p.cf_site, '') ILIKE '%{{ location_filter }}%'
+        )
+      {% endif %}
+  register: _pg_platforms_skip
+  changed_when: false
+  delegate_to: localhost
+  run_once: true
+
+- name: Set platform fetch facts (datalake)
+  set_fact:
+    netbox_platforms_monitor_raw: "{{ _pg_platforms_monitor.query_result | default([]) }}"
+    netbox_platforms_monitor_count: "{{ _pg_platforms_monitor.query_result | default([]) | length }}"
+    netbox_platforms_skip_raw: "{{ _pg_platforms_skip.query_result | default([]) }}"
+    netbox_platforms_skip_count: "{{ _pg_platforms_skip.query_result | default([]) | length }}"
+    netbox_platforms_raw: "{{ _pg_platforms_monitor.query_result | default([]) }}"

@@ -78,6 +78,10 @@
           "response_payload":     to_jsonb_str(entry.get("response_payload")),
           "error_payload":        to_jsonb_str(entry.get("error_payload")),
           "extra_data":           to_jsonb_str(entry.get("extra_data")),
+          "last_location":        nullify(entry.get("last_location")),
+          "last_proxy_group_id":  nullify(entry.get("last_proxy_group_id")),
+          "proxy_manual_change_detected": bool(entry.get("proxy_manual_change_detected", False)),
+          "field_merge_actions":  to_jsonb_str(entry.get("field_merge_actions")),
       }
       print(json.dumps(prepared))
     dest: /tmp/hmdl_prepare_values.py
@@ -134,9 +138,31 @@
           response_payload     JSONB NULL,
           error_payload        JSONB NULL,
           extra_data           JSONB NULL,
+          last_location        TEXT NULL,
+          last_proxy_group_id  TEXT NULL,
+          proxy_manual_change_detected BOOLEAN DEFAULT FALSE,
+          field_merge_actions  JSONB NULL,
           processed_at         TIMESTAMPTZ DEFAULT NOW(),
           created_at           TIMESTAMPTZ DEFAULT NOW()
       )
+  delegate_to: localhost
+  run_once: true
+  changed_when: false
+  when: hmdl_log_enabled | bool
+
+- name: Ensure HMDL log table has merge/proxy audit columns
+  community.postgresql.postgresql_query:
+    db: "{{ hmdl_db_name }}"
+    login_host: "{{ hmdl_db_host }}"
+    login_port: "{{ hmdl_db_port | int }}"
+    login_user: "{{ hmdl_db_user }}"
+    login_password: "{{ hmdl_db_password }}"
+    query: "{{ item }}"
+  loop:
+    - "ALTER TABLE {{ hmdl_log_schema }}.{{ hmdl_log_table }} ADD COLUMN IF NOT EXISTS last_location TEXT NULL"
+    - "ALTER TABLE {{ hmdl_log_schema }}.{{ hmdl_log_table }} ADD COLUMN IF NOT EXISTS last_proxy_group_id TEXT NULL"
+    - "ALTER TABLE {{ hmdl_log_schema }}.{{ hmdl_log_table }} ADD COLUMN IF NOT EXISTS proxy_manual_change_detected BOOLEAN DEFAULT FALSE"
+    - "ALTER TABLE {{ hmdl_log_schema }}.{{ hmdl_log_table }} ADD COLUMN IF NOT EXISTS field_merge_actions JSONB NULL"
   delegate_to: localhost
   run_once: true
   changed_when: false
@@ -195,7 +221,9 @@
               site_name, location_name, location_parent_name,
               root_location_name, tenant_name, cluster_name,
               operation, status, reason,
-              request_payload, response_payload, error_payload, extra_data
+              request_payload, response_payload, error_payload, extra_data,
+              last_location, last_proxy_group_id, proxy_manual_change_detected,
+              field_merge_actions
           ) VALUES (
               %(run_id)s, %(awx_job_id)s, %(playbook_name)s,
               %(source_device_id)s, %(source_device_name)s,
@@ -205,7 +233,9 @@
               %(root_location_name)s, %(tenant_name)s, %(cluster_name)s,
               %(operation)s, %(status)s, %(reason)s,
               %(request_payload)s::jsonb, %(response_payload)s::jsonb,
-              %(error_payload)s::jsonb, %(extra_data)s::jsonb
+              %(error_payload)s::jsonb, %(extra_data)s::jsonb,
+              %(last_location)s, %(last_proxy_group_id)s,
+              %(proxy_manual_change_detected)s, %(field_merge_actions)s::jsonb
           )
         named_args: "{{ _hmdl_prepared.stdout | from_json }}"
       delegate_to: localhost

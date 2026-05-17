@@ -1,0 +1,66 @@
+---
+# Read last successful HMDL sync row for a device (proxy/location/visible name baseline).
+
+- name: Reset HMDL last sync facts
+  set_fact:
+    hmdl_last_sync: {}
+    hmdl_last_location: ""
+    hmdl_last_proxy_group_id: ""
+    hmdl_last_visible_name: ""
+  run_once: false
+
+- name: Query last HMDL sync log row for device
+  community.postgresql.postgresql_query:
+    db: "{{ hmdl_db_name }}"
+    login_host: "{{ hmdl_db_host }}"
+    login_port: "{{ hmdl_db_port | int }}"
+    login_user: "{{ hmdl_db_user }}"
+    login_password: "{{ hmdl_db_password }}"
+    query: |
+      SELECT
+          root_location_name,
+          extra_data,
+          zabbix_hostname,
+          processed_at
+      FROM {{ hmdl_log_schema }}.{{ hmdl_log_table }}
+      WHERE source_device_id = %(device_id)s
+        AND status IN ('eklendi', 'güncellendi', 'güncel', 'dry_run')
+      ORDER BY processed_at DESC NULLS LAST, id DESC
+      LIMIT 1
+    named_args:
+      device_id: "{{ hmdl_read_device_id | int }}"
+  register: _hmdl_last_sync_query
+  changed_when: false
+  delegate_to: localhost
+  when:
+    - hmdl_log_enabled | bool
+    - hmdl_read_device_id is defined
+    - hmdl_read_device_id | string | trim != ''
+    - hmdl_read_device_id | string | trim != 'None'
+
+- name: Parse last HMDL sync row
+  set_fact:
+    hmdl_last_sync: "{{ (_hmdl_last_sync_query.query_result | default([]))[0] | default({}) }}"
+    hmdl_last_location: "{{ ((_hmdl_last_sync_query.query_result | default([]))[0].root_location_name | default('')) if ((_hmdl_last_sync_query.query_result | default([]) | length) > 0) else '' }}"
+    hmdl_last_proxy_group_id: >-
+      {% set row = (_hmdl_last_sync_query.query_result | default([]))[0] | default({}) %}
+      {% set extra = row.extra_data | default({}) %}
+      {% if extra is mapping %}
+      {{ extra.get('last_proxy_group_id', extra.get('proxy_group_id', '')) }}
+      {% elif extra is string and extra | length > 0 %}
+      {{ (extra | from_json).get('last_proxy_group_id', '') if (extra | from_json is mapping) else '' }}
+      {% else %}
+      {{ '' }}
+      {% endif %}
+    hmdl_last_visible_name: >-
+      {% set row = (_hmdl_last_sync_query.query_result | default([]))[0] | default({}) %}
+      {% set extra = row.extra_data | default({}) %}
+      {% if extra is mapping %}
+      {{ extra.get('last_visible_name', row.zabbix_hostname | default('')) }}
+      {% else %}
+      {{ row.zabbix_hostname | default('') }}
+      {% endif %}
+  when:
+    - hmdl_log_enabled | bool
+    - _hmdl_last_sync_query is defined
+    - (_hmdl_last_sync_query.query_result | default([]) | length) > 0
