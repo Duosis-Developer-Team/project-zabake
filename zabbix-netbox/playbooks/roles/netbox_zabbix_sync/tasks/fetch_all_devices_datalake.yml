@@ -10,18 +10,32 @@
       import json
       import sys
 
+      def sanitize_text(value):
+          if not isinstance(value, str):
+              return value
+          return value.encode("utf-8", errors="surrogatepass").decode("utf-8", errors="replace")
+
+      def sanitize_json(value):
+          if isinstance(value, str):
+              return sanitize_text(value)
+          if isinstance(value, dict):
+              return {sanitize_json(k): sanitize_json(v) for k, v in value.items()}
+          if isinstance(value, list):
+              return [sanitize_json(item) for item in value]
+          return value
+
       json_file      = sys.argv[1]
       mapping_file   = sys.argv[2]
       izlenmeli_mode = sys.argv[3] if len(sys.argv) > 3 else 'monitor'
 
-      with open(mapping_file, 'r') as f:
+      with open(mapping_file, 'r', encoding='utf-8') as f:
           device_type_mapping = json.load(f)
       mappings = device_type_mapping.get('mappings', [])
 
       print(f"DEBUG: Loaded {len(mappings)} device type mappings", file=sys.stderr)
       print(f"DEBUG: Processing mode={izlenmeli_mode}", file=sys.stderr)
 
-      with open(json_file, 'r') as f:
+      with open(json_file, 'r', encoding='utf-8') as f:
           raw = f.read().strip()
 
       if not raw or raw in ('null', '[]', ''):
@@ -120,7 +134,7 @@
           'count':   len(all_devices),
           'mode':    izlenmeli_mode,
       }
-      print(json.dumps(result, default=str))
+      print(json.dumps(sanitize_json(result), ensure_ascii=False, default=str))
     dest: /tmp/filter_db_devices.py
     mode: '0755'
   delegate_to: localhost

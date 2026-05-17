@@ -19,7 +19,21 @@
       from urllib3.exceptions import InsecureRequestWarning
       
       requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
-      
+
+      def sanitize_text(value):
+          if not isinstance(value, str):
+              return value
+          return value.encode("utf-8", errors="surrogatepass").decode("utf-8", errors="replace")
+
+      def sanitize_json(value):
+          if isinstance(value, str):
+              return sanitize_text(value)
+          if isinstance(value, dict):
+              return {sanitize_json(k): sanitize_json(v) for k, v in value.items()}
+          if isinstance(value, list):
+              return [sanitize_json(item) for item in value]
+          return value
+
       netbox_url = sys.argv[1].rstrip("/")
       netbox_token = sys.argv[2]
       verify_ssl = sys.argv[3].lower() == "true"
@@ -41,7 +55,7 @@
           if izlenmeli_mode == "monitor":
               base_url += "&cf_izlenmeli=Evet&cf_izlenmeli=null"
           elif izlenmeli_mode == "skip":
-              base_url += "&cf_izlenmeli=Hayır"
+              base_url += "&cf_izlenmeli=Hay\u0131r"
 
           next_url = base_url
           print(f"DEBUG: Using NetBox platforms API URL ({izlenmeli_mode}): {base_url}", file=sys.stderr)
@@ -142,7 +156,7 @@
           "mode": izlenmeli_mode,
       }
       
-      print(json.dumps(result))
+      print(json.dumps(sanitize_json(result), ensure_ascii=False, default=str))
     dest: "/tmp/fetch_all_netbox_platforms.py"
     mode: "0755"
   delegate_to: localhost
