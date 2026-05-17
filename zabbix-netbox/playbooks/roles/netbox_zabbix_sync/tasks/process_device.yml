@@ -811,6 +811,11 @@
       playbook_name: "{{ hmdl_playbook_name | default('db_to_zabbix_sync') }}"
       source_device_id: "{{ netbox_device.id | default(None) }}"
       source_device_name: "{{ netbox_device.name | default('') }}"
+      source_table: >-
+        {{ 'discovery_netbox_inventory_device' if (device_source | default('datalake') | lower == 'datalake')
+           else 'netbox_api_dcim_device' }}
+      host_entity_type: device
+      inventory_source: "{{ device_source | default('datalake') }}"
       zabbix_hostid: "{{ zbx_existing_host.hostid | default('') }}"
       zabbix_hostname: "{{ current_device_result.hostname | default(netbox_device.name | default('')) }}"
       zabbix_host_ip: "{{ current_device_result.ip | default('') }}"
@@ -830,15 +835,18 @@
         {% if _manual_change_notes is defined and (_manual_change_notes | length > 0) %}
         | Manuel koruma: {{ _manual_change_notes | join('; ') }}
         {% endif %}
+      last_visible_name: "{{ zbx_host_visible_name | default(zbx_record.HOSTNAME | default('')) }}"
       last_location: "{{ netbox_device.root_location_name | default(device_info.location | default('')) }}"
+      expected_proxy_group_id: "{{ _expected_proxy_group_id | default(zbx_proxy_group_id | default('')) }}"
       last_proxy_group_id: "{{ zbx_proxy_group_id | default('') }}"
+      zabbix_proxy_group_id: "{{ zbx_existing_host.proxy_groupid | default('') }}"
+      proxy_location_change: "{{ _proxy_location_change | default(false) | bool }}"
       proxy_manual_change_detected: "{{ _proxy_manual_change_detected | default(false) | bool }}"
       field_merge_actions: "{{ _field_merge_actions | default({}) }}"
-      extra_data:
-        last_proxy_group_id: "{{ zbx_proxy_group_id | default('') }}"
-        last_visible_name: "{{ zbx_host_visible_name | default(zbx_record.HOSTNAME | default('')) }}"
-        proxy_manual_change_detected: "{{ _proxy_manual_change_detected | default(false) | bool }}"
-        field_merge_actions: "{{ _field_merge_actions | default({}) }}"
+      last_managed_groups: >-
+        {{ device_info.host_groups | default('') | split(',') | map('trim') | reject('equalto', '') | list }}
+      dry_run: "{{ dry_run | default(false) | bool }}"
+      extra_data: {}
       request_payload: "{{ zbx_record | default({}) }}"
       response_payload: {}
       error_payload: {}

@@ -859,6 +859,8 @@
     _last_pg: "{{ hmdl_last_proxy_group_id | default(_exp_pg) | string }}"
     _loc_changed: "{{ (_last_loc | string | trim != '') and (_cur_loc | string | trim != _last_loc | string | trim) }}"
   set_fact:
+    _proxy_location_change: "{{ _loc_changed | bool }}"
+    _expected_proxy_group_id: "{{ _exp_pg }}"
     _proxy_apply_update: >-
       {{
         _loc_changed | bool or
@@ -993,8 +995,10 @@
       {%- if zbx_existing_host.host | default('') != zbx_record.HOSTNAME -%}
         {%- set _ = entries.append({'field_name': 'hostname', 'old_value': zbx_existing_host.host | default(''), 'new_value': zbx_record.HOSTNAME, 'action': 'updated'}) -%}
       {%- endif -%}
-      {%- if zbx_existing_host.name | default('') != zbx_record.HOSTNAME -%}
-        {%- set _ = entries.append({'field_name': 'visible_name', 'old_value': zbx_existing_host.name | default(''), 'new_value': zbx_record.HOSTNAME, 'action': 'updated'}) -%}
+      {%- if _visible_name_preserved | default(false) | bool -%}
+        {%- set _ = entries.append({'field_name': 'visible_name', 'old_value': zbx_existing_host.name | default(''), 'new_value': zbx_host_visible_name | default(''), 'action': 'skipped', 'merge_result': 'preserved_manual', 'reason': 'Manually changed in Zabbix'}) -%}
+      {%- elif zbx_existing_host.name | default('') != zbx_host_visible_name | default('') -%}
+        {%- set _ = entries.append({'field_name': 'visible_name', 'old_value': zbx_existing_host.name | default(''), 'new_value': zbx_host_visible_name | default(''), 'action': 'updated', 'merge_result': 'updated'}) -%}
       {%- endif -%}
       {%- if _existing_interface.ip | default('') != zbx_record.HOST_IP -%}
         {%- set _ = entries.append({'field_name': 'interface_ip', 'old_value': _existing_interface.ip | default(''), 'new_value': zbx_record.HOST_IP, 'action': 'updated'}) -%}
@@ -1002,8 +1006,10 @@
       {%- if zbx_existing_host.monitored_by | default('') | string != zbx_monitored_by | string -%}
         {%- set _ = entries.append({'field_name': 'monitored_by', 'old_value': zbx_existing_host.monitored_by | default('') | string, 'new_value': zbx_monitored_by | string, 'action': 'updated'}) -%}
       {%- endif -%}
-      {%- if zbx_existing_host.proxy_groupid | default('') | string != zbx_proxy_group_id | string -%}
-        {%- set _ = entries.append({'field_name': 'proxy_group', 'old_value': zbx_existing_host.proxy_groupid | default('') | string, 'new_value': zbx_proxy_group_id | string, 'action': 'updated'}) -%}
+      {%- if _proxy_manual_change_detected | default(false) | bool -%}
+        {%- set _ = entries.append({'field_name': 'proxy_group', 'old_value': zbx_existing_host.proxy_groupid | default('') | string, 'new_value': _expected_proxy_group_id | default(zbx_proxy_group_id) | string, 'action': 'skipped', 'merge_result': 'preserved_manual', 'reason': 'Proxy manually changed in Zabbix'}) -%}
+      {%- elif _proxy_apply_update | default(false) | bool -%}
+        {%- set _ = entries.append({'field_name': 'proxy_group', 'old_value': zbx_existing_host.proxy_groupid | default('') | string, 'new_value': zbx_proxy_group_id | string, 'action': 'updated', 'merge_result': 'updated'}) -%}
       {%- endif -%}
       {%- if _groups_needs_update | default(false) | bool -%}
         {%- set old_names = (zbx_existing_host.groups | default([]) | map(attribute='name') | sort | join(',')) -%}

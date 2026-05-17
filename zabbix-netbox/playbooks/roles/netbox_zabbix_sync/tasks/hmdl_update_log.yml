@@ -23,14 +23,18 @@
           awx_job_id         VARCHAR(100) NULL,
           source_device_id   BIGINT NULL,
           source_device_name TEXT NULL,
+          host_entity_type   VARCHAR(30) NULL,
+          inventory_source   VARCHAR(20) NULL,
           zabbix_hostid      TEXT NULL,
           zabbix_hostname    TEXT NULL,
           field_name         TEXT NOT NULL,
           old_value          TEXT NULL,
           new_value          TEXT NULL,
           action             VARCHAR(50) NOT NULL,
+          merge_result       VARCHAR(50) NULL,
           status             VARCHAR(50) NOT NULL,
           reason             TEXT NULL,
+          dry_run            BOOLEAN DEFAULT FALSE NOT NULL,
           processed_at       TIMESTAMPTZ DEFAULT NOW()
       )
   delegate_to: localhost
@@ -52,6 +56,8 @@
           awx_job_id         VARCHAR(100) NULL,
           source_device_id   BIGINT NULL,
           source_device_name TEXT NULL,
+          host_entity_type   VARCHAR(30) NULL,
+          inventory_source   VARCHAR(20) NULL,
           zabbix_hostid      TEXT NULL,
           zabbix_hostname    TEXT NULL,
           object_type        VARCHAR(50) NOT NULL,
@@ -59,8 +65,10 @@
           old_value          TEXT NULL,
           new_value          TEXT NULL,
           action             VARCHAR(50) NOT NULL,
+          merge_result       VARCHAR(50) NULL,
           status             VARCHAR(50) NOT NULL,
           reason             TEXT NULL,
+          dry_run            BOOLEAN DEFAULT FALSE NOT NULL,
           processed_at       TIMESTAMPTZ DEFAULT NOW()
       )
   delegate_to: localhost
@@ -102,6 +110,8 @@
       zabbix_hostid    = sys.argv[7] if len(sys.argv) > 7 else None
       zabbix_hostname  = sys.argv[8] if len(sys.argv) > 8 else None
       update_status    = sys.argv[9] if len(sys.argv) > 9 else 'updated'
+      inventory_source = sys.argv[10] if len(sys.argv) > 10 else None
+      host_entity_type = sys.argv[11] if len(sys.argv) > 11 else 'device'
 
       with open(entries_file, 'r') as f:
           entries = json.load(f)
@@ -113,13 +123,17 @@
               'awx_job_id':         nullify(awx_job_id),
               'source_device_id':   to_int_or_none(device_id),
               'source_device_name': nullify(device_name),
+              'host_entity_type':   nullify(host_entity_type),
+              'inventory_source':   nullify(inventory_source),
               'zabbix_hostid':      nullify(zabbix_hostid),
               'zabbix_hostname':    nullify(zabbix_hostname),
               'old_value':          nullify(entry.get('old_value')),
               'new_value':          nullify(entry.get('new_value')),
               'action':             entry.get('action', 'updated'),
+              'merge_result':       nullify(entry.get('merge_result', entry.get('action', 'updated'))),
               'status':             update_status,
               'reason':             nullify(entry.get('reason')),
+              'dry_run':            update_status == 'dry_run',
           }
           if entry_type == 'host':
               base['field_name'] = entry.get('field_name', 'unknown')
@@ -179,6 +193,8 @@
     "{{ zbx_existing_host.hostid | default('') }}"
     "{{ zabbix_hostname_final | default('') }}"
     "{{ _hmdl_update_log_status | default('unknown') }}"
+    "{{ device_source | default('datalake') }}"
+    "device"
   register: _hmdl_host_changes_prepared
   changed_when: false
   delegate_to: localhost
@@ -200,12 +216,14 @@
         query: |
           INSERT INTO {{ hmdl_log_schema }}.zabbix_host_update_log (
               run_id, awx_job_id, source_device_id, source_device_name,
+              host_entity_type, inventory_source,
               zabbix_hostid, zabbix_hostname, field_name,
-              old_value, new_value, action, status, reason
+              old_value, new_value, action, merge_result, status, reason, dry_run
           ) VALUES (
               %(run_id)s, %(awx_job_id)s, %(source_device_id)s, %(source_device_name)s,
+              %(host_entity_type)s, %(inventory_source)s,
               %(zabbix_hostid)s, %(zabbix_hostname)s, %(field_name)s,
-              %(old_value)s, %(new_value)s, %(action)s, %(status)s, %(reason)s
+              %(old_value)s, %(new_value)s, %(action)s, %(merge_result)s, %(status)s, %(reason)s, %(dry_run)s
           )
         named_args: "{{ host_change_item }}"
       loop: "{{ _hmdl_host_changes_prepared.stdout | from_json }}"
@@ -259,6 +277,8 @@
     "{{ zbx_existing_host.hostid | default('') }}"
     "{{ zabbix_hostname_final | default('') }}"
     "{{ _hmdl_update_log_status | default('unknown') }}"
+    "{{ device_source | default('datalake') }}"
+    "device"
   register: _hmdl_tag_changes_prepared
   changed_when: false
   delegate_to: localhost
@@ -280,12 +300,14 @@
         query: |
           INSERT INTO {{ hmdl_log_schema }}.zabbix_tag_update_log (
               run_id, awx_job_id, source_device_id, source_device_name,
+              host_entity_type, inventory_source,
               zabbix_hostid, zabbix_hostname, object_type, key_name,
-              old_value, new_value, action, status, reason
+              old_value, new_value, action, merge_result, status, reason, dry_run
           ) VALUES (
               %(run_id)s, %(awx_job_id)s, %(source_device_id)s, %(source_device_name)s,
+              %(host_entity_type)s, %(inventory_source)s,
               %(zabbix_hostid)s, %(zabbix_hostname)s, %(object_type)s, %(key_name)s,
-              %(old_value)s, %(new_value)s, %(action)s, %(status)s, %(reason)s
+              %(old_value)s, %(new_value)s, %(action)s, %(merge_result)s, %(status)s, %(reason)s, %(dry_run)s
           )
         named_args: "{{ tag_change_item }}"
       loop: "{{ _hmdl_tag_changes_prepared.stdout | from_json }}"

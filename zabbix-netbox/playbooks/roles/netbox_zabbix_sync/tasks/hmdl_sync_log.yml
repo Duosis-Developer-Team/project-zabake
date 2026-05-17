@@ -59,9 +59,13 @@
           "playbook_name":        nullify(entry.get("playbook_name")),
           "source_device_id":     to_int_or_none(entry.get("source_device_id")),
           "source_device_name":   nullify(entry.get("source_device_name")),
+          "source_table":         nullify(entry.get("source_table")),
+          "host_entity_type":     nullify(entry.get("host_entity_type")),
+          "inventory_source":     nullify(entry.get("inventory_source")),
           "zabbix_hostid":        nullify(entry.get("zabbix_hostid")),
           "zabbix_hostname":      nullify(entry.get("zabbix_hostname")),
           "zabbix_host_ip":       nullify(entry.get("zabbix_host_ip")),
+          "last_visible_name":    nullify(entry.get("last_visible_name")),
           "device_type":          nullify(entry.get("device_type")),
           "device_role":          nullify(entry.get("device_role")),
           "manufacturer_name":    nullify(entry.get("manufacturer_name")),
@@ -69,19 +73,24 @@
           "location_name":        nullify(entry.get("location_name")),
           "location_parent_name": nullify(entry.get("location_parent_name")),
           "root_location_name":   nullify(entry.get("root_location_name")),
+          "last_location":        nullify(entry.get("last_location")),
           "tenant_name":          nullify(entry.get("tenant_name")),
           "cluster_name":         nullify(entry.get("cluster_name")),
           "operation":            nullify(entry.get("operation")),
           "status":               entry.get("status") or "eklenemedi",
           "reason":               nullify(entry.get("reason")),
+          "dry_run":              bool(entry.get("dry_run", False)),
+          "expected_proxy_group_id": nullify(entry.get("expected_proxy_group_id")),
+          "last_proxy_group_id":  nullify(entry.get("last_proxy_group_id")),
+          "zabbix_proxy_group_id": nullify(entry.get("zabbix_proxy_group_id")),
+          "proxy_location_change": bool(entry.get("proxy_location_change", False)),
+          "proxy_manual_change_detected": bool(entry.get("proxy_manual_change_detected", False)),
+          "field_merge_actions":  to_jsonb_str(entry.get("field_merge_actions")),
+          "last_managed_groups":  to_jsonb_str(entry.get("last_managed_groups")),
           "request_payload":      to_jsonb_str(entry.get("request_payload")),
           "response_payload":     to_jsonb_str(entry.get("response_payload")),
           "error_payload":        to_jsonb_str(entry.get("error_payload")),
           "extra_data":           to_jsonb_str(entry.get("extra_data")),
-          "last_location":        nullify(entry.get("last_location")),
-          "last_proxy_group_id":  nullify(entry.get("last_proxy_group_id")),
-          "proxy_manual_change_detected": bool(entry.get("proxy_manual_change_detected", False)),
-          "field_merge_actions":  to_jsonb_str(entry.get("field_merge_actions")),
       }
       print(json.dumps(prepared))
     dest: /tmp/hmdl_prepare_values.py
@@ -112,38 +121,46 @@
     login_password: "{{ hmdl_db_password }}"
     query: |
       CREATE TABLE IF NOT EXISTS {{ hmdl_log_schema }}.{{ hmdl_log_table }} (
-          id                   BIGSERIAL PRIMARY KEY,
-          run_id               VARCHAR(100) NULL,
-          awx_job_id           VARCHAR(100) NULL,
-          playbook_name        TEXT NULL,
-          source_device_id     BIGINT NULL,
-          source_device_name   TEXT NULL,
-          source_table         TEXT DEFAULT 'discovery_netbox_inventory_device',
-          zabbix_hostid        TEXT NULL,
-          zabbix_hostname      TEXT NULL,
-          zabbix_host_ip       TEXT NULL,
-          device_type          TEXT NULL,
-          device_role          TEXT NULL,
-          manufacturer_name    TEXT NULL,
-          site_name            TEXT NULL,
-          location_name        TEXT NULL,
-          location_parent_name TEXT NULL,
-          root_location_name   TEXT NULL,
-          tenant_name          TEXT NULL,
-          cluster_name         TEXT NULL,
-          operation            VARCHAR(50) NULL,
-          status               VARCHAR(50) NOT NULL,
-          reason               TEXT NULL,
-          request_payload      JSONB NULL,
-          response_payload     JSONB NULL,
-          error_payload        JSONB NULL,
-          extra_data           JSONB NULL,
-          last_location        TEXT NULL,
-          last_proxy_group_id  TEXT NULL,
-          proxy_manual_change_detected BOOLEAN DEFAULT FALSE,
-          field_merge_actions  JSONB NULL,
-          processed_at         TIMESTAMPTZ DEFAULT NOW(),
-          created_at           TIMESTAMPTZ DEFAULT NOW()
+          id                           BIGSERIAL PRIMARY KEY,
+          run_id                       VARCHAR(100) NULL,
+          awx_job_id                   VARCHAR(100) NULL,
+          playbook_name                TEXT NULL,
+          source_device_id             BIGINT NULL,
+          source_device_name           TEXT NULL,
+          source_table                 TEXT DEFAULT 'discovery_netbox_inventory_device',
+          host_entity_type             VARCHAR(30) NULL,
+          inventory_source             VARCHAR(20) NULL,
+          zabbix_hostid                TEXT NULL,
+          zabbix_hostname              TEXT NULL,
+          zabbix_host_ip               TEXT NULL,
+          last_visible_name            TEXT NULL,
+          device_type                  TEXT NULL,
+          device_role                  TEXT NULL,
+          manufacturer_name            TEXT NULL,
+          site_name                    TEXT NULL,
+          location_name                TEXT NULL,
+          location_parent_name         TEXT NULL,
+          root_location_name           TEXT NULL,
+          last_location                TEXT NULL,
+          tenant_name                  TEXT NULL,
+          cluster_name                 TEXT NULL,
+          operation                    VARCHAR(50) NULL,
+          status                       VARCHAR(50) NOT NULL,
+          reason                       TEXT NULL,
+          dry_run                      BOOLEAN DEFAULT FALSE NOT NULL,
+          expected_proxy_group_id      TEXT NULL,
+          last_proxy_group_id          TEXT NULL,
+          zabbix_proxy_group_id        TEXT NULL,
+          proxy_location_change        BOOLEAN DEFAULT FALSE NOT NULL,
+          proxy_manual_change_detected BOOLEAN DEFAULT FALSE NOT NULL,
+          field_merge_actions          JSONB NULL,
+          last_managed_groups          JSONB NULL,
+          request_payload              JSONB NULL,
+          response_payload             JSONB NULL,
+          error_payload                JSONB NULL,
+          extra_data                   JSONB NULL,
+          processed_at                 TIMESTAMPTZ DEFAULT NOW(),
+          created_at                   TIMESTAMPTZ DEFAULT NOW()
       )
   delegate_to: localhost
   run_once: true
@@ -159,10 +176,18 @@
     login_password: "{{ hmdl_db_password }}"
     query: "{{ item }}"
   loop:
+    - "ALTER TABLE {{ hmdl_log_schema }}.{{ hmdl_log_table }} ADD COLUMN IF NOT EXISTS host_entity_type VARCHAR(30) NULL"
+    - "ALTER TABLE {{ hmdl_log_schema }}.{{ hmdl_log_table }} ADD COLUMN IF NOT EXISTS inventory_source VARCHAR(20) NULL"
+    - "ALTER TABLE {{ hmdl_log_schema }}.{{ hmdl_log_table }} ADD COLUMN IF NOT EXISTS last_visible_name TEXT NULL"
     - "ALTER TABLE {{ hmdl_log_schema }}.{{ hmdl_log_table }} ADD COLUMN IF NOT EXISTS last_location TEXT NULL"
+    - "ALTER TABLE {{ hmdl_log_schema }}.{{ hmdl_log_table }} ADD COLUMN IF NOT EXISTS expected_proxy_group_id TEXT NULL"
     - "ALTER TABLE {{ hmdl_log_schema }}.{{ hmdl_log_table }} ADD COLUMN IF NOT EXISTS last_proxy_group_id TEXT NULL"
+    - "ALTER TABLE {{ hmdl_log_schema }}.{{ hmdl_log_table }} ADD COLUMN IF NOT EXISTS zabbix_proxy_group_id TEXT NULL"
+    - "ALTER TABLE {{ hmdl_log_schema }}.{{ hmdl_log_table }} ADD COLUMN IF NOT EXISTS proxy_location_change BOOLEAN DEFAULT FALSE"
     - "ALTER TABLE {{ hmdl_log_schema }}.{{ hmdl_log_table }} ADD COLUMN IF NOT EXISTS proxy_manual_change_detected BOOLEAN DEFAULT FALSE"
     - "ALTER TABLE {{ hmdl_log_schema }}.{{ hmdl_log_table }} ADD COLUMN IF NOT EXISTS field_merge_actions JSONB NULL"
+    - "ALTER TABLE {{ hmdl_log_schema }}.{{ hmdl_log_table }} ADD COLUMN IF NOT EXISTS last_managed_groups JSONB NULL"
+    - "ALTER TABLE {{ hmdl_log_schema }}.{{ hmdl_log_table }} ADD COLUMN IF NOT EXISTS dry_run BOOLEAN DEFAULT FALSE"
   delegate_to: localhost
   run_once: true
   changed_when: false
@@ -215,27 +240,31 @@
         query: |
           INSERT INTO {{ hmdl_log_schema }}.{{ hmdl_log_table }} (
               run_id, awx_job_id, playbook_name,
-              source_device_id, source_device_name,
-              zabbix_hostid, zabbix_hostname, zabbix_host_ip,
+              source_device_id, source_device_name, source_table,
+              host_entity_type, inventory_source,
+              zabbix_hostid, zabbix_hostname, zabbix_host_ip, last_visible_name,
               device_type, device_role, manufacturer_name,
               site_name, location_name, location_parent_name,
-              root_location_name, tenant_name, cluster_name,
-              operation, status, reason,
-              request_payload, response_payload, error_payload, extra_data,
-              last_location, last_proxy_group_id, proxy_manual_change_detected,
-              field_merge_actions
+              root_location_name, last_location, tenant_name, cluster_name,
+              operation, status, reason, dry_run,
+              expected_proxy_group_id, last_proxy_group_id, zabbix_proxy_group_id,
+              proxy_location_change, proxy_manual_change_detected,
+              field_merge_actions, last_managed_groups,
+              request_payload, response_payload, error_payload, extra_data
           ) VALUES (
               %(run_id)s, %(awx_job_id)s, %(playbook_name)s,
-              %(source_device_id)s, %(source_device_name)s,
-              %(zabbix_hostid)s, %(zabbix_hostname)s, %(zabbix_host_ip)s,
+              %(source_device_id)s, %(source_device_name)s, %(source_table)s,
+              %(host_entity_type)s, %(inventory_source)s,
+              %(zabbix_hostid)s, %(zabbix_hostname)s, %(zabbix_host_ip)s, %(last_visible_name)s,
               %(device_type)s, %(device_role)s, %(manufacturer_name)s,
               %(site_name)s, %(location_name)s, %(location_parent_name)s,
-              %(root_location_name)s, %(tenant_name)s, %(cluster_name)s,
-              %(operation)s, %(status)s, %(reason)s,
+              %(root_location_name)s, %(last_location)s, %(tenant_name)s, %(cluster_name)s,
+              %(operation)s, %(status)s, %(reason)s, %(dry_run)s,
+              %(expected_proxy_group_id)s, %(last_proxy_group_id)s, %(zabbix_proxy_group_id)s,
+              %(proxy_location_change)s, %(proxy_manual_change_detected)s,
+              %(field_merge_actions)s::jsonb, %(last_managed_groups)s::jsonb,
               %(request_payload)s::jsonb, %(response_payload)s::jsonb,
-              %(error_payload)s::jsonb, %(extra_data)s::jsonb,
-              %(last_location)s, %(last_proxy_group_id)s,
-              %(proxy_manual_change_detected)s, %(field_merge_actions)s::jsonb
+              %(error_payload)s::jsonb, %(extra_data)s::jsonb
           )
         named_args: "{{ _hmdl_prepared.stdout | from_json }}"
       delegate_to: localhost

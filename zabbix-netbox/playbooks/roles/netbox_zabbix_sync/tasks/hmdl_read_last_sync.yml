@@ -19,8 +19,15 @@
     query: |
       SELECT
           root_location_name,
-          extra_data,
+          last_location,
+          last_proxy_group_id,
+          expected_proxy_group_id,
+          zabbix_proxy_group_id,
+          last_visible_name,
           zabbix_hostname,
+          proxy_manual_change_detected,
+          field_merge_actions,
+          extra_data,
           processed_at
       FROM {{ hmdl_log_schema }}.{{ hmdl_log_table }}
       WHERE source_device_id = %(device_id)s
@@ -41,25 +48,21 @@
 - name: Parse last HMDL sync row
   set_fact:
     hmdl_last_sync: "{{ (_hmdl_last_sync_query.query_result | default([]))[0] | default({}) }}"
-    hmdl_last_location: "{{ ((_hmdl_last_sync_query.query_result | default([]))[0].root_location_name | default('')) if ((_hmdl_last_sync_query.query_result | default([]) | length) > 0) else '' }}"
+    hmdl_last_location: >-
+      {% set row = (_hmdl_last_sync_query.query_result | default([]))[0] | default({}) %}
+      {{ row.last_location | default(row.root_location_name | default('')) }}
     hmdl_last_proxy_group_id: >-
       {% set row = (_hmdl_last_sync_query.query_result | default([]))[0] | default({}) %}
-      {% set extra = row.extra_data | default({}) %}
-      {% if extra is mapping %}
-      {{ extra.get('last_proxy_group_id', extra.get('proxy_group_id', '')) }}
-      {% elif extra is string and extra | length > 0 %}
-      {{ (extra | from_json).get('last_proxy_group_id', '') if (extra | from_json is mapping) else '' }}
+      {% set pg = row.last_proxy_group_id | default('') %}
+      {% if pg | string | trim != '' %}
+      {{ pg }}
       {% else %}
-      {{ '' }}
+      {% set extra = row.extra_data | default({}) %}
+      {{ extra.get('last_proxy_group_id', '') if (extra is mapping) else '' }}
       {% endif %}
     hmdl_last_visible_name: >-
       {% set row = (_hmdl_last_sync_query.query_result | default([]))[0] | default({}) %}
-      {% set extra = row.extra_data | default({}) %}
-      {% if extra is mapping %}
-      {{ extra.get('last_visible_name', row.zabbix_hostname | default('')) }}
-      {% else %}
-      {{ row.zabbix_hostname | default('') }}
-      {% endif %}
+      {{ row.last_visible_name | default(row.zabbix_hostname | default('')) }}
   when:
     - hmdl_log_enabled | bool
     - _hmdl_last_sync_query is defined
