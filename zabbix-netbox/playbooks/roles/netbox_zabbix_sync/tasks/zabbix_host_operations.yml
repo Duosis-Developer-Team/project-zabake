@@ -789,8 +789,12 @@
 - name: Compute merged host groups (preserve manual groups)
   vars:
     _current_group_names: "{{ zbx_existing_host.groups | default([]) | map(attribute='name') | list }}"
-    _required_group_names: "{{ zbx_required_groups_for_record | default([]) }}"
-    _required_set: "{{ zbx_required_groups_for_record | default([]) }}"
+    # In update scenario, exclude template-sourced groups (from templates.yml host_groups)
+    # from the "required" set. They are mapping defaults, not NetBox data.
+    # Groups already present in Zabbix are preserved via _manual_groups regardless.
+    _netbox_required_group_names: "{{ zbx_required_groups_for_record | default([]) | difference(_template_host_groups | default([])) }}"
+    _required_group_names: "{{ _netbox_required_group_names }}"
+    _required_set: "{{ _netbox_required_group_names }}"
     _manual_groups: "{{ _current_group_names | difference(_required_set) | list }}"
     _merged_group_names: "{{ (_required_group_names + _manual_groups) | unique | list }}"
   set_fact:
@@ -852,13 +856,12 @@
 
 - name: Check if macros need update
   set_fact:
-    _macros_needs_update: >-
-      {{ (_existing_macros_for_diff | map(attribute='macro') | list | sort) !=
-         (zbx_host_macros_formatted_update | map(attribute='macro') | list | sort) }}
+    # Macros come from mapping defaults (templates.yml), not from NetBox.
+    # In update scenario, existing Zabbix macro values are preserved as-is.
+    _macros_needs_update: false
   when:
     - zbx_scenario == 'update'
     - zbx_existing_host.hostid is defined
-    - zbx_host_macros_formatted_update is defined
     - _missing_params | default([]) | length == 0
 
 - name: Read last HMDL sync row for proxy/location baseline
@@ -931,22 +934,17 @@
     - zbx_scenario == 'update'
     - _effective_proxy_group_id is defined
 
-- name: Preserve manually edited visible name
+- name: Preserve Zabbix visible name on update (never overwrite from NetBox or mapping)
   set_fact:
     zbx_host_visible_name: "{{ zbx_existing_host.name | default(zbx_host_visible_name) }}"
     _visible_name_preserved: true
     _field_merge_actions: >-
-      {{ (_field_merge_actions | default({})) | combine({'visible_name': 'preserved_manual'}) }}
-    _manual_change_notes: >-
-      {{ (_manual_change_notes | default([])) +
-         ['Visible name manually changed in Zabbix (automation would set: ' ~
-           (zbx_record.HOST_VISIBLE_NAME | default(zbx_record.HOSTNAME)) ~ ')'] }}
+      {{ (_field_merge_actions | default({})) | combine({'visible_name': 'preserved_existing'}) }}
   when:
     - zbx_scenario == 'update'
+    - zbx_existing_host.hostid is defined
     - zbx_existing_host.name is defined
     - zbx_existing_host.name | string | trim != ''
-    - zbx_existing_host.name | string | trim != (zbx_record.HOST_VISIBLE_NAME | default(zbx_record.HOSTNAME) | string | trim)
-    - (hmdl_last_visible_name | default(zbx_record.HOST_VISIBLE_NAME | default(zbx_record.HOSTNAME)) | string | trim) != (zbx_existing_host.name | string | trim)
 
 - name: Build tag change log entries
   set_fact:
@@ -993,7 +991,6 @@
         (
           (_existing_interface.ip | default('') != zbx_record.HOST_IP) or
           (zbx_existing_host.host | default('') != zbx_record.HOSTNAME) or
-          ((zbx_existing_host.name | default('') != zbx_host_visible_name) and not (_visible_name_preserved | default(false) | bool)) or
           (zbx_existing_host.monitored_by | default('') | string != zbx_monitored_by | string) or
           (_proxy_apply_update | default(false) | bool) or
           (_tags_needs_update | default(false) | bool) or
@@ -1016,10 +1013,8 @@
       {%- if zbx_existing_host.host | default('') != zbx_record.HOSTNAME -%}
         {%- set _ = entries.append({'field_name': 'hostname', 'old_value': zbx_existing_host.host | default(''), 'new_value': zbx_record.HOSTNAME, 'action': 'updated'}) -%}
       {%- endif -%}
-      {%- if _visible_name_preserved | default(false) | bool -%}
-        {%- set _ = entries.append({'field_name': 'visible_name', 'old_value': zbx_existing_host.name | default(''), 'new_value': zbx_host_visible_name | default(''), 'action': 'skipped', 'merge_result': 'preserved_manual', 'reason': 'Manually changed in Zabbix'}) -%}
-      {%- elif zbx_existing_host.name | default('') != zbx_host_visible_name | default('') -%}
-        {%- set _ = entries.append({'field_name': 'visible_name', 'old_value': zbx_existing_host.name | default(''), 'new_value': zbx_host_visible_name | default(''), 'action': 'updated', 'merge_result': 'updated'}) -%}
+      {%- if zbx_existing_host.name | default('') | string | trim != (zbx_record.HOST_VISIBLE_NAME | default(zbx_record.HOSTNAME) | string | trim) -%}
+        {%- set _ = entries.append({'field_name': 'visible_name', 'old_value': zbx_existing_host.name | default(''), 'new_value': zbx_record.HOST_VISIBLE_NAME | default(zbx_record.HOSTNAME), 'action': 'skipped', 'merge_result': 'preserved_existing', 'reason': 'Visible name is never updated on existing hosts'}) -%}
       {%- endif -%}
       {%- if _existing_interface.ip | default('') != zbx_record.HOST_IP -%}
         {%- set _ = entries.append({'field_name': 'interface_ip', 'old_value': _existing_interface.ip | default(''), 'new_value': zbx_record.HOST_IP, 'action': 'updated'}) -%}
@@ -1096,11 +1091,9 @@
       params:
         hostid: "{{ zbx_existing_host.hostid }}"
         host: "{{ zbx_record.HOSTNAME }}"
-        name: "{{ zbx_host_visible_name }}"
         interfaces: "{{ _zbx_interface_update }}"
         groups: "{{ zbx_groups_formatted | default([]) }}"
         tags: "{{ _merged_tags_for_update | default([]) }}"
-        macros: "{{ zbx_host_macros_formatted_update if (zbx_host_macros_formatted_update is defined and zbx_host_macros_formatted_update | length > 0) else omit }}"
         monitored_by: "{{ zbx_monitored_by | int }}"
         proxy_groupid: "{{ zbx_proxy_group_id | default('0') | int }}"
       auth: "{{ zabbix_auth }}"
