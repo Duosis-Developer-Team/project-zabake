@@ -44,7 +44,7 @@
         selectInterfaces: "extend"
         selectTags: "extend"
         selectGroups: ["groupid", "name"]
-        selectMacros: ["macroid", "macro", "value"]
+        selectMacros: ["hostmacroid", "macro", "value"]
       auth: "{{ zabbix_auth }}"
       id: 100
   register: zbx_hosts_resp
