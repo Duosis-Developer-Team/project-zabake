@@ -844,12 +844,21 @@
       {{ out }}
   set_fact:
     zbx_host_macros_formatted_update: "{{ _manual_macros + zbx_host_macros_formatted }}"
+    _existing_macros_for_diff: "{{ zbx_existing_host.macros | default([]) }}"
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host.hostid is defined
+    - _missing_params | default([]) | length == 0
+
+- name: Check if macros need update
+  set_fact:
     _macros_needs_update: >-
-      {{ (_existing_macros | map(attribute='macro') | list | sort) !=
+      {{ (_existing_macros_for_diff | map(attribute='macro') | list | sort) !=
          (zbx_host_macros_formatted_update | map(attribute='macro') | list | sort) }}
   when:
     - zbx_scenario == 'update'
     - zbx_existing_host.hostid is defined
+    - zbx_host_macros_formatted_update is defined
     - _missing_params | default([]) | length == 0
 
 - name: Read last HMDL sync row for proxy/location baseline
