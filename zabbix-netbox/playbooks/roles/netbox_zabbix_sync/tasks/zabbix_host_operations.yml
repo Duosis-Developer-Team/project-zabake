@@ -606,39 +606,51 @@
       (zbx_create_resp.json.error.message | default('')) is search('already exists')
       or (zbx_create_resp.json.error.data | default('') | string) is search('already exists')
 
-- name: Switch to update when duplicate resolved by Loki_ID tag
+- name: Compute duplicate-resolution candidate host after host.create error
   set_fact:
-    zbx_scenario: "update"
-    zbx_existing_host: "{{ zabbix_hosts_by_loki_id.get(zbx_dup_loki) }}"
+    _dup_resolved_candidate: >-
+      {%- set resolved = {} -%}
+      {%- if zbx_dup_loki | default('') | length > 0 and zabbix_hosts_by_loki_id is defined -%}
+      {%- set by_loki = zabbix_hosts_by_loki_id.get(zbx_dup_loki, {}) -%}
+      {%- if by_loki.hostid is defined -%}
+      {%- set resolved = by_loki -%}
+      {%- endif -%}
+      {%- endif -%}
+      {%- if resolved.hostid is not defined and zabbix_hosts_by_hostname is defined -%}
+      {%- set by_host = zabbix_hosts_by_hostname.get(zbx_record.HOSTNAME, {}) -%}
+      {%- if by_host.hostid is defined -%}
+      {%- set resolved = by_host -%}
+      {%- endif -%}
+      {%- endif -%}
+      {%- if resolved.hostid is not defined and zabbix_hosts_by_visible_name is defined -%}
+      {%- set by_visible = zabbix_hosts_by_visible_name.get(zbx_host_visible_name, {}) -%}
+      {%- if by_visible.hostid is defined -%}
+      {%- set resolved = by_visible -%}
+      {%- endif -%}
+      {%- endif -%}
+      {%- if resolved.hostid is not defined and zabbix_hosts_by_visible_name is defined -%}
+      {%- set by_visible2 = zabbix_hosts_by_visible_name.get(zbx_record.HOST_VISIBLE_NAME | default(zbx_record.HOSTNAME, true), {}) -%}
+      {%- if by_visible2.hostid is defined -%}
+      {%- set resolved = by_visible2 -%}
+      {%- endif -%}
+      {%- endif -%}
+      {{ resolved }}
   when:
     - zbx_scenario == 'create'
     - zbx_create_resp.json.error is defined
-    - zabbix_hosts_by_loki_id is defined
-    - zbx_dup_loki | default('') | length > 0
-    - zabbix_hosts_by_loki_id.get(zbx_dup_loki) is not none
-    - zabbix_hosts_by_loki_id.get(zbx_dup_loki).hostid is defined
+    - >-
+      (zbx_create_resp.json.error.message | default('')) is search('already exists')
+      or (zbx_create_resp.json.error.data | default('') | string) is search('already exists')
 
-- name: Switch to update when duplicate resolved by technical hostname
+- name: Switch to update when duplicate resolved after host.create error
   set_fact:
     zbx_scenario: "update"
-    zbx_existing_host: "{{ zabbix_hosts_by_hostname.get(zbx_record.HOSTNAME) }}"
+    zbx_existing_host: "{{ _dup_resolved_candidate }}"
   when:
     - zbx_scenario == 'create'
     - zbx_create_resp.json.error is defined
-    - zabbix_hosts_by_hostname is defined
-    - zabbix_hosts_by_hostname.get(zbx_record.HOSTNAME) is not none
-    - zabbix_hosts_by_hostname.get(zbx_record.HOSTNAME).hostid is defined
-
-- name: Switch to update when duplicate resolved by visible host name
-  set_fact:
-    zbx_scenario: "update"
-    zbx_existing_host: "{{ zabbix_hosts_by_visible_name.get(zbx_host_visible_name) }}"
-  when:
-    - zbx_scenario == 'create'
-    - zbx_create_resp.json.error is defined
-    - zabbix_hosts_by_visible_name is defined
-    - zabbix_hosts_by_visible_name.get(zbx_host_visible_name) is not none
-    - zabbix_hosts_by_visible_name.get(zbx_host_visible_name).hostid is defined
+    - _dup_resolved_candidate is defined
+    - _dup_resolved_candidate.hostid is defined
 
 - name: DRY-RUN - Create preview summary
   debug:

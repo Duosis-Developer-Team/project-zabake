@@ -52,15 +52,31 @@
   delegate_to: localhost
   when: zabbix_auth is defined
 
+- name: Fail when Zabbix host.get returned API error
+  fail:
+    msg: "Zabbix host.get failed: {{ zbx_hosts_resp.json.error | default(zbx_hosts_resp.json) }}"
+  when:
+    - zbx_hosts_resp.json is defined
+    - zbx_hosts_resp.json.error is defined
+  run_once: true
+  delegate_to: localhost
+
+- name: Normalize Zabbix host list from API response
+  set_fact:
+    zabbix_host_list: "{{ (zbx_hosts_resp.json | default({})).get('result', []) }}"
+  run_once: true
+  delegate_to: localhost
+  when: zbx_hosts_resp is defined
+
 - name: Display Zabbix hosts fetch results
   debug:
     msg: |
       ============================================
       ZABBIX HOSTS FETCH RESULTS
       ============================================
-      Total hosts found: {{ zbx_hosts_resp.json.result | default([]) | length }}
+      Total hosts found: {{ zabbix_host_list | default([]) | length }}
       ============================================
-  when: zbx_hosts_resp.json.result is defined
+  when: zabbix_host_list is defined
 
 - name: Debug first host tags (RAW)
   debug:
@@ -68,22 +84,23 @@
       ============================================
       FIRST HOST RAW TAG DATA
       ============================================
-      Host: {{ zbx_hosts_resp.json.result[0].host | default('N/A') }}
-      Tags: {{ zbx_hosts_resp.json.result[0].tags | default([]) }}
-      Tag count: {{ zbx_hosts_resp.json.result[0].tags | default([]) | length }}
-      {% if zbx_hosts_resp.json.result[0].tags | default([]) | length > 0 %}
-      First tag structure: {{ zbx_hosts_resp.json.result[0].tags[0] }}
+      Host: {{ zabbix_host_list[0].host | default('N/A') }}
+      Visible name: {{ zabbix_host_list[0].name | default('N/A') }}
+      Tags: {{ zabbix_host_list[0].tags | default([]) }}
+      Tag count: {{ zabbix_host_list[0].tags | default([]) | length }}
+      {% if zabbix_host_list[0].tags | default([]) | length > 0 %}
+      First tag structure: {{ zabbix_host_list[0].tags[0] }}
       {% endif %}
       ============================================
-  when: 
-    - zbx_hosts_resp.json.result is defined
-    - zbx_hosts_resp.json.result | length > 0
+  when:
+    - zabbix_host_list is defined
+    - zabbix_host_list | length > 0
 
 - name: Build Loki_ID to host mapping (using Python-style iteration)
   set_fact:
     zabbix_hosts_by_loki_id: |
       {%- set mapping = {} -%}
-      {%- for host in zbx_hosts_resp.json.result | default([]) -%}
+      {%- for host in zabbix_host_list | default([]) -%}
         {%- set loki_tags = host.tags | default([]) | selectattr('tag', 'defined') | selectattr('tag', 'equalto', 'Loki_ID') | list -%}
         {%- if loki_tags | length > 0 -%}
           {%- set loki_id = loki_tags[0].value | string -%}
@@ -93,40 +110,25 @@
       {{ mapping }}
   run_once: true
   delegate_to: localhost
-
-- name: Debug Loki_ID mapping results
-  debug:
-    msg: |
-      ============================================
-      LOKI_ID MAPPING DEBUG
-      ============================================
-      Total hosts checked: {{ zbx_hosts_resp.json.result | default([]) | length }}
-      Hosts with Loki_ID: {{ zabbix_hosts_by_loki_id | default({}) | length }}
-      {% if zabbix_hosts_by_loki_id | default({}) | length > 0 %}
-      Sample Loki_IDs found: {{ (zabbix_hosts_by_loki_id.keys() | list | sort)[:5] }}
-      {% else %}
-      WARNING: No Loki_ID tags found in any host!
-      {% endif %}
-      ============================================
-  when: zbx_hosts_resp.json.result is defined
+  when: zabbix_host_list is defined
 
 - name: Build hostname to host mapping (fallback)
   set_fact:
     zabbix_hosts_by_hostname: >-
       {%- set mapping = {} -%}
-      {%- for host in zbx_hosts_resp.json.result | default([]) -%}
+      {%- for host in zabbix_host_list | default([]) -%}
       {%- set _ = mapping.update({host.host: host}) -%}
       {%- endfor -%}
       {{ mapping }}
   run_once: true
   delegate_to: localhost
-  when: zbx_hosts_resp.json.result is defined
+  when: zabbix_host_list is defined
 
 - name: Build visible name to host mapping (fallback)
   set_fact:
     zabbix_hosts_by_visible_name: >-
       {%- set mapping = {} -%}
-      {%- for host in zbx_hosts_resp.json.result | default([]) -%}
+      {%- for host in zabbix_host_list | default([]) -%}
       {%- if host.name is defined and host.name | string | trim != '' -%}
       {%- set _ = mapping.update({host.name: host}) -%}
       {%- endif -%}
@@ -134,7 +136,7 @@
       {{ mapping }}
   run_once: true
   delegate_to: localhost
-  when: zbx_hosts_resp.json.result is defined
+  when: zabbix_host_list is defined
 
 - name: Display mapping statistics
   debug:
@@ -142,9 +144,25 @@
       ============================================
       ZABBIX HOST MAPPING STATISTICS
       ============================================
+      Total hosts from API: {{ zabbix_host_list | default([]) | length }}
       Hosts with Loki_ID tag: {{ zabbix_hosts_by_loki_id | default({}) | length }}
-      Total hosts: {{ zbx_hosts_resp.json.result | default([]) | length }}
       Hostname mapping size: {{ zabbix_hosts_by_hostname | default({}) | length }}
+      Visible name mapping size: {{ zabbix_hosts_by_visible_name | default({}) | length }}
       ============================================
-  when: zbx_hosts_resp.json.result is defined
+  when: zabbix_host_list is defined
 
+- name: Debug Loki_ID mapping results
+  debug:
+    msg: |
+      ============================================
+      LOKI_ID MAPPING DEBUG
+      ============================================
+      Total hosts checked: {{ zabbix_host_list | default([]) | length }}
+      Hosts with Loki_ID tag: {{ zabbix_hosts_by_loki_id | default({}) | length }}
+      {% if zabbix_hosts_by_loki_id | default({}) | length > 0 %}
+      Sample Loki_IDs found: {{ (zabbix_hosts_by_loki_id.keys() | list | sort)[:5] }}
+      {% else %}
+      WARNING: No Loki_ID tags found on any Zabbix host. Existing hosts must have host tag Loki_ID=<NetBox device id> for ID-based matching.
+      {% endif %}
+      ============================================
+  when: zabbix_host_list is defined

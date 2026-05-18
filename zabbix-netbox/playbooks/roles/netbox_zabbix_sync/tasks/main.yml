@@ -48,11 +48,12 @@
 - name: Apply device limit
   set_fact:
     netbox_devices_final: >-
+      {%- set sorted_devices = netbox_devices_filtered | sort(attribute='name') -%}
       {%- set limit = device_limit | int -%}
       {%- if limit > 0 -%}
-      {{ netbox_devices_filtered[:limit] }}
+      {{ sorted_devices[:limit] }}
       {%- else -%}
-      {{ netbox_devices_filtered }}
+      {{ sorted_devices }}
       {%- endif -%}
 
 - name: Initialize processing results list

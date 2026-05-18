@@ -613,44 +613,80 @@
     zabbix_hostname_final: >-
       {{ ((device_info.hostname_prefix | default('', true) | string) ~ zabbix_hostname_base ~ (device_info.hostname_suffix | default('', true) | string)) | trim }}
 
-- name: Check if host exists in Zabbix by Loki_ID
+- name: Resolve existing Zabbix host (Loki_ID tag, then technical hostname, then visible name)
   set_fact:
-    zbx_existing_host: "{{ zabbix_hosts_by_loki_id.get(device_info.tags.Loki_ID | string) }}"
+    zbx_existing_host: >-
+      {%- set resolved = {} -%}
+      {%- set loki_id = (device_info.tags.Loki_ID | default('') | string) -%}
+      {%- if zabbix_hosts_by_loki_id is defined and loki_id | length > 0 -%}
+      {%- set by_loki = zabbix_hosts_by_loki_id.get(loki_id, {}) -%}
+      {%- if by_loki.hostid is defined -%}
+      {%- set resolved = by_loki -%}
+      {%- endif -%}
+      {%- endif -%}
+      {%- if resolved.hostid is not defined and zabbix_hosts_by_hostname is defined and zabbix_hostname_final | default('') | length > 0 -%}
+      {%- set by_host = zabbix_hosts_by_hostname.get(zabbix_hostname_final, {}) -%}
+      {%- if by_host.hostid is defined -%}
+      {%- set resolved = by_host -%}
+      {%- endif -%}
+      {%- endif -%}
+      {%- if resolved.hostid is not defined and zabbix_hosts_by_visible_name is defined and zabbix_hostname_final | default('') | length > 0 -%}
+      {%- set by_visible = zabbix_hosts_by_visible_name.get(zabbix_hostname_final, {}) -%}
+      {%- if by_visible.hostid is defined -%}
+      {%- set resolved = by_visible -%}
+      {%- endif -%}
+      {%- endif -%}
+      {{ resolved }}
+    _host_resolve_debug:
+      loki_id: "{{ device_info.tags.Loki_ID | default('') }}"
+      zabbix_hostname_final: "{{ zabbix_hostname_final | default('') }}"
+      loki_map_size: "{{ zabbix_hosts_by_loki_id | default({}) | length }}"
+      hostname_map_size: "{{ zabbix_hosts_by_hostname | default({}) | length }}"
+      visible_map_size: "{{ zabbix_hosts_by_visible_name | default({}) | length }}"
   when:
-    - zabbix_hosts_by_loki_id is defined
-    - device_info.tags.Loki_ID is defined
     - device_info.device_type is not none
     - device_info.device_type != ""
     - device_info.primary_ip is not none
     - device_info.primary_ip != ""
-    - zabbix_hosts_by_loki_id.get(device_info.tags.Loki_ID | string) is not none
-    - zabbix_hosts_by_loki_id.get(device_info.tags.Loki_ID | string) != None
 
-- name: Fallback to hostname matching if Loki_ID not found
+- name: Extract Loki_ID tag value from matched Zabbix host (if any)
   set_fact:
-    zbx_existing_host: "{{ zabbix_hosts_by_hostname.get(zabbix_hostname_final) }}"
+    _zbx_loki_tag_on_host: >-
+      {{ (zbx_existing_host.tags | default([])
+          | selectattr('tag', 'defined')
+          | selectattr('tag', 'equalto', 'Loki_ID')
+          | map(attribute='value')
+          | list
+          | first
+          | default('', true)) | string }}
   when:
-    - zbx_existing_host is not defined or zbx_existing_host == {} or zbx_existing_host.hostid is not defined
-    - zabbix_hosts_by_hostname is defined
-    - device_info.device_type is not none
-    - device_info.device_type != ""
-    - device_info.primary_ip is not none
-    - device_info.primary_ip != ""
-    - zabbix_hosts_by_hostname.get(zabbix_hostname_final) is not none
-    - zabbix_hosts_by_hostname.get(zabbix_hostname_final) != None
+    - zbx_existing_host is defined
+    - zbx_existing_host.hostid is defined
 
-- name: Fallback to visible name matching if Loki_ID and hostname not found
-  set_fact:
-    zbx_existing_host: "{{ zabbix_hosts_by_visible_name.get(zabbix_hostname_final) }}"
+- name: Debug Zabbix host resolution for device
+  debug:
+    msg: >-
+      Device {{ netbox_device.name }}: NetBox id (expected Loki_ID)={{ _host_resolve_debug.loki_id }},
+      zabbix_hostname={{ _host_resolve_debug.zabbix_hostname_final }},
+      maps(loki/hostname/visible)={{ _host_resolve_debug.loki_map_size }}/{{ _host_resolve_debug.hostname_map_size }}/{{ _host_resolve_debug.visible_map_size }},
+      matched_hostid={{ zbx_existing_host.hostid | default('NONE') }},
+      zabbix_host_Loki_ID_tag={{ _zbx_loki_tag_on_host | default('N/A') }}
   when:
-    - zbx_existing_host is not defined or zbx_existing_host == {} or zbx_existing_host.hostid is not defined
-    - zabbix_hosts_by_visible_name is defined
+    - _host_resolve_debug is defined
     - device_info.device_type is not none
     - device_info.device_type != ""
-    - device_info.primary_ip is not none
-    - device_info.primary_ip != ""
-    - zabbix_hosts_by_visible_name.get(zabbix_hostname_final) is not none
-    - zabbix_hosts_by_visible_name.get(zabbix_hostname_final) != None
+
+- name: Warn when Zabbix Loki_ID tag differs from current NetBox device id
+  debug:
+    msg: >-
+      WARNING: Host {{ zabbix_hostname_final }} matched in Zabbix (hostid {{ zbx_existing_host.hostid }})
+      but tag Loki_ID={{ _zbx_loki_tag_on_host }} does not equal NetBox device id {{ _host_resolve_debug.loki_id }}.
+      Sync will use update path and refresh managed tags when scenario=update.
+  when:
+    - zbx_existing_host.hostid is defined
+    - _zbx_loki_tag_on_host | default('') | length > 0
+    - _host_resolve_debug.loki_id | default('') | length > 0
+    - _zbx_loki_tag_on_host != _host_resolve_debug.loki_id
 
 - name: Determine scenario (create or update)
   set_fact:
