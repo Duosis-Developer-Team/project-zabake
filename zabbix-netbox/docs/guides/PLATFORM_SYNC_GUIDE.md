@@ -314,6 +314,18 @@ When a platform is synced again after already existing in Zabbix:
 
 ---
 
+### `Invalid params` / `tags/N` — `(tag, value)=(Vendor, ...) already exists` on virtual firewall `host.update`
+
+**Symptom:** All VFW rows `EKLENEMEDI`; CSV shows e.g. `Invalid parameter "/1/tags/8": value (tag, value)=(Vendor, Fortinet) already exists.` (Job 109430).
+
+**Cause (fixed in 2026-05):** VFW tags (`Vendor`, `Model`, `Port`, `fw_status`, `proje`, …) were not in `_effective_managed_tag_keys`. `merge_tags` treated them as manual (from Zabbix) and also appended them from NetBox MACROS, producing duplicate tag names in one `host.update` payload.
+
+**Fix (built-in):** `mappings/virtual_fw_tags_config.yml` defines VFW managed keys for `DEVICE_ROLE: VIRTUAL_FW`; `merge_tags` only adds managed keys to the replacement set. Re-run with `sync_virtual_fws: true` after upgrading the role.
+
+**Verify:** `pytest tests/test_tag_merge_strategy.py -v` (includes `test_vfw_tag_merge_no_duplicate`).
+
+---
+
 ### "Host with the same name ... already exists" (platform rows, same run)
 
 **Cause:** Zabbix host maps from the start of the play do not include hosts created **earlier in the same run**, or the existing host was created without a `Loki_ID` tag / under a different technical name.

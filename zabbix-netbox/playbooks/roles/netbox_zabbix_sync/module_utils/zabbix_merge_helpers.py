@@ -61,6 +61,8 @@ def merge_tags(
         val = t.get("value") if isinstance(t, dict) else None
         if tag is None:
             continue
+        if not is_managed_tag(str(tag), managed_keys):
+            continue
         sval = "" if val is None else str(val).strip()
         if sval == "":
             continue

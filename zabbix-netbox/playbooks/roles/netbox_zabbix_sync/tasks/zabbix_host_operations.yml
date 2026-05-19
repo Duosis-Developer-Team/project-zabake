@@ -51,6 +51,16 @@
     _platform_managed_tag_keys: "{{ _platform_tags_config_loaded.platform_tags.managed_keys | default([]) }}"
   run_once: false
 
+- name: Load virtual firewall tags config for managed tag keys
+  set_fact:
+    _vfw_tags_config_loaded: "{{ lookup('file', virtual_fw_tags_config_path) | from_yaml }}"
+  run_once: false
+
+- name: Set virtual firewall managed tag keys
+  set_fact:
+    _vfw_managed_tag_keys: "{{ _vfw_tags_config_loaded.virtual_fw_tags.managed_keys | default([]) }}"
+  run_once: false
+
 - name: Set effective managed tag keys for this record
   set_fact:
     _effective_managed_tag_keys: >-
@@ -59,6 +69,11 @@
         (
           (_platform_managed_tag_keys | default([]))
           if (zbx_record.DEVICE_ROLE | default('') | string | upper == 'PLATFORM')
+          else []
+        ) +
+        (
+          (_vfw_managed_tag_keys | default([]))
+          if (zbx_record.DEVICE_ROLE | default('') | string | upper == 'VIRTUAL_FW')
           else []
         )
       }}

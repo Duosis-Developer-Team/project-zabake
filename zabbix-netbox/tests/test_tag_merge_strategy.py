@@ -124,3 +124,77 @@ def test_merge_tags_tags_needs_update_false_when_unchanged():
     _, log = merge_tags(existing, new_managed, PLATFORM_MANAGED_KEYS)
     needs_update = any(e.get("action") in ("added", "updated") for e in log)
     assert needs_update is False
+
+
+VFW_MANAGED_KEYS = [
+    "Vendor",
+    "Location",
+    "Model",
+    "Manufacturer",
+    "Port",
+    "fw_status",
+    "proje",
+    "Loki_ID",
+    "Created",
+    "Last_Updated",
+]
+
+
+def test_vfw_managed_keys_config_file():
+    config_path = Path(__file__).resolve().parents[1] / "mappings" / "virtual_fw_tags_config.yml"
+    data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    keys = data["virtual_fw_tags"]["managed_keys"]
+    assert "Vendor" in keys
+    assert keys == VFW_MANAGED_KEYS
+
+
+def test_vfw_tag_merge_no_duplicate():
+    """Regression Job 109430: Vendor must not appear twice in merged tags."""
+    existing = [
+        {"tag": "Vendor", "value": "Fortinet"},
+        {"tag": "Location", "value": "AZ11"},
+        {"tag": "Model", "value": "VM01"},
+        {"tag": "Manufacturer", "value": "Fortinet"},
+        {"tag": "Port", "value": "4444"},
+        {"tag": "fw_status", "value": "active"},
+        {"tag": "proje", "value": "var_olan"},
+        {"tag": "Loki_ID", "value": "VFW_650"},
+        {"tag": "Created", "value": "2026-05-13T10:26:39+03:00"},
+        {"tag": "Last_Updated", "value": "2026-05-13T11:50:52+03:00"},
+    ]
+    new_managed = [
+        {"tag": "Vendor", "value": "Fortinet"},
+        {"tag": "Location", "value": "AZ11"},
+        {"tag": "Model", "value": "VM01"},
+        {"tag": "Manufacturer", "value": "Fortinet"},
+        {"tag": "Port", "value": "4444"},
+        {"tag": "fw_status", "value": "active"},
+        {"tag": "proje", "value": "var_olan"},
+        {"tag": "Loki_ID", "value": "VFW_650"},
+        {"tag": "Created", "value": "2026-05-13T10:26:39+03:00"},
+        {"tag": "Last_Updated", "value": "2026-05-13T11:50:52+03:00"},
+    ]
+    merged, log = merge_tags(existing, new_managed, VFW_MANAGED_KEYS)
+    vendor_entries = [t for t in merged if t["tag"] == "Vendor"]
+    assert len(vendor_entries) == 1
+    assert vendor_entries[0]["value"] == "Fortinet"
+    assert len(merged) == len(existing)
+    assert not any(e["action"] in ("added", "updated") for e in log if e["key_name"] == "Vendor")
+
+
+def test_merge_tags_filters_unmanaged_from_new_tags():
+    """Bug 1: new_managed_tags outside managed_keys must not duplicate manual existing tags."""
+    existing = [
+        {"tag": "Vendor", "value": "Fortinet"},
+        {"tag": "Custom_Manual", "value": "keep"},
+    ]
+    new_managed = [
+        {"tag": "Vendor", "value": "Fortinet"},
+        {"tag": "Loki_ID", "value": "VFW_1"},
+    ]
+    merged, _ = merge_tags(existing, new_managed, ["Loki_ID"])
+    assert len([t for t in merged if t["tag"] == "Vendor"]) == 1
+    tags = {t["tag"]: t["value"] for t in merged}
+    assert tags["Vendor"] == "Fortinet"
+    assert tags["Custom_Manual"] == "keep"
+    assert tags["Loki_ID"] == "VFW_1"

@@ -1,0 +1,15 @@
+# Virtual firewall (NetBox custom object) tags managed by HMDL sync on host.update.
+# Device tags remain in tags_config.yml; platform tags in platform_tags_config.yml.
+
+virtual_fw_tags:
+  managed_keys:
+    - Vendor
+    - Location
+    - Model
+    - Manufacturer
+    - Port
+    - fw_status
+    - proje
+    - Loki_ID
+    - Created
+    - Last_Updated
