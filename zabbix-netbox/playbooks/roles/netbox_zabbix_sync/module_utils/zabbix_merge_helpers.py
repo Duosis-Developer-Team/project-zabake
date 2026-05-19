@@ -95,10 +95,11 @@ def merge_host_groups(
     preserve_manual: bool = True,
 ) -> tuple[list[str], bool]:
     """
-    Set managed host groups from source; optionally preserve manual Zabbix groups.
+    Set managed host groups from source; preserve manual Zabbix groups by default.
 
-    When preserve_manual is False (e.g. DEVICE_ROLE PLATFORM), the merged list is
-    exactly the required managed names — existing wrong groups are not kept.
+    When preserve_manual is True (default for all host types), groups in Zabbix that
+    are not in the managed required set are kept. When False, merged is exactly the
+    required managed names (use only for explicit opt-in scenarios).
 
     Returns (merged_group_names, needs_update).
     """

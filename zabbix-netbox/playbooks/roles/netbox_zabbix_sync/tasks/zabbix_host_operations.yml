@@ -809,7 +809,7 @@
   zabbix_merge_host_groups:
     existing_group_names: "{{ zbx_existing_host.groups | default([]) | map(attribute='name') | list }}"
     required_managed_names: "{{ zbx_required_groups_for_record | default([]) }}"
-    preserve_manual: "{{ zbx_record.DEVICE_ROLE | default('') | upper != 'PLATFORM' }}"
+    preserve_manual: true
   register: zbx_group_merge
   delegate_to: localhost
   when:

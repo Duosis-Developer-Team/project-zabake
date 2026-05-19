@@ -13,7 +13,7 @@ module: zabbix_merge_host_groups
 short_description: Merge Zabbix host groups for host.update (managed + optional manual)
 description:
   - Uses full required_managed_names (template host_groups + DEVICE_TYPE + HOST_GROUPS).
-  - When preserve_manual is false, only required groups are returned (platform sync).
+  - When preserve_manual is false, only required groups are returned (opt-in only).
 options:
   existing_group_names:
     description: Current Zabbix host group names from host.get.
@@ -36,7 +36,7 @@ EXAMPLES = r"""
   zabbix_merge_host_groups:
     existing_group_names: "{{ zbx_existing_host.groups | map(attribute='name') | list }}"
     required_managed_names: "{{ zbx_required_groups_for_record }}"
-    preserve_manual: "{{ zbx_record.DEVICE_ROLE | default('') | upper != 'PLATFORM' }}"
+    preserve_manual: true
   register: zbx_group_merge
 """
 

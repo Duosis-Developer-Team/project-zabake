@@ -187,11 +187,8 @@ flowchart TD
     TM --> TM2[Final = new managed + manual tags]
 
     Split -->|Host groups| GM[Managed = full required: HOST_GROUPS + template host_groups + DEVICE_TYPE]
-    GM --> GM2{DEVICE_ROLE PLATFORM?}
-    GM2 -->|Yes| GM3[Final = managed only — zabbix_merge_host_groups preserve_manual false]
-    GM2 -->|No| GM4[Final = managed + manual groups outside managed set]
-    GM3 --> GM5[Omit groups on host.update if unchanged]
-    GM4 --> GM5
+    GM --> GM2[Final = managed + manual groups outside managed set]
+    GM2 --> GM5[Omit groups on host.update if unchanged]
 
     Split -->|Macros| MM[Managed = template macro keys]
     MM --> MM2[Final = managed + manual macros]
