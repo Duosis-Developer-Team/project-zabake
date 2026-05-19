@@ -295,6 +295,7 @@ When a platform is synced again after already existing in Zabbix:
 3. If `host.create` still runs and fails with a duplicate-host error, the playbook falls back to `zbx_scenario: update` by resolving the existing host in order: **Loki_ID from intended tags**, then **technical hostname map**, then **visible name map**, then **live `host.get` by technical `host`**, then **live `host.get` by visible `name`**. This covers a **stale prefetch** (a host created earlier in the same playbook run is not in the in-memory maps) and legacy hosts missing `Loki_ID`. Zabbix often returns `error.message: Invalid params.` with the real text in `error.data` (e.g. `Host with the same name "..." already exists.`); both `message` and `data` are checked for `already exists`.
 4. The update modifies: IP address, technical host, visible name, interface, macros, `monitored_by`, and `proxy_groupid`. For **`DEVICE_ROLE: PLATFORM`**, when managed tags differ from Zabbix, **`host.update` sends a deduplicated tag list** built by the `zabbix_merge_tags` module (`module_utils/zabbix_merge_helpers.merge_tags`): manual tags are preserved, keys in `mappings/platform_tags_config.yml` plus `tags_config.yml` are replaced from NetBox. If no managed tag changed, the `tags` parameter is **omitted** (Zabbix keeps existing tags).
 5. For non-platform hosts, tag updates on `host.update` use only `tags_config.yml` managed keys (same merge helper); tags are omitted when unchanged.
+6. **Host groups on update:** `zabbix_merge_host_groups` uses the full collected required set (`HOST_GROUPS` + `templates.yml` `host_groups` + `DEVICE_TYPE`) — template groups are **not** subtracted from managed names. For **`DEVICE_ROLE: PLATFORM`**, `preserve_manual` is **false**: only the mapping-derived group list is applied (wrong groups such as `Backup & Replication` + `Veeam` on a Nutanix host are not kept). For devices, manual Zabbix groups outside the managed set are preserved. If group membership is unchanged, the `groups` parameter is **omitted** on `host.update` (Zabbix API replaces all groups when `groups` is sent).
 6. Templates are **not** updated on existing hosts — only set during creation.
 
 > To force a full template reassignment on an existing platform host, delete it from Zabbix and re-run the sync.
@@ -318,6 +319,18 @@ When a platform is synced again after already existing in Zabbix:
 **Cause:** Zabbix host maps from the start of the play do not include hosts created **earlier in the same run**, or the existing host was created without a `Loki_ID` tag / under a different technical name.
 
 **Fix (built-in):** Duplicate `host.create` errors trigger live `host.get` by technical host and by visible name, then `host.update`. Platforms use a `_P_<id>` technical suffix and tag merge on update so the next run resolves by `Loki_ID` from prefetch.
+
+---
+
+### Platform host ends up in wrong groups (e.g. `Backup & Replication` + `Veeam` on Nutanix/VMware/NetBackup)
+
+**Symptom:** CSV or Zabbix shows a platform moved from the correct groups (e.g. `Virtual Infrastructure`, `Acropolis`) to unrelated backup groups after sync.
+
+**Cause (fixed in 2026-05):** The old update merge subtracted `templates.yml` `host_groups` from the required set, treated unrelated existing Zabbix groups as “manual”, and sent only group IDs present in `zbx_group_map` — often leaving two IDs from an earlier platform in the same AWX run. Zabbix `host.update` **replaces** all group memberships when `groups` is included.
+
+**Fix (built-in):** `zabbix_merge_host_groups` with `preserve_manual: false` for `DEVICE_ROLE: PLATFORM`; per-record reset of `zbx_required_groups_for_record`, `zbx_groups_formatted`, and `_template_host_groups`; merged names must resolve in `zbx_group_map` (create/fail path); omit `groups` when unchanged.
+
+**Verify:** AWX log `Resolve merged group IDs` should list platform-specific names (`Acropolis`, `VMware`, `NetBackup`, …). Run `pytest tests/test_host_group_merge_strategy.py -v`.
 
 ---
 

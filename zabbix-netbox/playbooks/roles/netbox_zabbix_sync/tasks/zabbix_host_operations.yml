@@ -16,6 +16,12 @@
     _platform_managed_tag_keys: []
     _host_update_params: {}
     _host_field_changes: []
+    zbx_required_groups_for_record: []
+    zbx_group_id_list: []
+    zbx_groups_formatted: []
+    _template_host_groups: []
+    _merged_group_names: []
+    _merged_groups_not_in_map: []
   run_once: false
 
 - name: Load tags config for managed tag keys
@@ -799,26 +805,142 @@
     - _missing_params | default([]) | length == 0
     - zbx_tag_merge is defined
 
-- name: Compute merged host groups (preserve manual groups)
-  vars:
-    _current_group_names: "{{ zbx_existing_host.groups | default([]) | map(attribute='name') | list }}"
-    # In update scenario, exclude template-sourced groups (from templates.yml host_groups)
-    # from the "required" set. They are mapping defaults, not NetBox data.
-    # Groups already present in Zabbix are preserved via _manual_groups regardless.
-    _netbox_required_group_names: "{{ zbx_required_groups_for_record | default([]) | difference(_template_host_groups | default([])) }}"
-    _required_group_names: "{{ _netbox_required_group_names }}"
-    _required_set: "{{ _netbox_required_group_names }}"
-    _manual_groups: "{{ _current_group_names | difference(_required_set) | list }}"
-    _merged_group_names: "{{ (_required_group_names + _manual_groups) | unique | list }}"
-  set_fact:
-    _merged_group_names: "{{ _merged_group_names }}"
-    _groups_needs_update: "{{ (_current_group_names | sort) != (_merged_group_names | sort) }}"
-    zbx_required_groups_for_record: "{{ _merged_group_names }}"
+- name: Merge host groups for update via zabbix_merge_host_groups
+  zabbix_merge_host_groups:
+    existing_group_names: "{{ zbx_existing_host.groups | default([]) | map(attribute='name') | list }}"
+    required_managed_names: "{{ zbx_required_groups_for_record | default([]) }}"
+    preserve_manual: "{{ zbx_record.DEVICE_ROLE | default('') | upper != 'PLATFORM' }}"
+  register: zbx_group_merge
+  delegate_to: localhost
   when:
     - zbx_scenario == 'update'
     - zbx_existing_host is defined
     - zbx_existing_host.hostid is defined
     - _missing_params | default([]) | length == 0
+
+- name: Apply merged host groups from zabbix_merge_host_groups
+  set_fact:
+    _merged_group_names: "{{ zbx_group_merge.merged_group_names | default([]) }}"
+    _groups_needs_update: "{{ zbx_group_merge.groups_needs_update | default(false) | bool }}"
+    zbx_required_groups_for_record: "{{ zbx_group_merge.merged_group_names | default([]) }}"
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host is defined
+    - zbx_existing_host.hostid is defined
+    - _missing_params | default([]) | length == 0
+    - zbx_group_merge is defined
+
+- name: Identify merged host group names not in zbx_group_map
+  set_fact:
+    _merged_groups_not_in_map: >-
+      {{
+        (_merged_group_names | default([]))
+        | difference(zbx_group_map.keys() | list if zbx_group_map is defined else [])
+      }}
+  when:
+    - zbx_scenario == 'update'
+    - _groups_needs_update | default(false) | bool
+    - _merged_group_names | default([]) | length > 0
+
+- name: Ensure merged host groups exist in Zabbix (query and create if needed)
+  when:
+    - zbx_scenario == 'update'
+    - _merged_groups_not_in_map | default([]) | length > 0
+  block:
+    - name: Get existing host groups from Zabbix for merged groups missing from map
+      uri:
+        url: "{{ zabbix_url }}"
+        method: POST
+        body_format: json
+        validate_certs: "{{ zabbix_validate_certs | default(false) }}"
+        body:
+          jsonrpc: "2.0"
+          method: "hostgroup.get"
+          params:
+            output: ["groupid", "name"]
+            filter:
+              name: "{{ _merged_groups_not_in_map }}"
+          auth: "{{ zabbix_auth }}"
+          id: 111
+      register: zbx_merged_groups_get_resp
+      delegate_to: localhost
+
+    - name: Identify merged groups that need to be created in Zabbix
+      vars:
+        _existing_merged_names: "{{ zbx_merged_groups_get_resp.json.result | map(attribute='name') | list }}"
+      set_fact:
+        _merged_groups_to_create: "{{ _merged_groups_not_in_map | difference(_existing_merged_names) }}"
+      delegate_to: localhost
+
+    - name: Create missing merged host groups in Zabbix
+      uri:
+        url: "{{ zabbix_url }}"
+        method: POST
+        body_format: json
+        validate_certs: "{{ zabbix_validate_certs | default(false) }}"
+        body:
+          jsonrpc: "2.0"
+          method: "hostgroup.create"
+          params:
+            name: "{{ merged_missing_group_item }}"
+          auth: "{{ zabbix_auth }}"
+          id: 112
+      loop: "{{ _merged_groups_to_create }}"
+      loop_control:
+        loop_var: merged_missing_group_item
+      register: zbx_merged_created_groups_resp
+      delegate_to: localhost
+      when: _merged_groups_to_create | length > 0
+
+    - name: Fetch merged host groups to refresh zbx_group_map
+      uri:
+        url: "{{ zabbix_url }}"
+        method: POST
+        body_format: json
+        validate_certs: "{{ zabbix_validate_certs | default(false) }}"
+        body:
+          jsonrpc: "2.0"
+          method: "hostgroup.get"
+          params:
+            output: ["groupid", "name"]
+            filter:
+              name: "{{ _merged_groups_not_in_map }}"
+          auth: "{{ zabbix_auth }}"
+          id: 113
+      register: zbx_merged_fetched_groups_resp
+      delegate_to: localhost
+
+    - name: Update zbx_group_map with merged host groups
+      vars:
+        _new_merged_groups_map: "{{ zbx_merged_fetched_groups_resp.json.result | items2dict(key_name='name', value_name='groupid') }}"
+      set_fact:
+        zbx_group_map: "{{ zbx_group_map | combine(_new_merged_groups_map) }}"
+      delegate_to: localhost
+
+- name: Fail when merged host group names are still missing from zbx_group_map
+  fail:
+    msg: >-
+      Host {{ zbx_record.HOSTNAME }}: cannot resolve group IDs for
+      {{ (_merged_group_names | default([]) | difference(zbx_group_map.keys() | list)) | join(', ') }}.
+      Ensure these host groups exist in Zabbix.
+  when:
+    - zbx_scenario == 'update'
+    - _groups_needs_update | default(false) | bool
+    - (_merged_group_names | default([]) | difference(zbx_group_map.keys() | list if zbx_group_map is defined else [])) | length > 0
+
+- name: Debug merged host groups for update
+  debug:
+    msg: |
+      Host: {{ zbx_record.HOSTNAME }}
+      DEVICE_ROLE: {{ zbx_record.DEVICE_ROLE | default('N/A') }}
+      Current groups: {{ zbx_existing_host.groups | default([]) | map(attribute='name') | list | join(', ') }}
+      Required managed: {{ zbx_required_groups_for_record | default([]) | join(', ') }}
+      Merged groups: {{ _merged_group_names | default([]) | join(', ') }}
+      Groups need update: {{ _groups_needs_update | default(false) }}
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host.hostid is defined
+    - _groups_needs_update | default(false) | bool
 
 - name: Rebuild group ID list after merged host groups
   set_fact:
@@ -832,7 +954,7 @@
   set_fact:
     zbx_group_id_list: "{{ zbx_group_id_list + [zbx_group_map[group_name]] }}"
     zbx_groups_formatted: "{{ zbx_groups_formatted + [{'groupid': zbx_group_map[group_name]}] }}"
-  loop: "{{ zbx_required_groups_for_record | default([]) }}"
+  loop: "{{ _merged_group_names | default(zbx_required_groups_for_record | default([])) }}"
   loop_control:
     loop_var: group_name
   when:
@@ -1065,13 +1187,12 @@
     - _missing_params | default([]) | length == 0
     - _needs_update | default(true) | bool
 
-- name: Build host.update params (tags omitted when unchanged per Zabbix API)
+- name: Build host.update params (tags/groups omitted when unchanged per Zabbix API)
   set_fact:
     _host_update_params:
       hostid: "{{ zbx_existing_host.hostid }}"
       host: "{{ zbx_record.HOSTNAME }}"
       interfaces: "{{ _zbx_interface_update }}"
-      groups: "{{ zbx_groups_formatted | default([]) }}"
       monitored_by: "{{ zbx_monitored_by | int }}"
       proxy_groupid: "{{ zbx_proxy_group_id | default('0') | int }}"
   when:
@@ -1079,6 +1200,17 @@
     - zbx_existing_host.hostid is defined
     - _missing_params | default([]) | length == 0
     - _needs_update | default(true) | bool
+    - not (dry_run | default(false) | bool)
+
+- name: Add groups to host.update params when host groups changed
+  set_fact:
+    _host_update_params: "{{ _host_update_params | combine({'groups': zbx_groups_formatted | default([])}) }}"
+  when:
+    - zbx_scenario == 'update'
+    - _host_update_params is defined
+    - _host_update_params | length > 0
+    - _groups_needs_update | default(false) | bool
+    - zbx_groups_formatted | default([]) | length > 0
     - not (dry_run | default(false) | bool)
 
 - name: Add tags to host.update params when managed tags changed

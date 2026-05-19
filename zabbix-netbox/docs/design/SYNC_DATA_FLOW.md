@@ -186,8 +186,12 @@ flowchart TD
     Split -->|Tags| TM[Managed = tags_config names + Loki_Tag_*]
     TM --> TM2[Final = new managed + manual tags]
 
-    Split -->|Host groups| GM[Managed = config-derived groups]
-    GM --> GM2[Final = managed + manual groups]
+    Split -->|Host groups| GM[Managed = full required: HOST_GROUPS + template host_groups + DEVICE_TYPE]
+    GM --> GM2{DEVICE_ROLE PLATFORM?}
+    GM2 -->|Yes| GM3[Final = managed only — zabbix_merge_host_groups preserve_manual false]
+    GM2 -->|No| GM4[Final = managed + manual groups outside managed set]
+    GM3 --> GM5[Omit groups on host.update if unchanged]
+    GM4 --> GM5
 
     Split -->|Macros| MM[Managed = template macro keys]
     MM --> MM2[Final = managed + manual macros]
@@ -202,7 +206,7 @@ flowchart TD
     PGM -->|Yes| PGK[Preserve proxy report manual]
     PGM -->|No| PGU2[Sync if drift]
 
-    TM2 & GM2 & MM2 & VNP & VNU & PGU & PGK --> API[host.update unless dry_run]
+    TM2 & GM5 & MM2 & VNP & VNU & PGU & PGK --> API[host.update unless dry_run]
 ```
 
 Reference implementation: [`module_utils/zabbix_merge_helpers.py`](../../playbooks/roles/netbox_zabbix_sync/module_utils/zabbix_merge_helpers.py).

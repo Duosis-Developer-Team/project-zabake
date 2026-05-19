@@ -24,3 +24,46 @@ def test_merge_host_groups_no_change():
     merged, needs_update = merge_host_groups(existing, required)
     assert merged == ["HOST", "Manual_Group"]
     assert needs_update is False
+
+
+def test_platform_merge_drops_wrong_manual_groups():
+    """PLATFORM sync: preserve_manual=False — only managed set, no Veeam leftovers."""
+    existing = ["Nutanix", "Nutanix Cluster", "Virtual Infrastructure"]
+    required = ["Virtual Infrastructure", "Acropolis"]
+    merged, needs_update = merge_host_groups(
+        existing, required, preserve_manual=False
+    )
+    assert merged == ["Virtual Infrastructure", "Acropolis"]
+    assert "Nutanix" not in merged
+    assert "Nutanix Cluster" not in merged
+    assert needs_update is True
+
+
+def test_platform_merge_no_change_when_correct():
+    existing = ["Virtual Infrastructure", "VMware"]
+    required = ["Virtual Infrastructure", "VMware"]
+    merged, needs_update = merge_host_groups(
+        existing, required, preserve_manual=False
+    )
+    assert merged == ["Virtual Infrastructure", "VMware"]
+    assert needs_update is False
+
+
+def test_required_includes_template_groups_not_subtracted():
+    """Managed set is full required list (template host_groups stay in required)."""
+    existing = ["Backup & Replication", "Veeam"]
+    required = ["Virtual Infrastructure", "VMware"]
+    merged, needs_update = merge_host_groups(
+        existing, required, preserve_manual=False
+    )
+    assert merged == ["Virtual Infrastructure", "VMware"]
+    assert "Veeam" not in merged
+    assert needs_update is True
+
+
+def test_device_merge_still_preserves_manual():
+    existing = ["HOST", "Legacy_Custom"]
+    required = ["HOST", "SWITCH"]
+    merged, needs_update = merge_host_groups(existing, required, preserve_manual=True)
+    assert "Legacy_Custom" in merged
+    assert merged == ["HOST", "SWITCH", "Legacy_Custom"]

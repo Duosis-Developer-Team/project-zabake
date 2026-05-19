@@ -92,17 +92,25 @@ def merge_tags(
 def merge_host_groups(
     existing_group_names: list[str],
     required_managed_names: list[str],
+    preserve_manual: bool = True,
 ) -> tuple[list[str], bool]:
     """
-    Preserve groups not in the managed required set; set managed groups from source.
+    Set managed host groups from source; optionally preserve manual Zabbix groups.
+
+    When preserve_manual is False (e.g. DEVICE_ROLE PLATFORM), the merged list is
+    exactly the required managed names — existing wrong groups are not kept.
 
     Returns (merged_group_names, needs_update).
     """
     existing = [g for g in (existing_group_names or []) if g]
     required = [g for g in (required_managed_names or []) if g]
-    required_set = set(required)
-    manual = [g for g in existing if g not in required_set]
-    merged = list(dict.fromkeys(required + manual))  # preserve order, unique
+    required_unique = list(dict.fromkeys(required))
+    if preserve_manual:
+        required_set = set(required_unique)
+        manual = [g for g in existing if g not in required_set]
+        merged = list(dict.fromkeys(required_unique + manual))
+    else:
+        merged = required_unique
     needs_update = sorted(existing) != sorted(merged)
     return merged, needs_update
 
