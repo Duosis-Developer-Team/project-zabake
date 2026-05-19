@@ -47,6 +47,7 @@ platform_mapping_path: "{{ playbook_dir | default(ansible_playbook_directory) }}
 virtual_fw_mapping_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/virtual_fw_mapping.yml"
 host_groups_config_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/host_groups_config.yml"
 tags_config_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/tags_config.yml"
+platform_tags_config_path: "{{ playbook_dir | default(ansible_playbook_directory) }}/../mappings/platform_tags_config.yml"
 
 # NetBox API credentials (required when any *_source is loki)
 netbox_url: ""

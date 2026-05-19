@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROLE_LIB = Path(__file__).resolve().parents[1] / "playbooks" / "roles" / "netbox_zabbix_sync" / "library"
 sys.path.insert(0, str(ROLE_LIB))
@@ -55,3 +56,71 @@ def test_merge_tags_preserves_manual():
     assert tags["Loki_ID"] == "123"
     assert tags["Manual_Tag"] == "keep-me"
     assert any(e["action"] == "updated" for e in log if e["key_name"] == "Manufacturer")
+
+
+PLATFORM_MANAGED_KEYS = [
+    "IP",
+    "Port",
+    "URL",
+    "Site",
+    "DC",
+    "Manufacturer",
+    "Created",
+    "Last_Updated",
+    "Loki_Platform_ID",
+    "Loki_ID",
+]
+
+
+def test_platform_managed_keys_include_ip():
+    config_path = Path(__file__).resolve().parents[1] / "mappings" / "platform_tags_config.yml"
+    data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    keys = data["platform_tags"]["managed_keys"]
+    assert "IP" in keys
+    assert keys == PLATFORM_MANAGED_KEYS
+
+
+def test_merge_tags_platform_ip_no_duplicate():
+    """Regression: host.update must not send duplicate (IP, value) pairs (Zabbix -32602)."""
+    existing = [
+        {"tag": "IP", "value": "10.0.0.1"},
+        {"tag": "Site", "value": "DC14-G1"},
+        {"tag": "Custom", "value": "manual"},
+    ]
+    new_managed = [
+        {"tag": "IP", "value": "10.0.0.1"},
+        {"tag": "Site", "value": "DC14-G1"},
+        {"tag": "Port", "value": "9440"},
+        {"tag": "Loki_ID", "value": "P_103"},
+    ]
+    merged, log = merge_tags(existing, new_managed, PLATFORM_MANAGED_KEYS)
+    ip_entries = [t for t in merged if t["tag"] == "IP"]
+    assert len(ip_entries) == 1
+    assert ip_entries[0]["value"] == "10.0.0.1"
+    assert {t["tag"] for t in merged} == {"IP", "Site", "Port", "Loki_ID", "Custom"}
+    assert not any(e["action"] in ("added", "updated") for e in log if e["key_name"] == "IP")
+
+
+def test_merge_tags_platform_ip_value_change():
+    existing = [{"tag": "IP", "value": "10.0.0.1"}]
+    new_managed = [{"tag": "IP", "value": "10.0.0.2"}]
+    merged, log = merge_tags(existing, new_managed, PLATFORM_MANAGED_KEYS)
+    assert len([t for t in merged if t["tag"] == "IP"]) == 1
+    assert merged[0]["value"] == "10.0.0.2"
+    assert any(
+        e["key_name"] == "IP" and e["action"] == "updated" for e in log
+    )
+
+
+def test_merge_tags_tags_needs_update_false_when_unchanged():
+    existing = [
+        {"tag": "IP", "value": "10.50.2.45"},
+        {"tag": "Loki_ID", "value": "P_103"},
+    ]
+    new_managed = [
+        {"tag": "IP", "value": "10.50.2.45"},
+        {"tag": "Loki_ID", "value": "P_103"},
+    ]
+    _, log = merge_tags(existing, new_managed, PLATFORM_MANAGED_KEYS)
+    needs_update = any(e.get("action") in ("added", "updated") for e in log)
+    assert needs_update is False

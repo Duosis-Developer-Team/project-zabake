@@ -293,8 +293,8 @@ When a platform is synced again after already existing in Zabbix:
 1. Before `host.create`, the playbook resolves the Zabbix host by tag `Loki_ID` (`P_<netbox_platform_id>`) using `zabbix_hosts_by_loki_id`, then falls back to **`zabbix_hosts_by_hostname`** using the **technical** host key, then to **`zabbix_hosts_by_visible_name`** using the **visible** name (the original NetBox UTF-8 name). If a host is found, `zbx_scenario` is `update`; otherwise `create`.
 2. Zabbix `host.create` / `host.update` use **`host`** = technical ASCII (platforms: transliterated name plus `_P_<id>` suffix) and **`name`** = visible UTF-8 label (`HOST_VISIBLE_NAME`), so Turkish characters remain in the UI name while the API host key stays valid and unique per NetBox platform id.
 3. If `host.create` still runs and fails with a duplicate-host error, the playbook falls back to `zbx_scenario: update` by resolving the existing host in order: **Loki_ID from intended tags**, then **technical hostname map**, then **visible name map**, then **live `host.get` by technical `host`**, then **live `host.get` by visible `name`**. This covers a **stale prefetch** (a host created earlier in the same playbook run is not in the in-memory maps) and legacy hosts missing `Loki_ID`. Zabbix often returns `error.message: Invalid params.` with the real text in `error.data` (e.g. `Host with the same name "..." already exists.`); both `message` and `data` are checked for `already exists`.
-4. The update modifies: IP address, technical host, visible name, interface, macros, `monitored_by`, and `proxy_groupid`. For **`DEVICE_ROLE: PLATFORM`**, when merged tags differ from Zabbix, **`host.update` also sends merged host tags** (existing Zabbix tags plus desired NetBox tags; same keys are overwritten) so `Loki_ID` and related tags stay aligned for the next run.
-5. For non-platform hosts, tags are still only applied on **create** (unchanged).
+4. The update modifies: IP address, technical host, visible name, interface, macros, `monitored_by`, and `proxy_groupid`. For **`DEVICE_ROLE: PLATFORM`**, when managed tags differ from Zabbix, **`host.update` sends a deduplicated tag list** built by the `zabbix_merge_tags` module (`library/zabbix_merge_helpers.merge_tags`): manual tags are preserved, keys in `mappings/platform_tags_config.yml` plus `tags_config.yml` are replaced from NetBox. If no managed tag changed, the `tags` parameter is **omitted** (Zabbix keeps existing tags).
+5. For non-platform hosts, tag updates on `host.update` use only `tags_config.yml` managed keys (same merge helper); tags are omitted when unchanged.
 6. Templates are **not** updated on existing hosts — only set during creation.
 
 > To force a full template reassignment on an existing platform host, delete it from Zabbix and re-run the sync.
@@ -304,6 +304,14 @@ When a platform is synced again after already existing in Zabbix:
 ---
 
 ## Troubleshooting
+
+### `Invalid params` / `tags/N` — `(tag, value)=(IP, ...) already exists` on `host.update`
+
+**Cause (fixed in 2026-05):** Platform tags such as `IP` were not listed in device-only `tags_config.yml` managed keys. The old Jinja merge kept the existing `IP` tag as “manual” and appended the same `IP` from NetBox again. Zabbix 7.0 rejects duplicate `(tag, value)` pairs in a single `host.update` request (`-32602`); `error.message` is often only `Invalid params.` — see **`error.data`** in AWX logs or the CSV `reason` column.
+
+**Fix (built-in):** `mappings/platform_tags_config.yml` defines platform managed keys; `zabbix_merge_tags` deduplicates by tag name before `host.update`. Re-run the sync after upgrading the role.
+
+---
 
 ### "Host with the same name ... already exists" (platform rows, same run)
 

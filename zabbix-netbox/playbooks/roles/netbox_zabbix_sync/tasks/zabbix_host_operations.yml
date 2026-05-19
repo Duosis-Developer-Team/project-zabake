@@ -12,6 +12,9 @@
     _existing_hmdl_tags_map: {}
     _merged_tags_for_update: []
     _tag_change_log: []
+    _effective_managed_tag_keys: []
+    _platform_managed_tag_keys: []
+    _host_update_params: {}
     _host_field_changes: []
   run_once: false
 
@@ -30,6 +33,29 @@
         {%- endif -%}
       {%- endfor -%}
       {{ keys }}
+  run_once: false
+
+- name: Load platform tags config for managed tag keys
+  set_fact:
+    _platform_tags_config_loaded: "{{ lookup('file', platform_tags_config_path) | from_yaml }}"
+  run_once: false
+
+- name: Set platform managed tag keys from platform_tags_config.yml
+  set_fact:
+    _platform_managed_tag_keys: "{{ _platform_tags_config_loaded.platform_tags.managed_keys | default([]) }}"
+  run_once: false
+
+- name: Set effective managed tag keys for this record
+  set_fact:
+    _effective_managed_tag_keys: >-
+      {{
+        (_hmdl_managed_tag_keys | default([])) +
+        (
+          (_platform_managed_tag_keys | default([]))
+          if (zbx_record.DEVICE_ROLE | default('') | string | upper == 'PLATFORM')
+          else []
+        )
+      }}
   run_once: false
 
 - name: Load mappings
@@ -730,7 +756,7 @@
     - zbx_existing_host is defined
     - zbx_existing_host.hostid is defined
 
-- name: Build existing tags list and HMDL tag map from zbx_existing_host
+- name: Build existing tags list and managed tag map from zbx_existing_host
   vars:
     _raw_tags: "{{ zbx_existing_host.tags | default([]) }}"
   set_fact:
@@ -738,7 +764,7 @@
     _existing_hmdl_tags_map: >-
       {%- set m = {} -%}
       {%- for t in _raw_tags -%}
-        {%- if t.tag in _hmdl_managed_tag_keys or t.tag.startswith('Loki_Tag_') -%}
+        {%- if t.tag in (_effective_managed_tag_keys | default([])) or t.tag.startswith('Loki_Tag_') -%}
           {%- set _ = m.update({t.tag: t.value}) -%}
         {%- endif -%}
       {%- endfor -%}
@@ -748,43 +774,30 @@
     - zbx_existing_host is defined
     - zbx_existing_host.hostid is defined
 
-- name: Build merged tags for update (preserve user tags, replace HMDL tags)
-  set_fact:
-    _merged_tags_for_update: >-
-      {%- set result = [] -%}
-      {%- for t in (_existing_tags_list | default([])) -%}
-        {%- if t.tag not in (_hmdl_managed_tag_keys | default([])) and not t.tag.startswith('Loki_Tag_') -%}
-          {%- set _ = result.append({'tag': t.tag, 'value': t.value}) -%}
-        {%- endif -%}
-      {%- endfor -%}
-      {%- for t in (zbx_tags | default([])) -%}
-        {%- if t.value is defined and t.value | string | trim != '' -%}
-          {%- set _ = result.append({'tag': t.tag, 'value': t.value | string}) -%}
-        {%- endif -%}
-      {%- endfor -%}
-      {{ result }}
-  when:
-    - zbx_scenario == 'update'
-    - zbx_existing_host is defined
-    - zbx_existing_host.hostid is defined
-
-- name: Check if HMDL tags have changed
-  vars:
-    _tags_changed: >-
-      {%- set ns = namespace(changed=false) -%}
-      {%- for t in (zbx_tags | default([])) -%}
-        {%- if (_existing_hmdl_tags_map | default({})).get(t.tag, '__NOT_FOUND__') != t.value | string -%}
-          {%- set ns.changed = true -%}
-        {%- endif -%}
-      {%- endfor -%}
-      {{ ns.changed }}
-  set_fact:
-    _tags_needs_update: "{{ _tags_changed | bool }}"
+- name: Merge tags for update via zabbix_merge_tags (dedupe by tag name)
+  zabbix_merge_tags:
+    existing_tags: "{{ zbx_existing_host.tags | default([]) }}"
+    new_managed_tags: "{{ zbx_tags | default([]) }}"
+    managed_keys: "{{ _effective_managed_tag_keys | default([]) }}"
+  register: zbx_tag_merge
+  delegate_to: localhost
   when:
     - zbx_scenario == 'update'
     - zbx_existing_host is defined
     - zbx_existing_host.hostid is defined
     - _missing_params | default([]) | length == 0
+
+- name: Apply merged tags and change log from zabbix_merge_tags
+  set_fact:
+    _merged_tags_for_update: "{{ zbx_tag_merge.merged_tags | default([]) }}"
+    _tag_change_log: "{{ zbx_tag_merge.change_log | default([]) }}"
+    _tags_needs_update: "{{ zbx_tag_merge.tags_needs_update | default(false) | bool }}"
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host is defined
+    - zbx_existing_host.hostid is defined
+    - _missing_params | default([]) | length == 0
+    - zbx_tag_merge is defined
 
 - name: Compute merged host groups (preserve manual groups)
   vars:
@@ -946,33 +959,6 @@
     - zbx_existing_host.name is defined
     - zbx_existing_host.name | string | trim != ''
 
-- name: Build tag change log entries
-  set_fact:
-    _tag_change_log: >-
-      {%- set entries = [] -%}
-      {%- for t in (zbx_tags | default([])) -%}
-        {%- set old_val = (_existing_hmdl_tags_map | default({})).get(t.tag, None) -%}
-        {%- if old_val is none -%}
-          {%- set action = 'added' -%}
-        {%- elif old_val != t.value | string -%}
-          {%- set action = 'updated' -%}
-        {%- else -%}
-          {%- set action = 'unchanged' -%}
-        {%- endif -%}
-        {%- set _ = entries.append({
-          'key_name': t.tag,
-          'old_value': old_val,
-          'new_value': t.value | string,
-          'action': action,
-          'object_type': 'tag'
-        }) -%}
-      {%- endfor -%}
-      {{ entries }}
-  when:
-    - zbx_scenario == 'update'
-    - zbx_existing_host is defined
-    - zbx_existing_host.hostid is defined
-
 - name: Build interface for update
   set_fact:
     _zbx_interface_update: "{{ [{'interfaceid': _interface_id, 'type': zbx_iface.type, 'main': 1, 'useip': 1, 'ip': zbx_record.HOST_IP, 'dns': zbx_iface.dns | default(''), 'port': (zbx_iface.port | default(161)) | string, 'details': zbx_iface.details | default(omit)}] if (zbx_iface is not none and zbx_iface is mapping and zbx_iface.type is defined) else omit }}"
@@ -1079,6 +1065,32 @@
     - _missing_params | default([]) | length == 0
     - _needs_update | default(true) | bool
 
+- name: Build host.update params (tags omitted when unchanged per Zabbix API)
+  set_fact:
+    _host_update_params:
+      hostid: "{{ zbx_existing_host.hostid }}"
+      host: "{{ zbx_record.HOSTNAME }}"
+      interfaces: "{{ _zbx_interface_update }}"
+      groups: "{{ zbx_groups_formatted | default([]) }}"
+      monitored_by: "{{ zbx_monitored_by | int }}"
+      proxy_groupid: "{{ zbx_proxy_group_id | default('0') | int }}"
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host.hostid is defined
+    - _missing_params | default([]) | length == 0
+    - _needs_update | default(true) | bool
+    - not (dry_run | default(false) | bool)
+
+- name: Add tags to host.update params when managed tags changed
+  set_fact:
+    _host_update_params: "{{ _host_update_params | combine({'tags': _merged_tags_for_update | default([])}) }}"
+  when:
+    - zbx_scenario == 'update'
+    - _host_update_params is defined
+    - _host_update_params | length > 0
+    - _tags_needs_update | default(false) | bool
+    - not (dry_run | default(false) | bool)
+
 - name: Update existing host (scenario update)
   uri:
     url: "{{ zabbix_url }}"
@@ -1088,14 +1100,7 @@
     body:
       jsonrpc: "2.0"
       method: "host.update"
-      params:
-        hostid: "{{ zbx_existing_host.hostid }}"
-        host: "{{ zbx_record.HOSTNAME }}"
-        interfaces: "{{ _zbx_interface_update }}"
-        groups: "{{ zbx_groups_formatted | default([]) }}"
-        tags: "{{ _merged_tags_for_update | default([]) }}"
-        monitored_by: "{{ zbx_monitored_by | int }}"
-        proxy_groupid: "{{ zbx_proxy_group_id | default('0') | int }}"
+      params: "{{ _host_update_params }}"
       auth: "{{ zabbix_auth }}"
       id: 2
   register: zbx_update_resp
@@ -1106,6 +1111,8 @@
     - _interface_id is defined
     - _interface_id != ''
     - _zbx_interface_update is defined
+    - _host_update_params is defined
+    - _host_update_params | length > 0
     - _missing_params | default([]) | length == 0
     - _needs_update | default(true) | bool
     - not (dry_run | default(false) | bool)
@@ -1198,7 +1205,12 @@
       hostname: "{{ zbx_record.HOSTNAME }}"
       device_role: "{{ zbx_record.DEVICE_ROLE | default('N/A') }}"
       status: "eklenemedi"
-      reason: "Güncelleme hatası: {{ zbx_update_resp.json.error.message | default(zbx_update_resp.json.error.data | default('Bilinmeyen hata')) }}"
+      reason: >-
+        Güncelleme hatası: {{
+          (zbx_update_resp.json.error.data | default('') | string | trim)
+          if (zbx_update_resp.json.error.data is defined and (zbx_update_resp.json.error.data | string | trim | length) > 0)
+          else (zbx_update_resp.json.error.message | default('Bilinmeyen hata'))
+        }}
       error_data: "{{ zbx_update_resp.json.error.data | default('') }}"
       error_code: "{{ zbx_update_resp.json.error.code | default('') }}"
       ip: "{{ zbx_record.HOST_IP }}"

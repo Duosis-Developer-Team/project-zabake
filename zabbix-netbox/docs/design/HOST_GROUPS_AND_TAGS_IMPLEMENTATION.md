@@ -167,7 +167,7 @@ Update path preserves operator changes in Zabbix while refreshing Loki/datalake-
 
 | Field | Managed by automation | Manual Zabbix edits |
 |-------|----------------------|---------------------|
-| Tags | Names in `tags_config.yml` + `Loki_Tag_*` | Preserved |
+| Tags | Device: `tags_config.yml` + `Loki_Tag_*`. Platform: also `platform_tags_config.yml` (`IP`, `Port`, `Loki_ID`, …) | Preserved |
 | Host groups | Groups from `host_groups_config.yml` / templates | Extra groups preserved |
 | Macros | Keys from `templates.yml` for mapped `device_type` | Extra macros preserved |
 | Visible name | `HOST_VISIBLE_NAME` when unchanged since last HMDL log | Preserved + reported |
@@ -177,7 +177,9 @@ Update path preserves operator changes in Zabbix while refreshing Loki/datalake-
 
 **HMDL audit columns:** `last_location`, `last_proxy_group_id`, `proxy_manual_change_detected`, `field_merge_actions` on `hmdl.zabbix_sync_log`.
 
-Implementation: `library/zabbix_merge_helpers.py`, `tasks/zabbix_host_operations.yml`, `tasks/hmdl_read_last_sync.yml`.
+Implementation: `library/zabbix_merge_helpers.py`, `library/zabbix_merge_tags.py` (Ansible module), `mappings/platform_tags_config.yml`, `tasks/zabbix_host_operations.yml`, `tasks/hmdl_read_last_sync.yml`.
+
+**Platform tag merge:** On `host.update`, `zabbix_merge_tags` builds the full replace list for Zabbix (no duplicate tag names). The `tags` field is sent only when managed tags changed; otherwise it is omitted per [Zabbix `host.update`](https://www.zabbix.com/documentation/7.0/en/manual/api/reference/host/update).
 
 ## Sonraki Adımlar
 

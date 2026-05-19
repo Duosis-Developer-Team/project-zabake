@@ -1,0 +1,15 @@
+# Platform (NetBox dcim/platform) tags managed by HMDL sync on host.update.
+# Device tags remain in tags_config.yml.
+
+platform_tags:
+  managed_keys:
+    - IP
+    - Port
+    - URL
+    - Site
+    - DC
+    - Manufacturer
+    - Created
+    - Last_Updated
+    - Loki_Platform_ID
+    - Loki_ID
