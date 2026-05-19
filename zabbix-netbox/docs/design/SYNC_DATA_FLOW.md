@@ -205,7 +205,7 @@ flowchart TD
     TM2 & GM2 & MM2 & VNP & VNU & PGU & PGK --> API[host.update unless dry_run]
 ```
 
-Reference implementation: [`library/zabbix_merge_helpers.py`](../../playbooks/roles/netbox_zabbix_sync/library/zabbix_merge_helpers.py).
+Reference implementation: [`module_utils/zabbix_merge_helpers.py`](../../playbooks/roles/netbox_zabbix_sync/module_utils/zabbix_merge_helpers.py).
 
 ## Host matching (idempotency)
 

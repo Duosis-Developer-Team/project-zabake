@@ -3,14 +3,8 @@
 
 from __future__ import annotations
 
-import os
-import sys
-
 from ansible.module_utils.basic import AnsibleModule
-
-# Role library path: import sibling helper module.
-sys.path.insert(0, os.path.dirname(__file__))
-from zabbix_merge_helpers import merge_tags  # noqa: E402
+from ansible.module_utils.zabbix_merge_helpers import merge_tags
 
 
 DOCUMENTATION = r"""
