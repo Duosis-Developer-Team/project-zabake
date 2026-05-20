@@ -1,0 +1,3 @@
+-- Initial HMDL datalake-collectors schema.
+-- Run collector_definition.sql, collector_target.sql, collector_sync_log.sql,
+-- collector_diff_log.sql, collector_check_log.sql in that order from SQL/datalake-collectors/.

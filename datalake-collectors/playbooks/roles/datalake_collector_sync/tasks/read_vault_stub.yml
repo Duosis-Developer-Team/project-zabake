@@ -1,0 +1,7 @@
+---
+# When Gitea vault URL is not configured, use empty vault map.
+- name: Initialize empty vault map
+  copy:
+    content: "{}"
+    dest: "{{ collector_work_dir }}/vault_by_dir.json"
+    mode: "0640"

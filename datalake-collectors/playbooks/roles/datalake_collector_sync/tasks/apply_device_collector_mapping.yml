@@ -1,0 +1,21 @@
+---
+- name: Apply device to collector_type mapping
+  command: >
+    python3 {{ role_path }}/files/apply_collector_mapping.py
+    --entity devices
+    --inventory-file {{ collector_work_dir }}/devices.json
+    --collector-types {{ collector_types_path | quote }}
+    --mapping-file {{ device_collector_mapping_path | quote }}
+    --proxy-assignment {{ proxy_assignment_path | quote }}
+    --collector-filter {{ collector_filter | default('') | quote }}
+    --output {{ collector_work_dir }}/device_targets.json
+  register: device_map_cmd
+  changed_when: false
+
+- name: Load device targets
+  set_fact:
+    device_targets: "{{ lookup('file', collector_work_dir + '/device_targets.json') | from_json }}"
+
+- name: Merge device targets into all targets
+  set_fact:
+    collector_all_targets: "{{ collector_all_targets + device_targets }}"

@@ -1,0 +1,78 @@
+---
+- name: Create collector sync work directory
+  file:
+    path: "{{ collector_work_dir }}"
+    state: directory
+    mode: "0750"
+
+- name: Load collector types mapping
+  include_vars:
+    file: "{{ collector_types_path }}"
+    name: collector_types_map
+
+- name: Load proxy assignment mapping
+  include_vars:
+    file: "{{ proxy_assignment_path }}"
+    name: proxy_assignment_map
+
+- name: Load collector defaults
+  include_vars:
+    file: "{{ collector_defaults_path }}"
+    name: collector_defaults_map
+
+- name: Initialize run facts
+  set_fact:
+    collector_run_id: "{{ ansible_env.AWX_JOB_ID | default(ansible_date_time.iso8601_basic_short) }}"
+    collector_all_targets: []
+    collector_sync_report: []
+    collector_diff_report: []
+    collector_check_report: []
+
+- name: Platform sync pipeline
+  when: sync_platforms | bool
+  block:
+    - name: Fetch NetBox platforms
+      include_tasks: fetch_platforms_loki.yml
+
+    - name: Apply platform collector mapping
+      include_tasks: apply_platform_collector_mapping.yml
+
+- name: Device sync pipeline
+  when: sync_devices | bool
+  block:
+    - name: Fetch NetBox devices
+      include_tasks: fetch_devices_loki.yml
+
+    - name: Apply device collector mapping
+      include_tasks: apply_device_collector_mapping.yml
+
+- name: Read vault credentials from Gitea
+  include_tasks: read_vault.yml
+  when: gitea_vault_url | length > 0
+
+- name: Use empty vault when Gitea not configured
+  include_tasks: read_vault_stub.yml
+  when: gitea_vault_url | length == 0
+
+- name: Upsert HMDL collector targets
+  include_tasks: upsert_hmdl_target.yml
+  when:
+    - hmdl_log_enabled | bool
+    - not (only_fetch | bool)
+
+- name: Render and reconcile proxy configuration
+  include_tasks: render_proxy_config.yml
+  when: not (only_fetch | bool)
+
+- name: Run basic connectivity checks
+  include_tasks: run_basic_checks.yml
+  when:
+    - run_basic_checks | bool
+    - not (only_fetch | bool)
+
+- name: Send email report
+  include_tasks: send_report.yml
+  when:
+    - send_email | bool
+    - mail_recipients | length > 0
+    - not (only_fetch | bool)

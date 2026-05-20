@@ -1,0 +1,63 @@
+---
+- name: HMDL Datalake Collector Sync (NetBox -> Proxy NiFi configuration_file.json)
+  hosts: localhost
+  gather_facts: true
+  vars:
+    _discovery_db_host: "{{ discovery_db_host | default('') }}"
+    _discovery_db_port: "{{ discovery_db_port | default(5432) }}"
+    _discovery_db_name: "{{ discovery_db_name | default('') }}"
+    _discovery_db_user: "{{ discovery_db_user | default('') }}"
+    _discovery_db_password: "{{ discovery_db_password | default('') }}"
+    _netbox_url: "{{ netbox_url | default('') }}"
+    _netbox_token: "{{ netbox_token | default('') }}"
+    _sync_platforms: "{{ sync_platforms | default(true) }}"
+    _sync_devices: "{{ sync_devices | default(false) }}"
+
+  pre_tasks:
+    - name: Validate discovery_db_host
+      fail:
+        msg: "discovery_db_host is required when hmdl_log_enabled=true"
+      when:
+        - hmdl_log_enabled | default(true) | bool
+        - _discovery_db_host | length == 0
+
+    - name: Validate discovery_db_name
+      fail:
+        msg: "discovery_db_name is required when hmdl_log_enabled=true"
+      when:
+        - hmdl_log_enabled | default(true) | bool
+        - _discovery_db_name | length == 0
+
+    - name: Validate discovery_db_user
+      fail:
+        msg: "discovery_db_user is required when hmdl_log_enabled=true"
+      when:
+        - hmdl_log_enabled | default(true) | bool
+        - _discovery_db_user | length == 0
+
+    - name: Validate discovery_db_password
+      fail:
+        msg: "discovery_db_password is required when hmdl_log_enabled=true"
+      when:
+        - hmdl_log_enabled | default(true) | bool
+        - _discovery_db_password | length == 0
+
+    - name: Validate NetBox when platform or device sync enabled
+      fail:
+        msg: "netbox_url and netbox_token are required when sync_platforms or sync_devices is true"
+      when:
+        - (_sync_platforms | bool) or (_sync_devices | bool)
+        - (_netbox_url | length == 0) or (_netbox_token | length == 0)
+
+  roles:
+    - role: datalake_collector_sync
+      vars:
+        discovery_db_host: "{{ _discovery_db_host }}"
+        discovery_db_port: "{{ _discovery_db_port }}"
+        discovery_db_name: "{{ _discovery_db_name }}"
+        discovery_db_user: "{{ _discovery_db_user }}"
+        discovery_db_password: "{{ _discovery_db_password }}"
+        netbox_url: "{{ _netbox_url }}"
+        netbox_token: "{{ _netbox_token }}"
+        sync_platforms: "{{ _sync_platforms }}"
+        sync_devices: "{{ _sync_devices }}"

@@ -1,0 +1,21 @@
+---
+# DC / site code -> Proxy NiFi SSH target and configuration path.
+# Replace placeholder hostnames with real proxy NiFi addresses before production use.
+
+DC13:
+  proxy_nifi_host: "REPLACE_PROXY_NIFI_DC13"
+  ssh_user: "nifi"
+  conf_path: "/Datalake_Project/configuration_file.json"
+  gitea_audit_path: "proxies/dc13/configuration_file.json"
+
+DC16:
+  proxy_nifi_host: "REPLACE_PROXY_NIFI_DC16"
+  ssh_user: "nifi"
+  conf_path: "/Datalake_Project/configuration_file.json"
+  gitea_audit_path: "proxies/dc16/configuration_file.json"
+
+MAIN:
+  proxy_nifi_host: "REPLACE_MAIN_NIFI"
+  ssh_user: "nifi"
+  conf_path: "/Datalake_Project/configuration_file.json"
+  gitea_audit_path: "proxies/main/configuration_file.json"

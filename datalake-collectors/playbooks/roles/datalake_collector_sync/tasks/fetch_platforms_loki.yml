@@ -1,0 +1,29 @@
+---
+- name: Validate NetBox credentials for platform fetch
+  assert:
+    that:
+      - netbox_url | length > 0
+      - netbox_token | length > 0
+    fail_msg: "netbox_url and netbox_token are required when sync_platforms=true"
+
+- name: Fetch platforms from NetBox API
+  command: >
+    python3 {{ role_path }}/files/fetch_netbox_inventory.py
+    --netbox-url {{ netbox_url | quote }}
+    --netbox-token {{ netbox_token | quote }}
+    --entity platforms
+    --verify-ssl {{ netbox_verify_ssl | string | lower }}
+    --location-filter {{ location_filter | default('') | quote }}
+  register: platform_fetch_cmd
+  changed_when: false
+  no_log: true
+
+- name: Save platform inventory JSON
+  copy:
+    content: "{{ platform_fetch_cmd.stdout }}"
+    dest: "{{ collector_work_dir }}/platforms.json"
+    mode: "0640"
+
+- name: Set platform inventory fact
+  set_fact:
+    netbox_platforms: "{{ platform_fetch_cmd.stdout | from_json }}"

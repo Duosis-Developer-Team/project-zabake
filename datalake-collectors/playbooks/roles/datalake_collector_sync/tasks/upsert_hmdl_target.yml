@@ -1,0 +1,38 @@
+---
+- name: Write merged targets file for downstream tasks
+  copy:
+    content: "{{ collector_all_targets | to_nice_json }}"
+    dest: "{{ collector_work_dir }}/all_targets.json"
+    mode: "0640"
+
+- name: Export collector types as JSON for DB script
+  copy:
+    content: "{{ collector_types_map | to_nice_json }}"
+    dest: "{{ collector_work_dir }}/collector_types.json"
+    mode: "0640"
+
+- name: Ensure HMDL collector tables exist
+  command: >
+    python3 {{ role_path }}/files/hmdl_collector_db.py
+    ensure-schema
+    --db-host {{ hmdl_db_host | quote }}
+    --db-port {{ hmdl_db_port }}
+    --db-name {{ hmdl_db_name | quote }}
+    --db-user {{ hmdl_db_user | quote }}
+    --db-password {{ hmdl_db_password | quote }}
+  no_log: true
+  changed_when: false
+
+- name: Upsert collector targets to HMDL database
+  command: >
+    python3 {{ role_path }}/files/hmdl_collector_db.py
+    upsert-targets
+    --db-host {{ hmdl_db_host | quote }}
+    --db-port {{ hmdl_db_port }}
+    --db-name {{ hmdl_db_name | quote }}
+    --db-user {{ hmdl_db_user | quote }}
+    --db-password {{ hmdl_db_password | quote }}
+    --targets-file {{ collector_work_dir }}/all_targets.json
+    --collector-types-file {{ collector_work_dir }}/collector_types.json
+  no_log: true
+  when: collector_all_targets | length > 0

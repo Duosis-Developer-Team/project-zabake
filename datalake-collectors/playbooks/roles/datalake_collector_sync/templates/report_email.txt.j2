@@ -1,0 +1,14 @@
+HMDL Datalake Collector Sync Report
+Run ID: {{ collector_run_id }}
+Dry run: {{ dry_run | default(true) }}
+
+Added IPs: {{ collector_email_added | default([]) | length }}
+Removed IPs: {{ collector_email_removed | default([]) | length }}
+Check failures: {{ collector_email_failed_checks | default([]) | length }}
+
+{% for row in collector_email_added | default([]) %}
++ {{ row.proxy_id | default('') }} | {{ row.collector_type | default(row.conf_key) }} | {{ row.ip }}
+{% endfor %}
+{% for row in collector_email_removed | default([]) %}
+- {{ row.proxy_id | default('') }} | {{ row.collector_type | default(row.conf_key) }} | {{ row.ip }}
+{% endfor %}

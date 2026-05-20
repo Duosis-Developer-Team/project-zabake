@@ -1,0 +1,37 @@
+---
+# NetBox /api/dcim/platforms/ -> collector_type (Phase 1 priority).
+# manufacturer: platform.manufacturer.name (case-insensitive)
+# priority: lower number wins
+
+mappings:
+  - manufacturer: "Nutanix"
+    collector_type: "Nutanix"
+    priority: 1
+
+  - manufacturer: "Acropolis"
+    collector_type: "Nutanix"
+    priority: 1
+
+  - manufacturer: "VMware"
+    collector_type: "VmWare"
+    priority: 999
+
+  - manufacturer: "IBM HMC"
+    collector_type: "IBM-HMC"
+    priority: 1
+
+  - manufacturer: "IBM Virtualize"
+    collector_type: "IBM-Virtualize"
+    priority: 1
+
+  - manufacturer: "Veeam"
+    collector_type: "Veeam"
+    priority: 999
+
+  - manufacturer: "Netbackup"
+    collector_type: "Netbackup"
+    priority: 999
+
+  - manufacturer: "Zerto"
+    collector_type: "Zerto"
+    priority: 999

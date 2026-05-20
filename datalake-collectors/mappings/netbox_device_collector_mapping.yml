@@ -1,0 +1,33 @@
+---
+# NetBox /api/dcim/devices/ -> collector_type (Phase 2).
+# conditions evaluated in priority order; first match wins.
+
+mappings:
+  - collector_type: "ILO-Redfish"
+    conditions:
+      device_role: "HOST"
+      manufacturer: ["HPE", "HP", "DELL", "Lenovo", "LENOVO", "Supermicro"]
+    ip_field_source: management_ip
+    priority: 1
+
+  - collector_type: "Inspur-Redfish"
+    conditions:
+      device_role: "HOST"
+      manufacturer: ["INSPUR", "Inspur"]
+    ip_field_source: management_ip
+    priority: 1
+
+  - collector_type: "IBM-SAN"
+    conditions:
+      device_role: ["SAN Switch"]
+      manufacturer: "IBM"
+    ip_field_source: primary_ip
+    priority: 1
+
+  - collector_type: "s3icos"
+    conditions:
+      device_role: ["Storage", "Object Storage"]
+      manufacturer: "IBM"
+      model_contains: ["S3", "ICOS"]
+    ip_field_source: primary_ip
+    priority: 1
