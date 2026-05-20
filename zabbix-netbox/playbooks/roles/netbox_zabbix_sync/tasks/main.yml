@@ -264,6 +264,13 @@
       (sync_virtual_fws={{ sync_virtual_fws | bool }}, source={{ virtual_fw_source }})
   when: sync_virtual_fws | bool
 
+- name: Clean up leftover VFW result temp files from previous runs
+  shell: "rm -f /tmp/zabbix_vfw_operation_result_*.json"
+  delegate_to: localhost
+  run_once: true
+  changed_when: false
+  when: sync_virtual_fws | bool
+
 - name: Process each virtual firewall
   include_tasks: process_virtual_fw.yml
   loop: "{{ netbox_virtual_fws_raw | default([]) }}"

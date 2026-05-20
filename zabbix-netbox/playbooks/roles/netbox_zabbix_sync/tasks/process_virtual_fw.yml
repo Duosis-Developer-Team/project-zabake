@@ -249,6 +249,28 @@
     - zabbix_hosts_by_loki_id.get('VFW_' ~ (vfw_id | string)) is not none
     - zabbix_hosts_by_loki_id.get('VFW_' ~ (vfw_id | string)) != None
 
+- name: Override Loki_ID match when target hostname already exists on another host
+  vars:
+    _loki_host_has_wrong_hostname: >-
+      {{
+        zbx_existing_host is defined and
+        zbx_existing_host.hostid is defined and
+        zbx_existing_host.host | default('') != zbx_record.HOSTNAME
+      }}
+    _target_hostname_exists: >-
+      {{
+        zabbix_hosts_by_hostname is defined and
+        zabbix_hosts_by_hostname.get(zbx_record.HOSTNAME) is not none and
+        zabbix_hosts_by_hostname.get(zbx_record.HOSTNAME) != None
+      }}
+  set_fact:
+    zbx_existing_host: "{{ zabbix_hosts_by_hostname.get(zbx_record.HOSTNAME) }}"
+  when:
+    - zbx_record is defined
+    - zbx_record.DEVICE_TYPE is defined
+    - _loki_host_has_wrong_hostname | bool
+    - _target_hostname_exists | bool
+
 - name: Fallback to technical hostname if Loki_ID not found (virtual firewall)
   set_fact:
     zbx_existing_host: "{{ zabbix_hosts_by_hostname.get(zbx_record.HOSTNAME) }}"
