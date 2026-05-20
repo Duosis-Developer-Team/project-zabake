@@ -1,0 +1,39 @@
+---
+# Fetch virtual firewalls from PostgreSQL discovery_netbox_inventory_virtual_fw table.
+
+- name: Fail when discovery DB credentials are missing for virtual FW datalake fetch
+  fail:
+    msg: >-
+      virtual_fw_source=datalake requires discovery_db_host, discovery_db_name,
+      discovery_db_user, and discovery_db_password.
+  when:
+    - discovery_db_host | default('') | trim == ''
+    - or discovery_db_name | default('') | trim == ''
+    - or discovery_db_user | default('') | trim == ''
+
+- name: Fetch active virtual firewalls from discovery database
+  community.postgresql.postgresql_query:
+    db: "{{ discovery_db_name }}"
+    login_host: "{{ discovery_db_host }}"
+    login_port: "{{ discovery_db_port | int }}"
+    login_user: "{{ discovery_db_user }}"
+    login_password: "{{ discovery_db_password }}"
+    query: |
+      SELECT *
+      FROM public.discovery_netbox_inventory_virtual_fw
+      WHERE COALESCE(fw_status, 'active') = 'active'
+      {% if location_filter | default('') | trim != '' %}
+        AND (
+          COALESCE(site_name, '') ILIKE '%{{ location_filter }}%'
+          OR COALESCE(dc_name, '') ILIKE '%{{ location_filter }}%'
+        )
+      {% endif %}
+  register: _pg_virtual_fws
+  changed_when: false
+  delegate_to: localhost
+  run_once: true
+
+- name: Set virtual firewall fetch facts (datalake)
+  set_fact:
+    netbox_virtual_fws_raw: "{{ _pg_virtual_fws.query_result | default([]) }}"
+    netbox_virtual_fws_count: "{{ _pg_virtual_fws.query_result | default([]) | length }}"

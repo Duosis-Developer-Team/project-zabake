@@ -161,11 +161,29 @@ csv_row = {
 4. Zabbix migration scripti ile test et
 5. Zabbix'te host groups ve tags'ın doğru oluşturulduğunu kontrol et
 
+## Smart merge (HMDL sync — 2026)
+
+Update path preserves operator changes in Zabbix while refreshing Loki/datalake-owned fields:
+
+| Field | Managed by automation | Manual Zabbix edits |
+|-------|----------------------|---------------------|
+| Tags | Names in `tags_config.yml` + `Loki_Tag_*` | Preserved |
+| Host groups | Groups from `host_groups_config.yml` / templates | Extra groups preserved |
+| Macros | Keys from `templates.yml` for mapped `device_type` | Extra macros preserved |
+| Visible name | `HOST_VISIBLE_NAME` when unchanged since last HMDL log | Preserved + reported |
+| Proxy group | Recalculated from `DC_ID`; **location change overrides** | Preserved when log shows correct proxy but Zabbix differs |
+
+**Inventory source (AWX extra vars):** `device_source`, `platform_source`, `virtual_fw_source` — each `loki` (NetBox API) or `datalake` (PostgreSQL discovery tables).
+
+**HMDL audit columns:** `last_location`, `last_proxy_group_id`, `proxy_manual_change_detected`, `field_merge_actions` on `hmdl.zabbix_sync_log`.
+
+Implementation: `library/zabbix_merge_helpers.py`, `tasks/zabbix_host_operations.yml`, `tasks/hmdl_read_last_sync.yml`.
+
 ## Sonraki Adımlar
 
 1. ✅ Host groups ve tags mapping dokümante edildi
 2. ✅ Zabbix migration script'e tags desteği eklendi
-3. ⏳ Netbox'tan CSV oluşturma scripti yazılmalı
-4. ⏳ Test edilmeli ve doğrulanmalı
+3. ✅ Smart merge + per-type inventory source (loki/datalake)
+4. ⏳ Netbox'tan CSV oluşturma scripti yazılmalı (legacy path)
 
 

@@ -40,10 +40,11 @@
       jsonrpc: "2.0"
       method: "host.get"
       params:
-        output: ["hostid", "host", "name", "monitored_by", "proxy_groupid"]
+        output: ["hostid", "host", "name", "status", "monitored_by", "proxy_groupid"]
         selectInterfaces: "extend"
         selectTags: "extend"
         selectGroups: ["groupid", "name"]
+        selectMacros: ["macroid", "macro", "value"]
       auth: "{{ zabbix_auth }}"
       id: 100
   register: zbx_hosts_resp
@@ -115,6 +116,20 @@
       {%- set mapping = {} -%}
       {%- for host in zbx_hosts_resp.json.result | default([]) -%}
       {%- set _ = mapping.update({host.host: host}) -%}
+      {%- endfor -%}
+      {{ mapping }}
+  run_once: true
+  delegate_to: localhost
+  when: zbx_hosts_resp.json.result is defined
+
+- name: Build visible name to host mapping (fallback)
+  set_fact:
+    zabbix_hosts_by_visible_name: >-
+      {%- set mapping = {} -%}
+      {%- for host in zbx_hosts_resp.json.result | default([]) -%}
+      {%- if host.name is defined and host.name | string | trim != '' -%}
+      {%- set _ = mapping.update({host.name: host}) -%}
+      {%- endif -%}
       {%- endfor -%}
       {{ mapping }}
   run_once: true

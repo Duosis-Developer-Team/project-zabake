@@ -1,0 +1,16 @@
+---
+# Router: fetch virtual firewalls from Loki (NetBox API) or Datalake (PostgreSQL).
+
+- name: Validate virtual_fw_source parameter
+  assert:
+    that:
+      - virtual_fw_source | lower in ['loki', 'datalake']
+    fail_msg: "virtual_fw_source must be 'loki' or 'datalake' (got '{{ virtual_fw_source }}')"
+
+- name: Fetch virtual firewalls from Datalake (PostgreSQL)
+  include_tasks: fetch_all_virtual_fws_datalake.yml
+  when: virtual_fw_source | lower == 'datalake'
+
+- name: Fetch virtual firewalls from Loki (NetBox API)
+  include_tasks: fetch_all_virtual_fws_loki.yml
+  when: virtual_fw_source | lower == 'loki'

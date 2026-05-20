@@ -6,6 +6,30 @@
     _zbx_interface_update: []
     _needs_update: false
     _updated_fields: ""
+    _tags_needs_update: false
+    _groups_needs_update: false
+    _existing_tags_list: []
+    _existing_hmdl_tags_map: {}
+    _merged_tags_for_update: []
+    _tag_change_log: []
+    _host_field_changes: []
+  run_once: false
+
+- name: Load tags config for managed tag keys
+  set_fact:
+    _tags_config_loaded: "{{ lookup('file', tags_config_path) | from_yaml }}"
+  run_once: false
+
+- name: Set HMDL managed tag keys from tags_config.yml
+  set_fact:
+    _hmdl_managed_tag_keys: >-
+      {%- set keys = [] -%}
+      {%- for defn in (_tags_config_loaded.tags.definitions | default([])) -%}
+        {%- if defn.enabled | default(true) | bool -%}
+          {%- set _ = keys.append(defn.tag_name) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ keys }}
   run_once: false
 
 - name: Load mappings
@@ -22,6 +46,10 @@
   set_fact:
     zbx_scenario: "{{ zbx_scenario | default('create') }}"
     zbx_existing_host: "{{ zbx_existing_host | default({}) }}"
+    zbx_host_visible_name: "{{ zbx_record.HOST_VISIBLE_NAME | default(zbx_record.HOSTNAME, true) }}"
+    _proxy_manual_change_detected: false
+    _field_merge_actions: {}
+    _manual_change_notes: []
 
 - name: Parse tags from MACROS field
   vars:
@@ -188,8 +216,7 @@
     zbx_proxy_group_id: "{{ zbx_proxy_group_map[_static_pg_name] }}"
     zbx_monitored_by: "2"
   when:
-    - _static_pg_name is defined
-    - _static_pg_name | string | length > 0
+    - _static_pg_name | default('') | length > 0
     - zbx_proxy_group_map is defined
     - _static_pg_name in zbx_proxy_group_map
 
@@ -494,7 +521,8 @@
       method: "host.create"
       params:
         host: "{{ zbx_record.HOSTNAME }}"
-        name: "{{ zbx_record.HOSTNAME }}"
+        name: "{{ zbx_host_visible_name }}"
+        status: "{{ zbx_record.HOST_STATUS | default(0) | int }}"
         interfaces: "{{ _zbx_interface_create }}"
         templates: "{{ zbx_template_id_list }}"
         groups: "{{ zbx_groups_formatted | default([]) }}"
@@ -509,6 +537,7 @@
   when:
     - zbx_scenario == 'create'
     - _missing_params | default([]) | length == 0
+    - not (dry_run | default(false) | bool)
 
 - name: Record create success
   set_fact:
@@ -567,17 +596,90 @@
     - _missing_params | default([]) | length == 0
     - zbx_create_resp.json.error is defined
 
-- name: Handle create error (host already exists fallback)
+- name: On duplicate host create error, capture Loki_ID from tags for resolution
+  set_fact:
+    zbx_dup_loki: "{{ zbx_tags | default([]) | selectattr('tag', 'equalto', 'Loki_ID') | map(attribute='value') | list | first | default('', true) | string }}"
+  when:
+    - zbx_scenario == 'create'
+    - zbx_create_resp.json.error is defined
+    - >-
+      (zbx_create_resp.json.error.message | default('')) is search('already exists')
+      or (zbx_create_resp.json.error.data | default('') | string) is search('already exists')
+
+- name: Switch to update when duplicate resolved by Loki_ID tag
   set_fact:
     zbx_scenario: "update"
-    zbx_existing_host: "{{ zabbix_hosts_by_hostname.get(zbx_record.HOSTNAME) | default({}) }}"
+    zbx_existing_host: "{{ zabbix_hosts_by_loki_id.get(zbx_dup_loki) }}"
+  when:
+    - zbx_scenario == 'create'
+    - zbx_create_resp.json.error is defined
+    - zabbix_hosts_by_loki_id is defined
+    - zbx_dup_loki | default('') | length > 0
+    - zabbix_hosts_by_loki_id.get(zbx_dup_loki) is not none
+    - zabbix_hosts_by_loki_id.get(zbx_dup_loki).hostid is defined
+
+- name: Switch to update when duplicate resolved by technical hostname
+  set_fact:
+    zbx_scenario: "update"
+    zbx_existing_host: "{{ zabbix_hosts_by_hostname.get(zbx_record.HOSTNAME) }}"
   when:
     - zbx_scenario == 'create'
     - zbx_create_resp.json.error is defined
     - zabbix_hosts_by_hostname is defined
-    - >-
-      (zbx_create_resp.json.error.message | default('')) is search('already exists')
-      or (zbx_create_resp.json.error.data | default('') | string) is search('already exists')
+    - zabbix_hosts_by_hostname.get(zbx_record.HOSTNAME) is not none
+    - zabbix_hosts_by_hostname.get(zbx_record.HOSTNAME).hostid is defined
+
+- name: Switch to update when duplicate resolved by visible host name
+  set_fact:
+    zbx_scenario: "update"
+    zbx_existing_host: "{{ zabbix_hosts_by_visible_name.get(zbx_host_visible_name) }}"
+  when:
+    - zbx_scenario == 'create'
+    - zbx_create_resp.json.error is defined
+    - zabbix_hosts_by_visible_name is defined
+    - zabbix_hosts_by_visible_name.get(zbx_host_visible_name) is not none
+    - zabbix_hosts_by_visible_name.get(zbx_host_visible_name).hostid is defined
+
+- name: DRY-RUN - Create preview summary
+  debug:
+    msg: |
+      ========================================
+      DRY-RUN: ZABBIX HOST CREATE PREVIEW
+      ========================================
+      Host          : {{ zbx_record.HOSTNAME }}
+      IP            : {{ zbx_record.HOST_IP }}
+      Device Type   : {{ zbx_record.DEVICE_TYPE | default('N/A') }}
+      Zabbix'te Var : HAYIR (yeni host oluşturulacaktı)
+      Template'ler  : {{ zbx_template_names | join(', ') }}
+      Host Group'lar: {{ zbx_required_groups_for_record | join(', ') }}
+      DC_ID         : {{ zbx_location_name }} → {{ zbx_matched_proxy_group | default('eşleşme yok') }} (proxy_groupid: {{ zbx_proxy_group_id | default('N/A') }})
+      Monitored By  : {{ zbx_monitored_by }}
+      Tag Sayısı    : {{ zbx_tags | default([]) | length }}
+      Macro Sayısı  : {{ zbx_host_macros_formatted | default([]) | length }}
+      ----------------------------------------
+      DRY-RUN: host.create çağrısı YAPILMADI.
+      ========================================
+  when:
+    - dry_run | default(false) | bool
+    - zbx_scenario == 'create'
+    - _missing_params | default([]) | length == 0
+
+- name: DRY-RUN - Record create preview result
+  set_fact:
+    device_result:
+      hostname: "{{ zbx_record.HOSTNAME }}"
+      device_role: "{{ zbx_record.DEVICE_ROLE | default('N/A') }}"
+      status: "dry_run"
+      reason: "Dry-run: host.create çağrısı yapılmadı — eklenecekti"
+      ip: "{{ zbx_record.HOST_IP }}"
+      location: "{{ zbx_record.REPORT_LOCATION | default('N/A', true) }}"
+      site: "{{ zbx_record.REPORT_SITE | default('N/A', true) }}"
+      tenant: "{{ zbx_record.REPORT_TENANT | default('N/A', true) }}"
+      ownership: "{{ zbx_record.REPORT_OWNERSHIP | default('N/A', true) }}"
+  when:
+    - dry_run | default(false) | bool
+    - zbx_scenario == 'create'
+    - _missing_params | default([]) | length == 0
 
 - name: Validate required parameters before update
   set_fact:
@@ -616,63 +718,235 @@
     - zbx_existing_host is defined
     - zbx_existing_host.hostid is defined
 
-- name: Get existing host macros for comparison
-  uri:
-    url: "{{ zabbix_url }}"
-    method: POST
-    body_format: json
-    validate_certs: "{{ zabbix_validate_certs | default(false) }}"
-    body:
-      jsonrpc: "2.0"
-      method: "host.get"
-      params:
-        output: ["hostid"]
-        hostids: "{{ zbx_existing_host.hostid }}"
-        selectMacros: "extend"
-      auth: "{{ zabbix_auth }}"
-      id: 1005
-  register: zbx_existing_macros_resp
-  when:
-    - zbx_scenario == 'update'
-    - zbx_existing_host is defined
-    - zbx_existing_host.hostid is defined
-
-- name: Build existing macros map
+- name: Build existing tags list and HMDL tag map from zbx_existing_host
   vars:
-    _existing_host_data: "{{ zbx_existing_macros_resp.json.result[0] | default({}) }}"
-    _existing_macros_list: "{{ _existing_host_data.macros | default([]) }}"
+    _raw_tags: "{{ zbx_existing_host.tags | default([]) }}"
   set_fact:
-    _existing_macros_map: >-
-      {%- set macros = {} -%}
-      {%- for macro in _existing_macros_list -%}
-        {%- set _ = macros.update({macro.macro: macro.value}) -%}
+    _existing_tags_list: "{{ _raw_tags }}"
+    _existing_hmdl_tags_map: >-
+      {%- set m = {} -%}
+      {%- for t in _raw_tags -%}
+        {%- if t.tag in _hmdl_managed_tag_keys or t.tag.startswith('Loki_Tag_') -%}
+          {%- set _ = m.update({t.tag: t.value}) -%}
+        {%- endif -%}
       {%- endfor -%}
-      {{ macros }}
+      {{ m }}
   when:
     - zbx_scenario == 'update'
     - zbx_existing_host is defined
     - zbx_existing_host.hostid is defined
-    - zbx_existing_macros_resp.json.result is defined
 
-- name: Merge new macros with existing ones (new macros take precedence)
+- name: Build merged tags for update (preserve user tags, replace HMDL tags)
+  set_fact:
+    _merged_tags_for_update: >-
+      {%- set result = [] -%}
+      {%- for t in (_existing_tags_list | default([])) -%}
+        {%- if t.tag not in (_hmdl_managed_tag_keys | default([])) and not t.tag.startswith('Loki_Tag_') -%}
+          {%- set _ = result.append({'tag': t.tag, 'value': t.value}) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {%- for t in (zbx_tags | default([])) -%}
+        {%- if t.value is defined and t.value | string | trim != '' -%}
+          {%- set _ = result.append({'tag': t.tag, 'value': t.value | string}) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ result }}
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host is defined
+    - zbx_existing_host.hostid is defined
+
+- name: Check if HMDL tags have changed
   vars:
-    _merged_macros: >-
-      {{ _existing_macros_map | default({}) | combine(zbx_host_macros | default({})) }}
+    _tags_changed: >-
+      {%- set ns = namespace(changed=false) -%}
+      {%- for t in (zbx_tags | default([])) -%}
+        {%- if (_existing_hmdl_tags_map | default({})).get(t.tag, '__NOT_FOUND__') != t.value | string -%}
+          {%- set ns.changed = true -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ ns.changed }}
   set_fact:
-    zbx_host_macros_merged: "{{ _merged_macros }}"
+    _tags_needs_update: "{{ _tags_changed | bool }}"
   when:
     - zbx_scenario == 'update'
     - zbx_existing_host is defined
     - zbx_existing_host.hostid is defined
+    - _missing_params | default([]) | length == 0
 
-- name: Format merged macros for Zabbix API (update scenario)
+- name: Compute merged host groups (preserve manual groups)
+  vars:
+    _current_group_names: "{{ zbx_existing_host.groups | default([]) | map(attribute='name') | list }}"
+    _required_group_names: "{{ zbx_required_groups_for_record | default([]) }}"
+    _required_set: "{{ zbx_required_groups_for_record | default([]) }}"
+    _manual_groups: "{{ _current_group_names | difference(_required_set) | list }}"
+    _merged_group_names: "{{ (_required_group_names + _manual_groups) | unique | list }}"
   set_fact:
-    zbx_host_macros_formatted_update: >-
-      {%- set formatted = [] -%}
-      {%- for macro_key, macro_value in (zbx_host_macros_merged | default({})).items() -%}
-        {%- set _ = formatted.append({'macro': macro_key, 'value': macro_value}) -%}
+    _merged_group_names: "{{ _merged_group_names }}"
+    _groups_needs_update: "{{ (_current_group_names | sort) != (_merged_group_names | sort) }}"
+    zbx_required_groups_for_record: "{{ _merged_group_names }}"
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host is defined
+    - zbx_existing_host.hostid is defined
+    - _missing_params | default([]) | length == 0
+
+- name: Rebuild group ID list after merged host groups
+  set_fact:
+    zbx_group_id_list: []
+    zbx_groups_formatted: []
+  when:
+    - zbx_scenario == 'update'
+    - _groups_needs_update | default(false) | bool
+
+- name: Resolve merged group IDs from map
+  set_fact:
+    zbx_group_id_list: "{{ zbx_group_id_list + [zbx_group_map[group_name]] }}"
+    zbx_groups_formatted: "{{ zbx_groups_formatted + [{'groupid': zbx_group_map[group_name]}] }}"
+  loop: "{{ zbx_required_groups_for_record | default([]) }}"
+  loop_control:
+    loop_var: group_name
+  when:
+    - zbx_scenario == 'update'
+    - group_name is defined
+    - group_name in zbx_group_map
+    - _groups_needs_update | default(false) | bool
+
+- name: Build managed macro keys from templates
+  set_fact:
+    _hmdl_managed_macro_keys: "{{ zbx_host_macros.keys() | list }}"
+  when:
+    - zbx_scenario == 'update'
+    - zbx_host_macros is defined
+
+- name: Merge macros for update (preserve manual macros)
+  vars:
+    _existing_macros: "{{ zbx_existing_host.macros | default([]) }}"
+    _manual_macros: >-
+      {%- set out = [] -%}
+      {%- for m in _existing_macros -%}
+        {%- if m.macro not in (_hmdl_managed_macro_keys | default([])) -%}
+          {%- set _ = out.append({'macro': m.macro, 'value': m.value}) -%}
+        {%- endif -%}
       {%- endfor -%}
-      {{ formatted }}
+      {{ out }}
+  set_fact:
+    zbx_host_macros_formatted_update: "{{ _manual_macros + zbx_host_macros_formatted }}"
+    _macros_needs_update: >-
+      {{ (_existing_macros | map(attribute='macro') | list | sort) !=
+         (zbx_host_macros_formatted_update | map(attribute='macro') | list | sort) }}
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host.hostid is defined
+    - _missing_params | default([]) | length == 0
+
+- name: Read last HMDL sync row for proxy/location baseline
+  include_tasks: hmdl_read_last_sync.yml
+  vars:
+    hmdl_read_device_id: "{{ zbx_record.LOKI_DEVICE_ID | default(zbx_tags | default([]) | selectattr('tag', 'equalto', 'Loki_ID') | map(attribute='value') | list | first | default('')) }}"
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host.hostid is defined
+    - hmdl_log_enabled | bool
+    - _missing_params | default([]) | length == 0
+
+- name: Resolve proxy group update policy (location change vs manual override)
+  vars:
+    _cur_loc: "{{ zbx_record.DC_ID | default('') }}"
+    _last_loc: "{{ hmdl_last_location | default('') }}"
+    _exp_pg: "{{ zbx_proxy_group_id | default('') | string }}"
+    _zbx_pg: "{{ zbx_existing_host.proxy_groupid | default('') | string }}"
+    _last_pg: "{{ hmdl_last_proxy_group_id | default(_exp_pg) | string }}"
+    _loc_changed: "{{ (_last_loc | string | trim != '') and (_cur_loc | string | trim != _last_loc | string | trim) }}"
+  set_fact:
+    _proxy_apply_update: >-
+      {{
+        _loc_changed | bool or
+        (
+          (_exp_pg != _zbx_pg) and
+          not (
+            (not (_loc_changed | bool)) and
+            (_last_pg | string != '') and
+            (_exp_pg == _last_pg) and
+            (_zbx_pg != _last_pg)
+          )
+        )
+      }}
+    _proxy_manual_change_detected: >-
+      {{
+        (not (_loc_changed | bool)) and
+        (_last_pg | string != '') and
+        (_exp_pg == _last_pg) and
+        (_zbx_pg != _last_pg)
+      }}
+    _effective_proxy_group_id: "{{ _zbx_pg if (_proxy_manual_change_detected | bool) else _exp_pg }}"
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host.hostid is defined
+    - _missing_params | default([]) | length == 0
+
+- name: Record proxy manual change in merge actions
+  set_fact:
+    _manual_change_notes: >-
+      {{ (_manual_change_notes | default([])) +
+         ['Proxy group manually changed in Zabbix (expected=' ~ (zbx_proxy_group_id | default('')) ~
+           ', actual=' ~ (zbx_existing_host.proxy_groupid | default('')) ~ ')'] }}
+    _field_merge_actions: >-
+      {{ (_field_merge_actions | default({})) | combine({
+        'proxy_group': 'preserved_manual',
+        'expected_proxy_group_id': zbx_proxy_group_id | default(''),
+        'actual_proxy_group_id': zbx_existing_host.proxy_groupid | default('')
+      }) }}
+  when:
+    - zbx_scenario == 'update'
+    - _proxy_manual_change_detected | default(false) | bool
+
+- name: Apply effective proxy group id for update payload
+  set_fact:
+    zbx_proxy_group_id: "{{ _effective_proxy_group_id }}"
+  when:
+    - zbx_scenario == 'update'
+    - _effective_proxy_group_id is defined
+
+- name: Preserve manually edited visible name
+  set_fact:
+    zbx_host_visible_name: "{{ zbx_existing_host.name | default(zbx_host_visible_name) }}"
+    _visible_name_preserved: true
+    _field_merge_actions: >-
+      {{ (_field_merge_actions | default({})) | combine({'visible_name': 'preserved_manual'}) }}
+    _manual_change_notes: >-
+      {{ (_manual_change_notes | default([])) +
+         ['Visible name manually changed in Zabbix (automation would set: ' ~
+           (zbx_record.HOST_VISIBLE_NAME | default(zbx_record.HOSTNAME)) ~ ')'] }}
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host.name is defined
+    - zbx_existing_host.name | string | trim != ''
+    - zbx_existing_host.name | string | trim != (zbx_record.HOST_VISIBLE_NAME | default(zbx_record.HOSTNAME) | string | trim)
+    - (hmdl_last_visible_name | default(zbx_record.HOST_VISIBLE_NAME | default(zbx_record.HOSTNAME)) | string | trim) != (zbx_existing_host.name | string | trim)
+
+- name: Build tag change log entries
+  set_fact:
+    _tag_change_log: >-
+      {%- set entries = [] -%}
+      {%- for t in (zbx_tags | default([])) -%}
+        {%- set old_val = (_existing_hmdl_tags_map | default({})).get(t.tag, None) -%}
+        {%- if old_val is none -%}
+          {%- set action = 'added' -%}
+        {%- elif old_val != t.value | string -%}
+          {%- set action = 'updated' -%}
+        {%- else -%}
+          {%- set action = 'unchanged' -%}
+        {%- endif -%}
+        {%- set _ = entries.append({
+          'key_name': t.tag,
+          'old_value': old_val,
+          'new_value': t.value | string,
+          'action': action,
+          'object_type': 'tag'
+        }) -%}
+      {%- endfor -%}
+      {{ entries }}
   when:
     - zbx_scenario == 'update'
     - zbx_existing_host is defined
@@ -689,25 +963,6 @@
     - _interface_id != ''
     - _missing_params | default([]) | length == 0
 
-- name: Check if macros have changed
-  vars:
-    _new_macros_dict: "{{ zbx_host_macros | default({}) }}"
-    _macros_changed: >-
-      {%- set changed = false -%}
-      {%- for macro_key, macro_value in _new_macros_dict.items() -%}
-        {%- if (_existing_macros_map | default({})).get(macro_key, '__NOT_FOUND__') != macro_value -%}
-          {%- set changed = true -%}
-        {%- endif -%}
-      {%- endfor -%}
-      {{ changed }}
-  set_fact:
-    _macros_needs_update: "{{ _macros_changed | bool }}"
-  when:
-    - zbx_scenario == 'update'
-    - zbx_existing_host is defined
-    - zbx_existing_host.hostid is defined
-    - _missing_params | default([]) | length == 0
-
 - name: Check if update is needed (compare with existing values)
   set_fact:
     _needs_update: >-
@@ -715,9 +970,11 @@
         (
           (_existing_interface.ip | default('') != zbx_record.HOST_IP) or
           (zbx_existing_host.host | default('') != zbx_record.HOSTNAME) or
-          (zbx_existing_host.name | default('') != zbx_record.HOSTNAME) or
+          ((zbx_existing_host.name | default('') != zbx_host_visible_name) and not (_visible_name_preserved | default(false) | bool)) or
           (zbx_existing_host.monitored_by | default('') | string != zbx_monitored_by | string) or
-          (zbx_existing_host.proxy_groupid | default('') | string != zbx_proxy_group_id | string) or
+          (_proxy_apply_update | default(false) | bool) or
+          (_tags_needs_update | default(false) | bool) or
+          (_groups_needs_update | default(false) | bool) or
           (_macros_needs_update | default(false) | bool)
         ) | bool
       }}
@@ -729,6 +986,38 @@
     - _interface_id != ''
     - _missing_params | default([]) | length == 0
 
+- name: Build host field change log entries
+  set_fact:
+    _host_field_changes: >-
+      {%- set entries = [] -%}
+      {%- if zbx_existing_host.host | default('') != zbx_record.HOSTNAME -%}
+        {%- set _ = entries.append({'field_name': 'hostname', 'old_value': zbx_existing_host.host | default(''), 'new_value': zbx_record.HOSTNAME, 'action': 'updated'}) -%}
+      {%- endif -%}
+      {%- if zbx_existing_host.name | default('') != zbx_record.HOSTNAME -%}
+        {%- set _ = entries.append({'field_name': 'visible_name', 'old_value': zbx_existing_host.name | default(''), 'new_value': zbx_record.HOSTNAME, 'action': 'updated'}) -%}
+      {%- endif -%}
+      {%- if _existing_interface.ip | default('') != zbx_record.HOST_IP -%}
+        {%- set _ = entries.append({'field_name': 'interface_ip', 'old_value': _existing_interface.ip | default(''), 'new_value': zbx_record.HOST_IP, 'action': 'updated'}) -%}
+      {%- endif -%}
+      {%- if zbx_existing_host.monitored_by | default('') | string != zbx_monitored_by | string -%}
+        {%- set _ = entries.append({'field_name': 'monitored_by', 'old_value': zbx_existing_host.monitored_by | default('') | string, 'new_value': zbx_monitored_by | string, 'action': 'updated'}) -%}
+      {%- endif -%}
+      {%- if zbx_existing_host.proxy_groupid | default('') | string != zbx_proxy_group_id | string -%}
+        {%- set _ = entries.append({'field_name': 'proxy_group', 'old_value': zbx_existing_host.proxy_groupid | default('') | string, 'new_value': zbx_proxy_group_id | string, 'action': 'updated'}) -%}
+      {%- endif -%}
+      {%- if _groups_needs_update | default(false) | bool -%}
+        {%- set old_names = (zbx_existing_host.groups | default([]) | map(attribute='name') | sort | join(',')) -%}
+        {%- set new_names = (zbx_required_groups_for_record | default([]) | sort | join(',')) -%}
+        {%- set _ = entries.append({'field_name': 'host_groups', 'old_value': old_names, 'new_value': new_names, 'action': 'updated'}) -%}
+      {%- endif -%}
+      {{ entries }}
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host.hostid is defined
+    - _needs_update is defined
+    - _needs_update | bool
+    - _missing_params | default([]) | length == 0
+
 - name: Debug update check
   debug:
     msg: |
@@ -737,6 +1026,8 @@
       Current IP: {{ _existing_interface.ip | default('N/A') }} -> New IP: {{ zbx_record.HOST_IP }}
       Current monitored_by: {{ zbx_existing_host.monitored_by | default('N/A') }} -> New: {{ zbx_monitored_by }}
       Current proxy_groupid: {{ zbx_existing_host.proxy_groupid | default('N/A') }} -> New: {{ zbx_proxy_group_id }}
+      Tags need update: {{ _tags_needs_update | default(false) }}
+      Groups need update: {{ _groups_needs_update | default(false) }}
   when:
     - zbx_scenario == 'update'
     - zbx_existing_host.hostid is defined
@@ -752,7 +1043,6 @@
       IP: {{ zbx_record.HOST_IP }}
       Device Type: {{ zbx_record.DEVICE_TYPE | default('N/A') }}
       Interface: {{ _zbx_interface_update | to_nice_json }}
-      Macros: {{ zbx_host_macros_formatted_update | to_nice_json }}
       Monitored By: {{ zbx_monitored_by }}
       Proxy Group ID: {{ zbx_proxy_group_id }}
       Needs Update: {{ _needs_update | default(true) | bool }}
@@ -767,7 +1057,7 @@
     - _missing_params | default([]) | length == 0
     - _needs_update | default(true) | bool
 
-- name: Update existing host (scenario update - only continuous fields, NO TAGS)
+- name: Update existing host (scenario update)
   uri:
     url: "{{ zabbix_url }}"
     method: POST
@@ -779,8 +1069,10 @@
       params:
         hostid: "{{ zbx_existing_host.hostid }}"
         host: "{{ zbx_record.HOSTNAME }}"
-        name: "{{ zbx_record.HOSTNAME }}"
+        name: "{{ zbx_host_visible_name }}"
         interfaces: "{{ _zbx_interface_update }}"
+        groups: "{{ zbx_groups_formatted | default([]) }}"
+        tags: "{{ _merged_tags_for_update | default([]) }}"
         macros: "{{ zbx_host_macros_formatted_update if (zbx_host_macros_formatted_update is defined and zbx_host_macros_formatted_update | length > 0) else omit }}"
         monitored_by: "{{ zbx_monitored_by | int }}"
         proxy_groupid: "{{ zbx_proxy_group_id | default('0') | int }}"
@@ -796,6 +1088,7 @@
     - _zbx_interface_update is defined
     - _missing_params | default([]) | length == 0
     - _needs_update | default(true) | bool
+    - not (dry_run | default(false) | bool)
 
 - name: Record no update needed (already up-to-date)
   set_fact:
@@ -831,17 +1124,22 @@
       {%- if zbx_existing_host.proxy_groupid | default('') | string != zbx_proxy_group_id | string -%}
         {%- set _ = fields.append('Proxy Group: ' ~ zbx_existing_host.proxy_groupid | default('N/A') ~ ' → ' ~ zbx_proxy_group_id) -%}
       {%- endif -%}
-      {%- if _macros_needs_update | default(false) | bool -%}
-        {%- set changed_macros = [] -%}
-        {%- for macro_key, macro_value in (zbx_host_macros | default({})).items() -%}
-          {%- if (_existing_macros_map | default({})).get(macro_key, '__NOT_FOUND__') != macro_value -%}
-            {%- set old_value = (_existing_macros_map | default({})).get(macro_key, 'yok') -%}
-            {%- set _ = changed_macros.append(macro_key ~ ': ' ~ old_value ~ ' → ' ~ macro_value) -%}
+      {%- if _tags_needs_update | default(false) | bool -%}
+        {%- set ns_t = namespace(changed_tags=[]) -%}
+        {%- for entry in (_tag_change_log | default([])) -%}
+          {%- if entry.action in ['added', 'updated'] -%}
+            {%- set old_str = entry.old_value | default('yok') | string -%}
+            {%- set ns_t.changed_tags = ns_t.changed_tags + [entry.key_name ~ ': ' ~ old_str ~ ' → ' ~ entry.new_value] -%}
           {%- endif -%}
         {%- endfor -%}
-        {%- if changed_macros | length > 0 -%}
-          {%- set _ = fields.append('Macros: ' ~ (changed_macros | join('; '))) -%}
+        {%- if ns_t.changed_tags | length > 0 -%}
+          {%- set _ = fields.append('Tags: ' ~ (ns_t.changed_tags | join('; '))) -%}
         {%- endif -%}
+      {%- endif -%}
+      {%- if _groups_needs_update | default(false) | bool -%}
+        {%- set old_grp = (zbx_existing_host.groups | default([]) | map(attribute='name') | sort | join(', ')) -%}
+        {%- set new_grp = (zbx_required_groups_for_record | default([]) | sort | join(', ')) -%}
+        {%- set _ = fields.append('Groups: ' ~ old_grp ~ ' → ' ~ new_grp) -%}
       {%- endif -%}
       {{ fields | join(', ') }}
   when:
@@ -919,3 +1217,57 @@
     - zbx_update_resp is defined
     - zbx_update_resp.json is defined
     - zbx_update_resp.json.error is defined
+
+- name: DRY-RUN - Update preview summary
+  debug:
+    msg: |
+      ========================================
+      DRY-RUN: ZABBIX HOST UPDATE PREVIEW
+      ========================================
+      Host            : {{ zbx_record.HOSTNAME }}
+      Host ID (mevcut): {{ zbx_existing_host.hostid }}
+      IP (mevcut→yeni): {{ _existing_interface.ip | default('N/A') }} → {{ zbx_record.HOST_IP }}
+      Device Type     : {{ zbx_record.DEVICE_TYPE | default('N/A') }}
+      Hostname değişti: {{ zbx_existing_host.host | default('') != zbx_record.HOSTNAME }}
+      IP değişti      : {{ _existing_interface.ip | default('') != zbx_record.HOST_IP }}
+      Monitored By    : {{ zbx_existing_host.monitored_by | default('N/A') }} → {{ zbx_monitored_by }}
+      Proxy Group     : {{ zbx_existing_host.proxy_groupid | default('N/A') }} → {{ zbx_proxy_group_id }}
+      Macro değişti   : {{ _macros_needs_update | default(false) }}
+      Tag değişti     : {{ _tags_needs_update | default(false) }}
+      Group değişti   : {{ _groups_needs_update | default(false) }}
+      DC_ID           : {{ zbx_location_name }} → {{ zbx_matched_proxy_group | default('eşleşme yok') }}
+      ----------------------------------------
+      Tag değişimleri :
+      {% for entry in (_tag_change_log | default([])) if entry.action in ['added', 'updated'] %}
+        {{ entry.action | upper }}: {{ entry.key_name }}: {{ entry.old_value | default('(yok)') }} → {{ entry.new_value }}
+      {% else %}
+        (tag değişikliği yok)
+      {% endfor %}
+      ----------------------------------------
+      DRY-RUN: host.update çağrısı YAPILMADI.
+      ========================================
+  when:
+    - dry_run | default(false) | bool
+    - zbx_scenario == 'update'
+    - zbx_existing_host.hostid is defined
+    - _needs_update | default(false) | bool
+    - _missing_params | default([]) | length == 0
+
+- name: DRY-RUN - Record update preview result
+  set_fact:
+    device_result:
+      hostname: "{{ zbx_record.HOSTNAME }}"
+      device_role: "{{ zbx_record.DEVICE_ROLE | default('N/A') }}"
+      status: "dry_run"
+      reason: "Dry-run: host.update çağrısı yapılmadı — güncellenecekti"
+      ip: "{{ zbx_record.HOST_IP }}"
+      location: "{{ zbx_record.REPORT_LOCATION | default('N/A', true) }}"
+      site: "{{ zbx_record.REPORT_SITE | default('N/A', true) }}"
+      tenant: "{{ zbx_record.REPORT_TENANT | default('N/A', true) }}"
+      ownership: "{{ zbx_record.REPORT_OWNERSHIP | default('N/A', true) }}"
+  when:
+    - dry_run | default(false) | bool
+    - zbx_scenario == 'update'
+    - zbx_existing_host.hostid is defined
+    - _needs_update | default(false) | bool
+    - _missing_params | default([]) | length == 0
