@@ -463,6 +463,7 @@ Zerto:
     type: API
     host_groups:
       - "Backup & Replication"
+      - "Sanallaştırma Team"
     macros:
       "{$ZERTO_IP}": "{HOST.IP}"
       "{$ZERTO_PASS}": "2u4Mzf7RJC"
@@ -473,6 +474,7 @@ NetBackup:
     type: API
     host_groups:
       - "Backup & Replication"
+      - "Backup Team"
     macros:
       "{$NB_URL}": "{HOST.IP}"
       "{$NBMASTER_TOKEN}": "A-EZXhAXHlSJtiMvubyWeum6pZ9-g_S8G8FA82l8wTqyD_ToOexe7aKK-q42UGEb"
