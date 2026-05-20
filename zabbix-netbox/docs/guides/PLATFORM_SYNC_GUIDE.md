@@ -334,6 +334,20 @@ When a platform is synced again after already existing in Zabbix:
 
 ---
 
+### "Host with the same name ... already exists" on virtual firewall `host.update` (stale Loki_ID host)
+
+**Symptom:** VFW rows `EKLENEMEDI`; CSV reason `Güncelleme hatası: Host with the same name "DIJITAL_KURYE_DC14_VFW_804" already exists.` (e.g. AWX job 109443). Same hostname may appear twice in the report if leftover `/tmp/zabbix_vfw_operation_result_*.json` files were not cleaned up before a previous interrupted run.
+
+**Cause (fixed in 2026-05):** Prefetch resolves the host by `Loki_ID=VFW_<id>` on a **legacy** Zabbix host (old technical `host` / visible name). A **newer** host already owns the canonical technical name (`<slug>_VFW_<id>`). The play attempted `host.update` on the stale host while renaming `host` to the canonical name, which collides with the existing host.
+
+**Fix (built-in):** In [`process_virtual_fw.yml`](../../playbooks/roles/netbox_zabbix_sync/tasks/process_virtual_fw.yml), after Loki_ID lookup, if the matched host’s technical name differs from the expected `HOSTNAME` **and** `zabbix_hosts_by_hostname` already has that canonical name, the playbook selects the canonical host for update instead of renaming the stale one. VFW processing also removes leftover `/tmp/zabbix_vfw_operation_result_*.json` before each run ([`main.yml`](../../playbooks/roles/netbox_zabbix_sync/tasks/main.yml)).
+
+**Stale hosts:** Orphan Zabbix hosts that still hold the wrong `Loki_ID` tag are not deleted automatically; disable or remove them manually after confirming the canonical host is correct.
+
+**Verify:** `pytest tests/test_zabbix_host_resolution.py::TestVfwHostResolution -v`
+
+---
+
 ### Platform host ends up in wrong groups (e.g. `Backup & Replication` + `Veeam` on Nutanix/VMware/NetBackup)
 
 **Symptom:** CSV or Zabbix shows a platform moved from the correct groups (e.g. `Virtual Infrastructure`, `Acropolis`) to unrelated backup groups after sync.
