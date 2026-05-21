@@ -475,9 +475,3 @@ mappings:
       device_role: "KVM OVER IP"
       manufacturer: "Avocent"
     priority: 1
-
-  - device_type: "PURESTORAGE"
-    conditions:
-      device_role: "Storage"
-      manufacturer: "PURESTORAGE"
-    priority: 1

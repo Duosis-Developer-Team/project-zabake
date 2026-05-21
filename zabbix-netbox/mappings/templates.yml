@@ -163,10 +163,13 @@ Oracle Storage:
     host_groups: 
       - "Storage Devices"
 Purestorage:
-  - name: BLT - Purestorage Template
-    type: snmpv2
+  - name: BLT - Pure Storage FlashArray v2 by HTTP
+    type: API
     host_groups: 
       - "Storage Devices"
+    macros:
+      "{$PURE.FLASHARRAY.API.URL}": "{HOST.IP}"
+      "{$PURE.FLASHARRAY.API.TOKEN}": ""
 QNAP Storage:
   - name: BLT - QNAP Storage Template
     type: snmpv2
@@ -541,12 +544,6 @@ Acropolis:
 KVM:
   - name: BLT - Template Module ICMP Ping
     type: agent
-
-PURESTORAGE:
-  - name: BLT - Pure Storage FlashArray v2 by HTTP
-    type: API
-    host_groups:
-    - "Storage Devices"
 
 # # Placeholder logical type for NetBox custom-objects virtual firewalls (virtual_fw_mapping.yml).
 # # Point new vendor rows to this key until a dedicated Zabbix template is confirmed.
