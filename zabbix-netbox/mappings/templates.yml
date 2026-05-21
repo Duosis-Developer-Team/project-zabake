@@ -542,6 +542,11 @@ KVM:
   - name: BLT - Template Module ICMP Ping
     type: agent
 
+PURESTORAGE:
+  - name: BLT - Pure Storage FlashArray v2 by HTTP
+    type: API
+    host_groups:
+    - "Storage Devices"
 
 # # Placeholder logical type for NetBox custom-objects virtual firewalls (virtual_fw_mapping.yml).
 # # Point new vendor rows to this key until a dedicated Zabbix template is confirmed.
