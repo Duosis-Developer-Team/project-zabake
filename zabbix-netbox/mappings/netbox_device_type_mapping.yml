@@ -35,6 +35,14 @@ mappings:
     hostname_suffix: " - BMC"
     priority: 1
 
+  # H3C devices
+  - device_type: "H3C IPMI"
+    conditions:
+      device_role: "HOST"
+      manufacturer: ["H3C"]
+    hostname_suffix: " - BMC"
+    priority: 1
+
   # Moneygram tenant: dedicated device_type for templates.yml (e.g. proxy_group_by_dc)
   - device_type: "HPE IPMI Moneygram"
     tenant: "Moneygram"
@@ -112,6 +120,15 @@ mappings:
     conditions:
       device_role: "Storage"
       manufacturer: ["HPE", "HP"]
+      model_contains: ["Primera"]
+    priority: 1
+  
+  # Alletra devices
+  - device_type: "HPE Alletra"
+    conditions:
+      device_role: "Storage"
+      manufacturer: ["HPE", "HP"]
+      model_contains: ["Alletra"]
     priority: 1
 
   # DELL Storage devices

@@ -31,6 +31,13 @@ HPE IPMI:
       "{$REDFISH.API.URL}": "https://{HOST.IP}/"
       "{$REDFISH.PASSWORD}": "S7G3y9TtmRSm"
       "{$REDFISH.USER}": "zabbix"
+      
+H3C IPMI:
+  - name: BLT - Template Module ICMP Ping
+    type: snmpv2
+    host_groups: 
+      - "Physical Hosts"
+
 HPE IPMI Moneygram:
   - name: BLT - HPE ProLiant DL380 by SNMP
     type: snmpv2
@@ -119,6 +126,13 @@ HPE Primera:
       "{$HPE.PRIMERA.API.HOST}": "{HOST.IP}"
       "{$HPE.PRIMERA.API.PASSWORD}": "gUkUmZ/fh4J$6$eg$DW+"
       "{$HPE.PRIMERA.API.USERNAME}": "monitor"
+
+HPE Alletra:
+  - name: BLT - Template Module ICMP Ping
+    type: snmpv2
+    host_groups: 
+      - "Storage Devices"
+
 Huawei Storage:
   - name: BLT - Huawei OceanStor 5300 V5 by SNMP Original
     type: snmpv2
