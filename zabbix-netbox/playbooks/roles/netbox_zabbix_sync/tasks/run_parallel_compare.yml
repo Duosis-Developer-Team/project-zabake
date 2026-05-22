@@ -188,21 +188,14 @@
   delegate_to: localhost
   run_once: true
 
-- name: Parse compare engine summary
+- name: Load compare engine summary from file
   set_fact:
-    pce_summary: >-
-      {%- set lines = pce_result.stdout_lines | default([]) -%}
-      {%- set found = {} -%}
-      {%- for line in lines -%}
-        {%- set parsed = line | from_json -%}
-        {%- if parsed.type is defined and parsed.type == 'summary' -%}
-          {%- set found = parsed -%}
-        {%- endif -%}
-      {%- endfor -%}
-      {{ found }}
+    pce_summary: "{{ lookup('file', '/tmp/compare_summary.json') | from_json }}"
   delegate_to: localhost
   run_once: true
-  when: pce_result.stdout_lines is defined
+  when:
+    - pce_result.rc is defined
+    - pce_result.rc == 0
 
 - name: Load missing host groups aggregate from compare engine
   set_fact:
@@ -229,4 +222,6 @@
       ============================================
   delegate_to: localhost
   run_once: true
-  when: pce_summary is defined
+  when:
+    - pce_summary is defined
+    - pce_summary.devices is defined

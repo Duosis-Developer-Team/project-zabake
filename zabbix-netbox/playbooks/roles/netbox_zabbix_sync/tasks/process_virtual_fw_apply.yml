@@ -1,11 +1,55 @@
 ---
 # Phase B: POST pre-built Zabbix payloads from virtual firewall compare plans.
 
+- name: Resolve VFW sync plan file path
+  set_fact:
+    _vfw_plan_path: "/tmp/vfw_plan_{{ netbox_virtual_fw.id | string }}.json"
+  when: netbox_virtual_fw.id is defined
+
+- name: Check VFW sync plan file exists
+  stat:
+    path: "{{ _vfw_plan_path }}"
+  register: _vfw_plan_stat
+  delegate_to: localhost
+  when: netbox_virtual_fw.id is defined
+
 - name: Load VFW sync plan from compare phase
   set_fact:
-    _vfw_sync_plan_loaded: >-
-      {{ lookup('file', '/tmp/vfw_plan_' ~ (netbox_virtual_fw.id | string) ~ '.json') | from_json }}
-  when: netbox_virtual_fw.id is defined
+    _vfw_sync_plan_loaded: "{{ lookup('file', _vfw_plan_path) | from_json }}"
+  when:
+    - netbox_virtual_fw.id is defined
+    - _vfw_plan_stat.stat.exists | default(false) | bool
+
+- name: Record missing VFW plan (Phase A file not found, non-fatal)
+  set_fact:
+    _vfw_sync_plan_loaded:
+      action: skip
+      zbx_record: {}
+      current_vfw_result:
+        hostname: "{{ netbox_virtual_fw.hostname | default(netbox_virtual_fw.name | default('Unknown')) }}"
+        device_role: VIRTUAL_FW
+        status: eklenemedi
+        reason: >-
+          Phase A plan missing at {{ _vfw_plan_path }}.
+          Ensure VFW fetch runs before Phase A (main.yml task order).
+        ip: N/A
+        location: N/A
+        site: N/A
+        tenant: N/A
+        ownership: N/A
+  when:
+    - netbox_virtual_fw.id is defined
+    - not (_vfw_plan_stat.stat.exists | default(false) | bool)
+
+- name: Save missing-plan VFW result to temporary file
+  copy:
+    content: "{{ _vfw_sync_plan_loaded.current_vfw_result | to_json }}"
+    dest: "/tmp/zabbix_vfw_operation_result_{{ netbox_virtual_fw.id | default('unknown') }}.json"
+  when:
+    - _vfw_sync_plan_loaded is defined
+    - _vfw_sync_plan_loaded.current_vfw_result is defined
+    - not (_vfw_plan_stat.stat.exists | default(false) | bool)
+  delegate_to: localhost
 
 - name: Use precomputed result for skip action (no Zabbix API call)
   set_fact:

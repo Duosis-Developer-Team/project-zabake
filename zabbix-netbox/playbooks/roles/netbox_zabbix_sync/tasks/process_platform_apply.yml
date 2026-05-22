@@ -1,11 +1,55 @@
 ---
 # Phase B: POST pre-built Zabbix payloads from platform compare plans.
 
+- name: Resolve platform sync plan file path
+  set_fact:
+    _platform_plan_path: "/tmp/platform_plan_{{ netbox_platform.id | string }}.json"
+  when: netbox_platform.id is defined
+
+- name: Check platform sync plan file exists
+  stat:
+    path: "{{ _platform_plan_path }}"
+  register: _platform_plan_stat
+  delegate_to: localhost
+  when: netbox_platform.id is defined
+
 - name: Load platform sync plan from compare phase
   set_fact:
-    _platform_sync_plan_loaded: >-
-      {{ lookup('file', '/tmp/platform_plan_' ~ (netbox_platform.id | string) ~ '.json') | from_json }}
-  when: netbox_platform.id is defined
+    _platform_sync_plan_loaded: "{{ lookup('file', _platform_plan_path) | from_json }}"
+  when:
+    - netbox_platform.id is defined
+    - _platform_plan_stat.stat.exists | default(false) | bool
+
+- name: Record missing platform plan (Phase A file not found, non-fatal)
+  set_fact:
+    _platform_sync_plan_loaded:
+      action: skip
+      zbx_record: {}
+      current_platform_result:
+        hostname: "{{ netbox_platform.name | default(netbox_platform.display | default('Unknown Platform')) }}"
+        device_role: PLATFORM
+        status: eklenemedi
+        reason: >-
+          Phase A plan missing at {{ _platform_plan_path }}.
+          Ensure platform fetch runs before Phase A (main.yml task order).
+        ip: "{{ netbox_platform.custom_fields.ip_addresses | default('N/A') if (netbox_platform.custom_fields is defined) else 'N/A' }}"
+        location: N/A
+        site: N/A
+        tenant: N/A
+        ownership: N/A
+  when:
+    - netbox_platform.id is defined
+    - not (_platform_plan_stat.stat.exists | default(false) | bool)
+
+- name: Save missing-plan platform result to temporary file
+  copy:
+    content: "{{ _platform_sync_plan_loaded.current_platform_result | to_json }}"
+    dest: "/tmp/zabbix_platform_operation_result_{{ netbox_platform.id | default('unknown') }}.json"
+  when:
+    - _platform_sync_plan_loaded is defined
+    - _platform_sync_plan_loaded.current_platform_result is defined
+    - not (_platform_plan_stat.stat.exists | default(false) | bool)
+  delegate_to: localhost
 
 - name: Use precomputed result for skip action (no Zabbix API call)
   set_fact:
