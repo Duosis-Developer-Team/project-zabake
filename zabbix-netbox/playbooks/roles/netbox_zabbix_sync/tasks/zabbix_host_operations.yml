@@ -1057,7 +1057,7 @@
 - name: Record INTERFACE_TYPE_LOCKED when interface type change is blocked
   set_fact:
     _interface_type_locked: true
-    _zbx_interface_update: "{{ omit }}"
+    _zbx_interface_update: []
     _host_field_changes: >-
       {%- set entries = _host_field_changes | default([]) -%}
       {%- set _ = entries.append({
@@ -1222,7 +1222,7 @@
     - _host_update_params is defined
     - _host_update_params | length > 0
     - _zbx_interface_update is defined
-    - _zbx_interface_update is not omit
+    - _zbx_interface_update | length > 0
     - not (_interface_type_locked | default(false) | bool)
     - not (dry_run | default(false) | bool)
 
