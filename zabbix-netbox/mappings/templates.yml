@@ -289,6 +289,12 @@ Fortinet Virtual Firewall VM:
     host_groups:
       - "Network Devices"
       - "Virtual Firewall"
+Fortigate Virtual Firewall VM:
+  - name: BLT - Template Net Fortinet FortiGate SNMP
+    type: snmpv2
+    host_groups:
+      - "Network Devices"
+      - "Virtual Firewall"
 Fortinet Firewall:
   - name: BLT - FortiGate by HTTP
     type: API
