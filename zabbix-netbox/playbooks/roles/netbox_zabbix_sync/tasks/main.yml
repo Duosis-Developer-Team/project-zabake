@@ -157,33 +157,10 @@
   vars:
     netbox_device: "{{ outer_device_item }}"
     device_sync_phase: compare
-  async: 120
-  poll: 0
   throttle: "{{ sync_throttle | default(10) }}"
-  register: device_compare_async
   when:
     - sync_devices | bool
     - use_two_phase_device_sync | default(true) | bool
-
-- name: Wait for all device compare jobs to finish
-  async_status:
-    jid: "{{ item.ansible_job_id }}"
-  loop: "{{ device_compare_async.results | default([]) }}"
-  register: device_compare_poll
-  until: device_compare_poll.finished
-  retries: 120
-  delay: 5
-  when:
-    - sync_devices | bool
-    - use_two_phase_device_sync | default(true) | bool
-    - device_compare_async is defined
-
-- name: Fail when any compare-phase job failed
-  fail:
-    msg: "Device compare phase failed for one or more hosts. Check AWX logs."
-  when:
-    - device_compare_async is defined
-    - device_compare_async.results | default([]) | selectattr('failed', 'defined') | selectattr('failed') | list | length > 0
 
 - name: Phase B — sequential Zabbix apply from device plans
   include_tasks: process_device_apply.yml
