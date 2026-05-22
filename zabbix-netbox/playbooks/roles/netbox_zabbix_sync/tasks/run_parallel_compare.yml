@@ -1,13 +1,37 @@
 ---
-# Phase A: parallel compare for devices, platforms, and virtual firewalls.
+# Phase A: parallel compare + payload build for devices, platforms, and virtual firewalls.
 # Runs parallel_compare_engine.py once (run_once: true); writes plan files to /tmp.
-# Ansible apply loops (Phase B) consume these plan files sequentially.
+# Ansible apply loops (Phase B) POST ready payloads sequentially.
 
 - name: Copy parallel compare engine to runner
   copy:
     src: parallel_compare_engine.py
     dest: /tmp/parallel_compare_engine.py
     mode: '0755'
+  delegate_to: localhost
+  run_once: true
+
+- name: Copy Zabbix payload builder to runner
+  copy:
+    src: zabbix_payload_builder.py
+    dest: /tmp/zabbix_payload_builder.py
+    mode: '0755'
+  delegate_to: localhost
+  run_once: true
+
+- name: Ensure module_utils directory on runner for payload builder
+  file:
+    path: /tmp/module_utils
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+  run_once: true
+
+- name: Copy zabbix merge helpers for payload builder runtime
+  copy:
+    src: "{{ role_path }}/module_utils/zabbix_merge_helpers.py"
+    dest: /tmp/module_utils/zabbix_merge_helpers.py
+    mode: '0644'
   delegate_to: localhost
   run_once: true
 
@@ -80,6 +104,43 @@
   delegate_to: localhost
   run_once: true
 
+- name: Write Zabbix template ID cache for payload builder
+  copy:
+    content: "{{ zbx_template_id_cache | default({}) | to_json }}"
+    dest: /tmp/pce_template_id_cache.json
+  delegate_to: localhost
+  run_once: true
+
+- name: Write Zabbix host group ID cache for payload builder
+  copy:
+    content: "{{ zbx_group_map_global | default({}) | to_json }}"
+    dest: /tmp/pce_group_id_cache.json
+  delegate_to: localhost
+  run_once: true
+
+- name: Write Zabbix proxy group map for payload builder
+  copy:
+    content: "{{ zbx_proxy_group_map_global | default({}) | to_json }}"
+    dest: /tmp/pce_proxy_group_cache.json
+  delegate_to: localhost
+  run_once: true
+
+- name: Write HMDL baseline map for payload builder
+  copy:
+    content: "{{ hmdl_baseline_by_device_id | default({}) | to_json }}"
+    dest: /tmp/pce_hmdl_baseline.json
+  delegate_to: localhost
+  run_once: true
+  when: hmdl_log_enabled | bool
+
+- name: Write empty HMDL baseline map when logging disabled
+  copy:
+    content: "{}"
+    dest: /tmp/pce_hmdl_baseline.json
+  delegate_to: localhost
+  run_once: true
+  when: not (hmdl_log_enabled | bool)
+
 - name: Run parallel compare engine (Phase A)
   command: >
     python3 /tmp/parallel_compare_engine.py
@@ -90,6 +151,10 @@
     --zbx-hosts-loki-map /tmp/pce_zbx_by_loki.json
     --zbx-hosts-hostname-map /tmp/pce_zbx_by_hostname.json
     --zbx-hosts-visible-map /tmp/pce_zbx_by_visible.json
+    --zbx-templates-cache /tmp/pce_template_id_cache.json
+    --zbx-groups-cache /tmp/pce_group_id_cache.json
+    --zbx-proxy-groups-cache /tmp/pce_proxy_group_cache.json
+    --hmdl-baseline-map /tmp/pce_hmdl_baseline.json
     --output-dir /tmp
     --workers {{ parallel_compare_workers | default(20) | int }}
     {{ '--create-devices-disabled' if (create_devices_disabled | default(false) | bool) else '' }}
@@ -139,15 +204,28 @@
   run_once: true
   when: pce_result.stdout_lines is defined
 
+- name: Load missing host groups aggregate from compare engine
+  set_fact:
+    pce_missing_groups: "{{ lookup('file', '/tmp/missing_groups_aggregate.json') | from_json }}"
+  delegate_to: localhost
+  run_once: true
+
+- name: Set all missing host groups list for pre-Phase-B creation
+  set_fact:
+    all_missing_groups_to_create: "{{ pce_missing_groups.groups | default([]) }}"
+  delegate_to: localhost
+  run_once: true
+
 - name: Display compare engine summary
   debug:
     msg: |
       ============================================
-      PHASE A COMPARE ENGINE SUMMARY
+      PHASE A COMPARE + PAYLOAD BUILD SUMMARY
       ============================================
       Devices:   total={{ pce_summary.devices.total | default(0) }}  create={{ pce_summary.devices.create | default(0) }}  update={{ pce_summary.devices.update | default(0) }}  skip={{ pce_summary.devices.skip | default(0) }}  error={{ pce_summary.devices.error | default(0) }}
       Platforms: total={{ pce_summary.platforms.total | default(0) }}  create={{ pce_summary.platforms.create | default(0) }}  update={{ pce_summary.platforms.update | default(0) }}  skip={{ pce_summary.platforms.skip | default(0) }}  error={{ pce_summary.platforms.error | default(0) }}
       VFWs:      total={{ pce_summary.vfws.total | default(0) }}  create={{ pce_summary.vfws.create | default(0) }}  update={{ pce_summary.vfws.update | default(0) }}  skip={{ pce_summary.vfws.skip | default(0) }}  error={{ pce_summary.vfws.error | default(0) }}
+      Missing host groups to create: {{ all_missing_groups_to_create | default([]) | length }}
       ============================================
   delegate_to: localhost
   run_once: true

@@ -1,0 +1,38 @@
+---
+# Bulk-fetch all Zabbix proxy groups once for Phase A payload builder.
+
+- name: Fetch all proxy groups from Zabbix (bulk, run once)
+  uri:
+    url: "{{ zabbix_url }}"
+    method: POST
+    body_format: json
+    validate_certs: "{{ zabbix_validate_certs | default(false) }}"
+    body:
+      jsonrpc: "2.0"
+      method: "proxygroup.get"
+      params:
+        output: ["proxy_groupid", "name"]
+      auth: "{{ zabbix_auth }}"
+      id: 105
+  register: _zbx_all_proxy_groups_resp
+  run_once: true
+  delegate_to: localhost
+  when:
+    - zabbix_auth is defined
+    - not only_fetch | bool
+
+- name: Build proxy group name to ID map
+  set_fact:
+    zbx_proxy_group_map_global: "{{ _zbx_all_proxy_groups_resp.json.result | items2dict(key_name='name', value_name='proxy_groupid') }}"
+  run_once: true
+  delegate_to: localhost
+  when:
+    - _zbx_all_proxy_groups_resp is defined
+    - _zbx_all_proxy_groups_resp.json.result is defined
+
+- name: Initialize empty proxy group map when fetch skipped
+  set_fact:
+    zbx_proxy_group_map_global: {}
+  run_once: true
+  delegate_to: localhost
+  when: zbx_proxy_group_map_global is not defined

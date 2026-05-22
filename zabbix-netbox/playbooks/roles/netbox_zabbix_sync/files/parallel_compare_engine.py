@@ -2,8 +2,8 @@
 """
 Parallel Compare Engine for Zabbix-NetBox sync.
 
-Performs Phase A (compare, no Zabbix writes) in parallel for devices,
-platforms, and virtual firewalls using ThreadPoolExecutor.
+Performs Phase A (compare + payload build, no Zabbix writes) in parallel for
+devices, platforms, and virtual firewalls using ThreadPoolExecutor.
 
 Outputs one JSON-line per item to stdout (AWX-visible stream) and writes
 plan files to --output-dir:
@@ -11,7 +11,9 @@ plan files to --output-dir:
   platform_plan_<id>.json     — consumed by process_platform_apply.yml
   vfw_plan_<id>.json          — consumed by process_virtual_fw_apply.yml
 
-A final aggregate compare_summary.json is written on completion.
+Each plan includes ready host.create / host.update params for Phase B.
+
+A final compare_summary.json and missing_groups_aggregate.json are written.
 
 Exit codes:
   0 — all items compared successfully (some may have action=skip)
@@ -27,7 +29,9 @@ import sys
 import traceback
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
+
+from zabbix_payload_builder import ZabbixPayloadBuilder, build_proxy_group_config
 
 # ---------------------------------------------------------------------------
 # Hostname / filter helpers (from filter_plugins/zabbix_hostname.py)
@@ -1119,7 +1123,11 @@ def run_parallel_compare(
         "platforms": {"total": len(platforms), "create": 0, "update": 0, "skip": 0, "error": 0},
         "vfws": {"total": len(vfws), "create": 0, "update": 0, "skip": 0, "error": 0},
         "errors": [],
+        "missing_groups": [],
     }
+
+    payload_builder = ZabbixPayloadBuilder(ctx) if ctx.get("payload_build_enabled", True) else None
+    all_missing_groups: Set[str] = set()
 
     futures = {}
     with ThreadPoolExecutor(max_workers=workers) as executor:
@@ -1139,6 +1147,11 @@ def run_parallel_compare(
             entity_type, item_id, item_name = futures[future]
             try:
                 plan = future.result()
+                if payload_builder is not None:
+                    plan = payload_builder.enrich_plan(plan)
+                for grp in plan.get("missing_groups") or []:
+                    if grp:
+                        all_missing_groups.add(str(grp))
                 action = plan.get("action", "skip")
                 _progress(entity_type, item_id, item_name, action)
                 summary[f"{entity_type}s"][action if action in ("create", "update", "skip") else "skip"] += 1
@@ -1196,9 +1209,14 @@ def run_parallel_compare(
                 except Exception:
                     pass
 
+    summary["missing_groups"] = sorted(all_missing_groups)
     summary_path = os.path.join(output_dir, "compare_summary.json")
     with open(summary_path, "w", encoding="utf-8") as f_sum:
         json.dump(summary, f_sum, ensure_ascii=False, indent=2)
+
+    missing_path = os.path.join(output_dir, "missing_groups_aggregate.json")
+    with open(missing_path, "w", encoding="utf-8") as f_miss:
+        json.dump({"groups": summary["missing_groups"]}, f_miss, ensure_ascii=False, indent=2)
 
     return summary
 
@@ -1240,6 +1258,10 @@ def main():
     parser.add_argument("--mappings-dir", required=True, help="Path to mappings/ directory")
     parser.add_argument("--zbx-templates-cache", help="Path to Zabbix templates cache JSON {name: id}")
     parser.add_argument("--zbx-groups-cache", help="Path to Zabbix host groups cache JSON {name: id}")
+    parser.add_argument(
+        "--zbx-proxy-groups-cache",
+        help="Path to Zabbix proxy groups cache JSON {name: id} or pre-built config list",
+    )
     parser.add_argument("--zbx-hosts-loki-map", help="Path to Zabbix hosts by Loki_ID JSON")
     parser.add_argument("--zbx-hosts-hostname-map", help="Path to Zabbix hosts by hostname JSON")
     parser.add_argument("--zbx-hosts-visible-map", help="Path to Zabbix hosts by visible_name JSON")
@@ -1266,6 +1288,24 @@ def main():
     vfw_mapping = _load_yaml_file(
         os.path.join(mappings_dir, "virtual_fw_mapping.yml"), {}
     )
+    template_type_map = _load_yaml_file(
+        os.path.join(mappings_dir, "template_types.yml"), {}
+    )
+    platform_tags_config = _load_yaml_file(
+        os.path.join(mappings_dir, "platform_tags_config.yml"), {}
+    )
+    vfw_tags_config = _load_yaml_file(
+        os.path.join(mappings_dir, "virtual_fw_tags_config.yml"), {}
+    )
+
+    template_id_cache = _load_json_file(args.zbx_templates_cache, {}) or {}
+    group_id_cache = _load_json_file(args.zbx_groups_cache, {}) or {}
+    proxy_group_raw = _load_json_file(args.zbx_proxy_groups_cache, {}) or {}
+    if isinstance(proxy_group_raw, list):
+        proxy_group_config = proxy_group_raw
+    else:
+        proxy_group_config = build_proxy_group_config(proxy_group_raw)
+    hmdl_baseline_map = _load_json_file(args.hmdl_baseline_map, {}) or {}
 
     # Load Zabbix host maps
     by_loki = _load_json_file(args.zbx_hosts_loki_map, {})
@@ -1285,6 +1325,22 @@ def main():
         "create_devices_disabled": args.create_devices_disabled,
         "create_platforms_disabled": args.create_platforms_disabled,
         "create_virtual_fws_disabled": args.create_vfws_disabled,
+        "template_type_map": template_type_map,
+        "template_id_cache": template_id_cache,
+        "group_id_cache": group_id_cache,
+        "proxy_group_config": proxy_group_config,
+        "hmdl_baseline_map": hmdl_baseline_map,
+        "platform_managed_tag_keys": (
+            platform_tags_config.get("platform_tags", {}).get("managed_keys", [])
+            if isinstance(platform_tags_config, dict)
+            else []
+        ),
+        "vfw_managed_tag_keys": (
+            vfw_tags_config.get("virtual_fw_tags", {}).get("managed_keys", [])
+            if isinstance(vfw_tags_config, dict)
+            else []
+        ),
+        "payload_build_enabled": True,
     }
 
     devices = _load_json_file(args.devices_json, []) or []

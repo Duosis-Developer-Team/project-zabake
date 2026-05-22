@@ -1,25 +1,10 @@
 ---
-# Phase B: sequential Zabbix writes from compare-phase plan files (no parallel host.create/update).
+# Phase B: POST pre-built Zabbix payloads from compare-phase plan files (no per-host Ansible mapping).
 
 - name: Load device sync plan from compare phase
   set_fact:
     _device_sync_plan_loaded: "{{ lookup('file', '/tmp/device_plan_' ~ (netbox_device.id | string) ~ '.json') | from_json }}"
   when: netbox_device.id is defined
-
-- name: Restore facts from device sync plan
-  set_fact:
-    zbx_record: "{{ _device_sync_plan_loaded.zbx_record | default({}) }}"
-    zbx_existing_host: "{{ _device_sync_plan_loaded.zbx_existing_host | default({}) }}"
-    zbx_scenario: "{{ _device_sync_plan_loaded.zbx_scenario | default('create') }}"
-    device_info: "{{ _device_sync_plan_loaded.device_info | default({}) }}"
-    current_device_result: "{{ _device_sync_plan_loaded.current_device_result | default({}) }}"
-    _zbx_record_for_role: "{{ _device_sync_plan_loaded.zbx_record | default({}) }}"
-    _zbx_existing_host_for_role: "{{ _device_sync_plan_loaded.zbx_existing_host | default({}) }}"
-    _zbx_scenario_for_role: "{{ _device_sync_plan_loaded.zbx_scenario | default('create') }}"
-    _zabbix_auth_for_role: "{{ zabbix_auth }}"
-  when:
-    - _device_sync_plan_loaded is defined
-    - _device_sync_plan_loaded.action | default('skip') in ['create', 'update']
 
 - name: Use precomputed result for skip action (no Zabbix API call)
   set_fact:
@@ -28,40 +13,169 @@
     - _device_sync_plan_loaded is defined
     - _device_sync_plan_loaded.action | default('skip') == 'skip'
 
-- name: Read HMDL baseline before Zabbix host operations (update path)
-  include_tasks: hmdl_read_last_sync.yml
-  vars:
-    hmdl_read_device_id: "{{ netbox_device.id | default('') }}"
-  when:
-    - hmdl_log_enabled | bool
-    - _device_sync_plan_loaded.action | default('skip') == 'update'
-    - netbox_device.id is defined
-
-- name: Apply Zabbix host operations from device plan (sequential write phase)
-  include_tasks: zabbix_host_operations.yml
-  vars:
-    zbx_record: "{{ _zbx_record_for_role }}"
-    zabbix_url: "{{ zabbix_url }}"
-    zabbix_user: "{{ zabbix_user }}"
-    zabbix_password: "{{ zabbix_password }}"
-    zabbix_validate_certs: "{{ zabbix_validate_certs }}"
-    zabbix_auth: "{{ _zabbix_auth_for_role }}"
-    zbx_existing_host: "{{ _zbx_existing_host_for_role }}"
-    zbx_scenario: "{{ _zbx_scenario_for_role }}"
-    dry_run: "{{ dry_run | default(false) | bool }}"
+- name: POST host.create from plan payload (Phase B)
+  uri:
+    url: "{{ zabbix_url }}"
+    method: POST
+    body_format: json
+    validate_certs: "{{ zabbix_validate_certs | default(false) }}"
+    body:
+      jsonrpc: "2.0"
+      method: "host.create"
+      params: "{{ _device_sync_plan_loaded.create_payload }}"
+      auth: "{{ zabbix_auth }}"
+      id: 1
+  register: zbx_create_resp
+  failed_when: false
   when:
     - _device_sync_plan_loaded is defined
-    - _device_sync_plan_loaded.action | default('skip') in ['create', 'update']
-    - _zbx_record_for_role is defined
-    - _zabbix_auth_for_role is defined
+    - _device_sync_plan_loaded.action | default('skip') == 'create'
+    - _device_sync_plan_loaded.create_payload is defined
+    - _device_sync_plan_loaded.create_payload | length > 0
+    - not (dry_run | default(false) | bool)
+    - zabbix_auth is defined
 
-- name: Collect device result from zabbix host operations (apply phase)
+- name: Record create success from plan apply
   set_fact:
-    current_device_result: "{{ device_result }}"
+    current_device_result:
+      hostname: "{{ _device_sync_plan_loaded.zbx_record.HOSTNAME | default(netbox_device.name | default('')) }}"
+      device_role: "{{ _device_sync_plan_loaded.zbx_record.DEVICE_ROLE | default('N/A') }}"
+      status: "eklendi"
+      reason: ""
+      ip: "{{ _device_sync_plan_loaded.zbx_record.HOST_IP | default('N/A') }}"
+      location: "{{ _device_sync_plan_loaded.zbx_record.REPORT_LOCATION | default('N/A', true) }}"
+      site: "{{ _device_sync_plan_loaded.zbx_record.REPORT_SITE | default('N/A', true) }}"
+      tenant: "{{ _device_sync_plan_loaded.zbx_record.REPORT_TENANT | default('N/A', true) }}"
+      ownership: "{{ _device_sync_plan_loaded.zbx_record.REPORT_OWNERSHIP | default('N/A', true) }}"
+      planned_operation: "create"
   when:
-    - device_result is defined
-    - device_result | length > 0
-    - device_result.hostname is defined
+    - _device_sync_plan_loaded.action | default('skip') == 'create'
+    - zbx_create_resp is defined
+    - zbx_create_resp.json.result is defined
+    - zbx_create_resp.json.result.hostids is defined
+
+- name: Record create failure from plan apply
+  set_fact:
+    current_device_result:
+      hostname: "{{ _device_sync_plan_loaded.zbx_record.HOSTNAME | default(netbox_device.name | default('')) }}"
+      device_role: "{{ _device_sync_plan_loaded.zbx_record.DEVICE_ROLE | default('N/A') }}"
+      status: "eklenemedi"
+      reason: "{{ zbx_create_resp.json.error.message | default('host.create failed') }}"
+      ip: "{{ _device_sync_plan_loaded.zbx_record.HOST_IP | default('N/A') }}"
+      location: "{{ _device_sync_plan_loaded.zbx_record.REPORT_LOCATION | default('N/A', true) }}"
+      site: "{{ _device_sync_plan_loaded.zbx_record.REPORT_SITE | default('N/A', true) }}"
+      tenant: "{{ _device_sync_plan_loaded.zbx_record.REPORT_TENANT | default('N/A', true) }}"
+      ownership: "{{ _device_sync_plan_loaded.zbx_record.REPORT_OWNERSHIP | default('N/A', true) }}"
+      planned_operation: "create"
+  when:
+    - _device_sync_plan_loaded.action | default('skip') == 'create'
+    - zbx_create_resp is defined
+    - zbx_create_resp.json.error is defined
+
+- name: DRY-RUN — Record planned create from plan
+  set_fact:
+    current_device_result:
+      hostname: "{{ _device_sync_plan_loaded.zbx_record.HOSTNAME | default(netbox_device.name | default('')) }}"
+      device_role: "{{ _device_sync_plan_loaded.zbx_record.DEVICE_ROLE | default('N/A') }}"
+      status: "dry_run"
+      reason: "Dry-run: host.create çağrısı yapılmadı — eklenecekti"
+      ip: "{{ _device_sync_plan_loaded.zbx_record.HOST_IP | default('N/A') }}"
+      location: "{{ _device_sync_plan_loaded.zbx_record.REPORT_LOCATION | default('N/A', true) }}"
+      site: "{{ _device_sync_plan_loaded.zbx_record.REPORT_SITE | default('N/A', true) }}"
+      tenant: "{{ _device_sync_plan_loaded.zbx_record.REPORT_TENANT | default('N/A', true) }}"
+      ownership: "{{ _device_sync_plan_loaded.zbx_record.REPORT_OWNERSHIP | default('N/A', true) }}"
+      planned_operation: "create"
+  when:
+    - _device_sync_plan_loaded.action | default('skip') == 'create'
+    - _device_sync_plan_loaded.create_payload is defined
+    - dry_run | default(false) | bool
+
+- name: Use precomputed up-to-date result for update with no delta
+  set_fact:
+    current_device_result: "{{ _device_sync_plan_loaded.current_device_result | default({}) }}"
+  when:
+    - _device_sync_plan_loaded is defined
+    - _device_sync_plan_loaded.action | default('skip') == 'update'
+    - not (_device_sync_plan_loaded.needs_update | default(false) | bool)
+
+- name: POST host.update from plan payload (Phase B)
+  uri:
+    url: "{{ zabbix_url }}"
+    method: POST
+    body_format: json
+    validate_certs: "{{ zabbix_validate_certs | default(false) }}"
+    body:
+      jsonrpc: "2.0"
+      method: "host.update"
+      params: "{{ _device_sync_plan_loaded.update_payload }}"
+      auth: "{{ zabbix_auth }}"
+      id: 2
+  register: zbx_update_resp
+  failed_when: false
+  when:
+    - _device_sync_plan_loaded is defined
+    - _device_sync_plan_loaded.action | default('skip') == 'update'
+    - _device_sync_plan_loaded.needs_update | default(false) | bool
+    - _device_sync_plan_loaded.update_payload is defined
+    - _device_sync_plan_loaded.update_payload | length > 0
+    - not (dry_run | default(false) | bool)
+    - zabbix_auth is defined
+
+- name: Record update success from plan apply
+  set_fact:
+    current_device_result:
+      hostname: "{{ _device_sync_plan_loaded.zbx_record.HOSTNAME | default(netbox_device.name | default('')) }}"
+      device_role: "{{ _device_sync_plan_loaded.zbx_record.DEVICE_ROLE | default('N/A') }}"
+      status: "güncellendi"
+      reason: ""
+      ip: "{{ _device_sync_plan_loaded.zbx_record.HOST_IP | default('N/A') }}"
+      location: "{{ _device_sync_plan_loaded.zbx_record.REPORT_LOCATION | default('N/A', true) }}"
+      site: "{{ _device_sync_plan_loaded.zbx_record.REPORT_SITE | default('N/A', true) }}"
+      tenant: "{{ _device_sync_plan_loaded.zbx_record.REPORT_TENANT | default('N/A', true) }}"
+      ownership: "{{ _device_sync_plan_loaded.zbx_record.REPORT_OWNERSHIP | default('N/A', true) }}"
+      planned_operation: "update"
+  when:
+    - _device_sync_plan_loaded.action | default('skip') == 'update'
+    - zbx_update_resp is defined
+    - zbx_update_resp.json.result is defined
+    - zbx_update_resp.json.result.hostids is defined
+
+- name: Record update failure from plan apply
+  set_fact:
+    current_device_result:
+      hostname: "{{ _device_sync_plan_loaded.zbx_record.HOSTNAME | default(netbox_device.name | default('')) }}"
+      device_role: "{{ _device_sync_plan_loaded.zbx_record.DEVICE_ROLE | default('N/A') }}"
+      status: "eklenemedi"
+      reason: "{{ zbx_update_resp.json.error.message | default('host.update failed') }}"
+      ip: "{{ _device_sync_plan_loaded.zbx_record.HOST_IP | default('N/A') }}"
+      location: "{{ _device_sync_plan_loaded.zbx_record.REPORT_LOCATION | default('N/A', true) }}"
+      site: "{{ _device_sync_plan_loaded.zbx_record.REPORT_SITE | default('N/A', true) }}"
+      tenant: "{{ _device_sync_plan_loaded.zbx_record.REPORT_TENANT | default('N/A', true) }}"
+      ownership: "{{ _device_sync_plan_loaded.zbx_record.REPORT_OWNERSHIP | default('N/A', true) }}"
+      planned_operation: "update"
+  when:
+    - _device_sync_plan_loaded.action | default('skip') == 'update'
+    - zbx_update_resp is defined
+    - zbx_update_resp.json.error is defined
+
+- name: DRY-RUN — Record planned update from plan
+  set_fact:
+    current_device_result:
+      hostname: "{{ _device_sync_plan_loaded.zbx_record.HOSTNAME | default(netbox_device.name | default('')) }}"
+      device_role: "{{ _device_sync_plan_loaded.zbx_record.DEVICE_ROLE | default('N/A') }}"
+      status: "dry_run"
+      reason: "Dry-run: host.update çağrısı yapılmadı — güncellenecekti"
+      ip: "{{ _device_sync_plan_loaded.zbx_record.HOST_IP | default('N/A') }}"
+      location: "{{ _device_sync_plan_loaded.zbx_record.REPORT_LOCATION | default('N/A', true) }}"
+      site: "{{ _device_sync_plan_loaded.zbx_record.REPORT_SITE | default('N/A', true) }}"
+      tenant: "{{ _device_sync_plan_loaded.zbx_record.REPORT_TENANT | default('N/A', true) }}"
+      ownership: "{{ _device_sync_plan_loaded.zbx_record.REPORT_OWNERSHIP | default('N/A', true) }}"
+      planned_operation: "update"
+  when:
+    - _device_sync_plan_loaded.action | default('skip') == 'update'
+    - _device_sync_plan_loaded.needs_update | default(false) | bool
+    - _device_sync_plan_loaded.update_payload is defined
+    - dry_run | default(false) | bool
 
 - name: Save device result to temporary file (apply phase)
   copy:
@@ -70,6 +184,7 @@
   when:
     - current_device_result is defined
     - current_device_result | length > 0
+    - current_device_result.hostname is defined
   delegate_to: localhost
 
 - name: Build HMDL log entry base for device (apply phase)
@@ -85,10 +200,10 @@
            else 'netbox_api_dcim_device' }}
       host_entity_type: device
       inventory_source: "{{ device_source | default('datalake') }}"
-      zabbix_hostid: "{{ zbx_existing_host.hostid | default('') }}"
+      zabbix_hostid: "{{ _device_sync_plan_loaded.zbx_existing_host.hostid | default('') }}"
       zabbix_hostname: "{{ current_device_result.hostname | default(netbox_device.name | default('')) }}"
       zabbix_host_ip: "{{ current_device_result.ip | default('') }}"
-      device_type: "{{ device_info.device_type | default('') }}"
+      device_type: "{{ _device_sync_plan_loaded.zbx_record.DEVICE_TYPE | default('') }}"
       device_role: "{{ current_device_result.device_role | default('') }}"
       manufacturer_name: "{{ netbox_device.manufacturer_name | default('') }}"
       site_name: "{{ current_device_result.site | default(netbox_device.site_name | default('')) }}"
@@ -97,28 +212,29 @@
       root_location_name: "{{ netbox_device.root_location_name | default('') }}"
       tenant_name: "{{ current_device_result.tenant | default(netbox_device.tenant_name | default('')) }}"
       cluster_name: "{{ netbox_device.cluster_name | default('') }}"
-      operation: "{{ zbx_scenario | default('none') }}"
+      operation: "{{ _device_sync_plan_loaded.zbx_scenario | default('none') }}"
       status: "{{ current_device_result.status | default('eklenemedi') }}"
       reason: "{{ current_device_result.reason | default('') }}"
-      last_visible_name: "{{ zbx_host_visible_name | default(zbx_record.HOSTNAME | default('')) }}"
-      last_location: "{{ netbox_device.root_location_name | default(device_info.location | default('')) }}"
-      expected_proxy_group_id: "{{ _expected_proxy_group_id | default(zbx_proxy_group_id | default('')) }}"
-      last_proxy_group_id: "{{ zbx_proxy_group_id | default('') }}"
-      zabbix_proxy_group_id: "{{ zbx_existing_host.proxy_groupid | default('') }}"
-      proxy_location_change: "{{ _proxy_location_change | default(false) | bool }}"
-      proxy_manual_change_detected: "{{ _proxy_manual_change_detected | default(false) | bool }}"
-      field_merge_actions: "{{ _field_merge_actions | default({}) }}"
+      last_visible_name: "{{ _device_sync_plan_loaded.zbx_record.HOST_VISIBLE_NAME | default(_device_sync_plan_loaded.zbx_record.HOSTNAME | default('')) }}"
+      last_location: "{{ netbox_device.root_location_name | default('') }}"
+      expected_proxy_group_id: "{{ _device_sync_plan_loaded.update_payload.proxy_groupid | default(_device_sync_plan_loaded.create_payload.proxy_groupid | default('')) }}"
+      last_proxy_group_id: "{{ _device_sync_plan_loaded.update_payload.proxy_groupid | default(_device_sync_plan_loaded.create_payload.proxy_groupid | default('')) }}"
+      zabbix_proxy_group_id: "{{ _device_sync_plan_loaded.zbx_existing_host.proxy_groupid | default('') }}"
+      proxy_location_change: false
+      proxy_manual_change_detected: "{{ _device_sync_plan_loaded.proxy_manual_change_detected | default(false) | bool }}"
+      field_merge_actions: {}
       last_managed_groups: >-
-        {{ device_info.host_groups | default('') | split(',') | map('trim') | reject('equalto', '') | list }}
+        {{ (_device_sync_plan_loaded.zbx_record.HOST_GROUPS | default('')).split(',') | map('trim') | reject('equalto', '') | list }}
       dry_run: "{{ dry_run | default(false) | bool }}"
       extra_data: {}
-      request_payload: "{{ zbx_record | default({}) }}"
-      response_payload: {}
-      error_payload: {}
+      request_payload: "{{ _device_sync_plan_loaded.create_payload | default(_device_sync_plan_loaded.update_payload | default({})) }}"
+      response_payload: "{{ zbx_create_resp.json | default(zbx_update_resp.json | default({})) }}"
+      error_payload: "{{ zbx_create_resp.json.error | default(zbx_update_resp.json.error | default({})) }}"
   when:
     - hmdl_log_enabled | bool
     - current_device_result is defined
     - current_device_result | length > 0
+    - _device_sync_plan_loaded is defined
 
 - name: Write HMDL log for device (apply phase)
   include_tasks: hmdl_sync_log.yml

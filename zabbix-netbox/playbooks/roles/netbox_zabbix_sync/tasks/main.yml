@@ -67,6 +67,12 @@
     - not only_fetch | bool
     - (sync_devices | bool) or (sync_platforms | bool) or (sync_virtual_fws | bool)
 
+- name: Prefetch all Zabbix proxy groups (bulk, run once)
+  include_tasks: fetch_all_zabbix_proxy_groups.yml
+  when:
+    - not only_fetch | bool
+    - (sync_devices | bool) or (sync_platforms | bool) or (sync_virtual_fws | bool)
+
 - name: Prefetch HMDL baseline for all devices (bulk SQL, run once)
   include_tasks: fetch_hmdl_baseline_bulk.yml
   when:
@@ -167,6 +173,76 @@
     - use_python_parallel_compare | default(true) | bool
     - not only_fetch | bool
     - (sync_devices | bool) or (sync_platforms | bool) or (sync_virtual_fws | bool)
+
+- name: Initialize empty missing host groups list when compare phase skipped
+  set_fact:
+    all_missing_groups_to_create: []
+  run_once: true
+  when: not (use_python_parallel_compare | default(true) | bool)
+
+- name: Create missing host groups in Zabbix before Phase B (sequential, once)
+  uri:
+    url: "{{ zabbix_url }}"
+    method: POST
+    body_format: json
+    validate_certs: "{{ zabbix_validate_certs | default(false) }}"
+    body:
+      jsonrpc: "2.0"
+      method: "hostgroup.create"
+      params:
+        name: "{{ missing_group_name_item }}"
+      auth: "{{ zabbix_auth }}"
+      id: 120
+  loop: "{{ all_missing_groups_to_create | default([]) }}"
+  loop_control:
+    loop_var: missing_group_name_item
+    label: "{{ missing_group_name_item }}"
+  register: zbx_prestep_created_groups
+  delegate_to: localhost
+  run_once: true
+  failed_when: false
+  when:
+    - use_python_parallel_compare | default(true) | bool
+    - all_missing_groups_to_create | default([]) | length > 0
+    - not (dry_run | default(false) | bool)
+    - zabbix_auth is defined
+
+- name: Refresh host group cache after pre-Phase-B group creation
+  uri:
+    url: "{{ zabbix_url }}"
+    method: POST
+    body_format: json
+    validate_certs: "{{ zabbix_validate_certs | default(false) }}"
+    body:
+      jsonrpc: "2.0"
+      method: "hostgroup.get"
+      params:
+        output: ["groupid", "name"]
+        filter:
+          name: "{{ all_missing_groups_to_create | default([]) }}"
+      auth: "{{ zabbix_auth }}"
+      id: 121
+  register: zbx_prestep_groups_get
+  delegate_to: localhost
+  run_once: true
+  when:
+    - use_python_parallel_compare | default(true) | bool
+    - all_missing_groups_to_create | default([]) | length > 0
+    - not (dry_run | default(false) | bool)
+    - zabbix_auth is defined
+
+- name: Merge newly created groups into global group map
+  set_fact:
+    zbx_group_map_global: >-
+      {{
+        (zbx_group_map_global | default({}))
+        | combine(zbx_prestep_groups_get.json.result | default([]) | items2dict(key_name='name', value_name='groupid'))
+      }}
+  delegate_to: localhost
+  run_once: true
+  when:
+    - zbx_prestep_groups_get is defined
+    - zbx_prestep_groups_get.json.result is defined
 
 - name: Phase B — sequential Zabbix apply from device plans
   include_tasks: process_device_apply.yml

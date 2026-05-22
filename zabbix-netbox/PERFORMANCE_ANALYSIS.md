@@ -13,6 +13,8 @@ Measured from AWX job `109471` (764 monitor devices, sync_devices only):
 | hostgroup.get/create per host | ~1562 API calls |
 | Debug tasks (default on) | ~7,029 |
 
+**Phase A payload builder** (2026): `parallel_compare_engine.py` + `zabbix_payload_builder.py` build ready `host.create` / `host.update` params in parallel. Phase B (`process_*_apply.yml`) only POSTs plan payloads and records results — no per-host Ansible mapping.
+
 **Implemented mitigations** (see role `netbox_zabbix_sync`):
 
 - `load_role_configuration.yml` — YAML mappings loaded once

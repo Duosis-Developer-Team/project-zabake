@@ -28,13 +28,12 @@ LEGACY_FILES = (
 )
 
 
-def test_apply_paths_pass_dry_run_into_zabbix_host_operations():
+def test_apply_paths_use_plan_payloads_not_zabbix_host_operations():
     for rel in APPLY_FILES:
-        block = _zabbix_include_block(
-            read_text(rel),
-            "include_tasks: zabbix_host_operations.yml",
-        )
-        assert 'dry_run: "{{ dry_run | default(false) | bool }}"' in block, rel
+        text = read_text(rel)
+        assert "include_tasks: zabbix_host_operations.yml" not in text, rel
+        assert "host.create" in text or "host.create from plan" in text.lower() or 'method: "host.create"' in text or "method: host.create" in text
+        assert "dry_run | default(false) | bool" in text, rel
 
 
 def test_legacy_paths_pass_dry_run_into_zabbix_host_operations():
