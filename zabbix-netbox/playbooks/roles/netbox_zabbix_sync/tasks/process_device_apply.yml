@@ -1,0 +1,129 @@
+---
+# Phase B: sequential Zabbix writes from compare-phase plan files (no parallel host.create/update).
+
+- name: Load device sync plan from compare phase
+  set_fact:
+    _device_sync_plan_loaded: "{{ lookup('file', '/tmp/device_plan_' ~ (netbox_device.id | string) ~ '.json') | from_json }}"
+  when: netbox_device.id is defined
+
+- name: Restore facts from device sync plan
+  set_fact:
+    zbx_record: "{{ _device_sync_plan_loaded.zbx_record | default({}) }}"
+    zbx_existing_host: "{{ _device_sync_plan_loaded.zbx_existing_host | default({}) }}"
+    zbx_scenario: "{{ _device_sync_plan_loaded.zbx_scenario | default('create') }}"
+    device_info: "{{ _device_sync_plan_loaded.device_info | default({}) }}"
+    current_device_result: "{{ _device_sync_plan_loaded.current_device_result | default({}) }}"
+    _zbx_record_for_role: "{{ _device_sync_plan_loaded.zbx_record | default({}) }}"
+    _zbx_existing_host_for_role: "{{ _device_sync_plan_loaded.zbx_existing_host | default({}) }}"
+    _zbx_scenario_for_role: "{{ _device_sync_plan_loaded.zbx_scenario | default('create') }}"
+    _zabbix_auth_for_role: "{{ zabbix_auth }}"
+  when:
+    - _device_sync_plan_loaded is defined
+    - _device_sync_plan_loaded.action | default('skip') in ['create', 'update']
+
+- name: Use precomputed result for skip action (no Zabbix API call)
+  set_fact:
+    current_device_result: "{{ _device_sync_plan_loaded.current_device_result | default({}) }}"
+  when:
+    - _device_sync_plan_loaded is defined
+    - _device_sync_plan_loaded.action | default('skip') == 'skip'
+
+- name: Read HMDL baseline before Zabbix host operations (update path)
+  include_tasks: hmdl_read_last_sync.yml
+  vars:
+    hmdl_read_device_id: "{{ netbox_device.id | default('') }}"
+  when:
+    - hmdl_log_enabled | bool
+    - _device_sync_plan_loaded.action | default('skip') == 'update'
+    - netbox_device.id is defined
+
+- name: Apply Zabbix host operations from device plan (sequential write phase)
+  include_tasks: zabbix_host_operations.yml
+  vars:
+    zbx_record: "{{ _zbx_record_for_role }}"
+    zabbix_url: "{{ zabbix_url }}"
+    zabbix_user: "{{ zabbix_user }}"
+    zabbix_password: "{{ zabbix_password }}"
+    zabbix_validate_certs: "{{ zabbix_validate_certs }}"
+    zabbix_auth: "{{ _zabbix_auth_for_role }}"
+    zbx_existing_host: "{{ _zbx_existing_host_for_role }}"
+    zbx_scenario: "{{ _zbx_scenario_for_role }}"
+  when:
+    - _device_sync_plan_loaded is defined
+    - _device_sync_plan_loaded.action | default('skip') in ['create', 'update']
+    - _zbx_record_for_role is defined
+    - _zabbix_auth_for_role is defined
+
+- name: Collect device result from zabbix host operations (apply phase)
+  set_fact:
+    current_device_result: "{{ device_result }}"
+  when:
+    - device_result is defined
+    - device_result | length > 0
+    - device_result.hostname is defined
+
+- name: Save device result to temporary file (apply phase)
+  copy:
+    content: "{{ current_device_result | to_json }}"
+    dest: "/tmp/zabbix_host_operation_result_{{ netbox_device.id | default('unknown') }}.json"
+  when:
+    - current_device_result is defined
+    - current_device_result | length > 0
+  delegate_to: localhost
+
+- name: Build HMDL log entry base for device (apply phase)
+  set_fact:
+    _hmdl_log_entry:
+      run_id: "{{ hmdl_run_id | default('') }}"
+      awx_job_id: "{{ lookup('env', 'AWX_JOB_ID') | default('', true) }}"
+      playbook_name: "{{ hmdl_playbook_name | default('db_to_zabbix_sync') }}"
+      source_device_id: "{{ netbox_device.id | default(None) }}"
+      source_device_name: "{{ netbox_device.name | default('') }}"
+      source_table: >-
+        {{ 'discovery_netbox_inventory_device' if (device_source | default('datalake') | lower == 'datalake')
+           else 'netbox_api_dcim_device' }}
+      host_entity_type: device
+      inventory_source: "{{ device_source | default('datalake') }}"
+      zabbix_hostid: "{{ zbx_existing_host.hostid | default('') }}"
+      zabbix_hostname: "{{ current_device_result.hostname | default(netbox_device.name | default('')) }}"
+      zabbix_host_ip: "{{ current_device_result.ip | default('') }}"
+      device_type: "{{ device_info.device_type | default('') }}"
+      device_role: "{{ current_device_result.device_role | default('') }}"
+      manufacturer_name: "{{ netbox_device.manufacturer_name | default('') }}"
+      site_name: "{{ current_device_result.site | default(netbox_device.site_name | default('')) }}"
+      location_name: "{{ netbox_device.location_name | default('') }}"
+      location_parent_name: "{{ netbox_device.location_parent_name | default('') }}"
+      root_location_name: "{{ netbox_device.root_location_name | default('') }}"
+      tenant_name: "{{ current_device_result.tenant | default(netbox_device.tenant_name | default('')) }}"
+      cluster_name: "{{ netbox_device.cluster_name | default('') }}"
+      operation: "{{ zbx_scenario | default('none') }}"
+      status: "{{ current_device_result.status | default('eklenemedi') }}"
+      reason: "{{ current_device_result.reason | default('') }}"
+      last_visible_name: "{{ zbx_host_visible_name | default(zbx_record.HOSTNAME | default('')) }}"
+      last_location: "{{ netbox_device.root_location_name | default(device_info.location | default('')) }}"
+      expected_proxy_group_id: "{{ _expected_proxy_group_id | default(zbx_proxy_group_id | default('')) }}"
+      last_proxy_group_id: "{{ zbx_proxy_group_id | default('') }}"
+      zabbix_proxy_group_id: "{{ zbx_existing_host.proxy_groupid | default('') }}"
+      proxy_location_change: "{{ _proxy_location_change | default(false) | bool }}"
+      proxy_manual_change_detected: "{{ _proxy_manual_change_detected | default(false) | bool }}"
+      field_merge_actions: "{{ _field_merge_actions | default({}) }}"
+      last_managed_groups: >-
+        {{ device_info.host_groups | default('') | split(',') | map('trim') | reject('equalto', '') | list }}
+      dry_run: "{{ dry_run | default(false) | bool }}"
+      extra_data: {}
+      request_payload: "{{ zbx_record | default({}) }}"
+      response_payload: {}
+      error_payload: {}
+  when:
+    - hmdl_log_enabled | bool
+    - current_device_result is defined
+    - current_device_result | length > 0
+
+- name: Write HMDL log for device (apply phase)
+  include_tasks: hmdl_sync_log.yml
+  vars:
+    hmdl_log_device_id: "{{ netbox_device.id | default('unknown') }}"
+    hmdl_log_entry: "{{ _hmdl_log_entry }}"
+  when:
+    - hmdl_log_enabled | bool
+    - _hmdl_log_entry is defined

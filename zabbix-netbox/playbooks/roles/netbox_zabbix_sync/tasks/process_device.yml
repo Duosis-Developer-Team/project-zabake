@@ -28,7 +28,9 @@
     msg: >
       Device {{ netbox_device.name }} - izlenmeli_raw={{ device_izlenmeli_raw | default('UNSET') }},
       device_izlenmeyecek={{ device_izlenmeyecek | default(false) }}
-  when: report_izlenmeyecek | default(true) | bool
+  when:
+    - debug_mode | default(false) | bool
+    - report_izlenmeyecek | default(true) | bool
 
 - name: Record device marked as not to be monitored
   set_fact:
@@ -833,7 +835,7 @@
     - device_info.primary_ip is not none
     - device_info.primary_ip != ""
 
-- name: Zabbix login to obtain auth token
+- name: Zabbix login to obtain auth token (only when global auth missing)
   uri:
     url: "{{ zabbix_url }}"
     method: POST
@@ -848,6 +850,7 @@
       id: 0
   register: zbx_login_resp
   when:
+    - zabbix_auth is not defined
     - device_info.device_type is not none
     - device_info.device_type != ""
     - device_info.primary_ip is not none
@@ -859,6 +862,7 @@
   set_fact:
     zabbix_auth: "{{ zbx_login_resp.json.result }}"
   when:
+    - zabbix_auth is not defined
     - device_info.device_type is not none
     - device_info.device_type != ""
     - device_info.primary_ip is not none
@@ -890,6 +894,54 @@
     - zbx_scenario | default('create') == 'update'
     - netbox_device.id is defined
 
+- name: Determine device sync plan action (compare phase)
+  set_fact:
+    _device_plan_action: >-
+      {%- if current_device_result is defined and current_device_result.status is defined and current_device_result.status in ['eklenemedi', 'atlandı'] -%}
+      skip
+      {%- elif device_info.device_type is none or device_info.device_type == '' or device_info.primary_ip is none or device_info.primary_ip == '' -%}
+      skip
+      {%- elif zbx_scenario | default('create') == 'create' -%}
+      create
+      {%- elif zbx_scenario | default('create') == 'update' -%}
+      update
+      {%- else -%}
+      skip
+      {%- endif -%}
+  when:
+    - device_sync_phase | default('full') == 'compare'
+    - device_info is defined
+
+- name: Write device sync plan JSON (compare phase — no Zabbix writes)
+  copy:
+    content: "{{ _device_sync_plan | to_json }}"
+    dest: "/tmp/device_plan_{{ netbox_device.id | default('unknown') }}.json"
+  vars:
+    _device_sync_plan:
+      action: "{{ _device_plan_action | default('skip') }}"
+      device_id: "{{ netbox_device.id | default('') }}"
+      zbx_record: "{{ _zbx_record_for_role | default({}) }}"
+      zbx_existing_host: "{{ _zbx_existing_host_for_role | default({}) }}"
+      zbx_scenario: "{{ _zbx_scenario_for_role | default('create') }}"
+      device_info: "{{ device_info | default({}) }}"
+      current_device_result: "{{ current_device_result | default({}) }}"
+      netbox_device_name: "{{ netbox_device.name | default('') }}"
+  delegate_to: localhost
+  when:
+    - device_sync_phase | default('full') == 'compare'
+    - netbox_device.id is defined
+
+- name: Save compare-phase result when plan action is skip
+  copy:
+    content: "{{ current_device_result | to_json }}"
+    dest: "/tmp/zabbix_host_operation_result_{{ netbox_device.id | default('unknown') }}.json"
+  when:
+    - device_sync_phase | default('full') == 'compare'
+    - _device_plan_action | default('skip') == 'skip'
+    - current_device_result is defined
+    - current_device_result | length > 0
+  delegate_to: localhost
+
 - name: Process device with Zabbix host operations
   include_tasks: zabbix_host_operations.yml
   vars:
@@ -902,6 +954,7 @@
     zbx_existing_host: "{{ _zbx_existing_host_for_role }}"
     zbx_scenario: "{{ _zbx_scenario_for_role }}"
   when:
+    - device_sync_phase | default('full') in ['full', 'apply']
     - device_info.device_type is not none
     - device_info.device_type != ""
     - device_info.primary_ip is not none
@@ -923,13 +976,14 @@
       Device: {{ netbox_device.name | default('Unknown') }}
       Result defined: {{ current_device_result is defined }}
       Result content: {{ current_device_result | default('NOT DEFINED') }}
-  when: true
+  when: debug_mode | default(false) | bool
 
 - name: Save device result to temporary file
   copy:
     content: "{{ current_device_result | to_json }}"
     dest: "/tmp/zabbix_host_operation_result_{{ netbox_device.id | default('unknown') }}.json"
   when:
+    - device_sync_phase | default('full') in ['full', 'apply']
     - current_device_result is defined
     - current_device_result | length > 0
   delegate_to: localhost
@@ -1048,3 +1102,4 @@
   when:
     - hmdl_log_enabled | bool
     - _hmdl_log_entry is defined
+    - device_sync_phase | default('full') in ['full', 'apply']

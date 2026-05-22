@@ -5,7 +5,20 @@ Normalize NetBox API device dicts to datalake-flat field names used by process_d
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Optional, Set
+
+_INVALID_HOSTNAME_CHARS = re.compile(r"[\t\r\n]+")
+_MULTI_WHITESPACE = re.compile(r"\s{2,}")
+
+
+def sanitize_hostname(name: str) -> str:
+    """Normalize hostnames for Zabbix API (tab/CR/LF and repeated spaces)."""
+    if not name:
+        return name
+    cleaned = _INVALID_HOSTNAME_CHARS.sub(" ", str(name))
+    cleaned = _MULTI_WHITESPACE.sub(" ", cleaned).strip()
+    return cleaned
 
 
 def _nested_name(obj: Any) -> str:
@@ -147,6 +160,8 @@ def normalize_device_record(
 ) -> Dict[str, Any]:
     """Return shallow copy with flat fields for datalake-compatible processing."""
     record = dict(device)
+    if record.get("name"):
+        record["name"] = sanitize_hostname(str(record["name"]))
     loc_filter = (location_filter or "").strip()
     root_map = location_root_map or {}
 

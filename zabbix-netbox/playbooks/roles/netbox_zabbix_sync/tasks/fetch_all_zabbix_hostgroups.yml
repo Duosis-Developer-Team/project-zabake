@@ -1,0 +1,40 @@
+---
+# Bulk-fetch all Zabbix host groups once; per-host hostgroup.get/create is replaced by global map.
+
+- name: Fetch all host groups from Zabbix (bulk, run once)
+  uri:
+    url: "{{ zabbix_url }}"
+    method: POST
+    body_format: json
+    validate_certs: "{{ zabbix_validate_certs | default(false) }}"
+    body:
+      jsonrpc: "2.0"
+      method: "hostgroup.get"
+      params:
+        output: ["groupid", "name"]
+      auth: "{{ zabbix_auth }}"
+      id: 301
+  register: _zbx_all_groups_resp
+  run_once: true
+  delegate_to: localhost
+  when:
+    - zabbix_auth is defined
+    - not only_fetch | bool
+
+- name: Build host group name to ID cache map
+  set_fact:
+    zbx_group_map_global: "{{ _zbx_all_groups_resp.json.result | items2dict(key_name='name', value_name='groupid') }}"
+    zbx_group_map: "{{ _zbx_all_groups_resp.json.result | items2dict(key_name='name', value_name='groupid') }}"
+  run_once: true
+  delegate_to: localhost
+  when:
+    - _zbx_all_groups_resp is defined
+    - _zbx_all_groups_resp.json.result is defined
+
+- name: Initialize empty host group cache when fetch skipped
+  set_fact:
+    zbx_group_map_global: {}
+    zbx_group_map: {}
+  run_once: true
+  delegate_to: localhost
+  when: zbx_group_map_global is not defined

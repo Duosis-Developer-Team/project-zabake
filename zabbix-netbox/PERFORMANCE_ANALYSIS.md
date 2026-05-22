@@ -1,5 +1,35 @@
 # Performance Analysis - Device Processing Loop
 
+## Optimization baseline (2026-05-22)
+
+Measured from AWX job `109471` (764 monitor devices, sync_devices only):
+
+| Metric | Before optimization |
+|--------|---------------------|
+| Total Ansible tasks | ~146,020 |
+| Per-host task estimate | ~191 |
+| HMDL bootstrap per device | 9 tasks x 1077 |
+| template.get per host | 781 API calls |
+| hostgroup.get/create per host | ~1562 API calls |
+| Debug tasks (default on) | ~7,029 |
+
+**Implemented mitigations** (see role `netbox_zabbix_sync`):
+
+- `load_role_configuration.yml` — YAML mappings loaded once
+- `bootstrap_hmdl_log.yml` — HMDL DDL once per run
+- `fetch_all_zabbix_templates.yml` — single `template.get`
+- `fetch_all_zabbix_hostgroups.yml` — single `hostgroup.get` + shared `zbx_group_map_global`
+- `fetch_hmdl_baseline_bulk.yml` — one SQL for all device baselines
+- `debug_mode: false` — suppress per-host debug tasks
+- Two-phase sync: parallel compare (`async` + `throttle`) + sequential apply (Zabbix writes)
+- `ansible.cfg`: `profile_tasks` for post-run timing
+
+**Target** (1000+ monitor devices, all sync flags): 30–90 minutes vs ~12 hours.
+
+Re-run AWX with `callback_whitelist=profile_tasks` after deploy to capture after metrics.
+
+---
+
 ## 📊 Current Performance Issue
 
 ### Observed Metrics (job_597.txt)

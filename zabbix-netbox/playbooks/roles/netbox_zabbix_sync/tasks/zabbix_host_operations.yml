@@ -24,42 +24,7 @@
     _merged_groups_not_in_map: []
   run_once: false
 
-- name: Load tags config for managed tag keys
-  set_fact:
-    _tags_config_loaded: "{{ lookup('file', tags_config_path) | from_yaml }}"
-  run_once: false
-
-- name: Set HMDL managed tag keys from tags_config.yml
-  set_fact:
-    _hmdl_managed_tag_keys: >-
-      {%- set keys = [] -%}
-      {%- for defn in (_tags_config_loaded.tags.definitions | default([])) -%}
-        {%- if defn.enabled | default(true) | bool -%}
-          {%- set _ = keys.append(defn.tag_name) -%}
-        {%- endif -%}
-      {%- endfor -%}
-      {{ keys }}
-  run_once: false
-
-- name: Load platform tags config for managed tag keys
-  set_fact:
-    _platform_tags_config_loaded: "{{ lookup('file', platform_tags_config_path) | from_yaml }}"
-  run_once: false
-
-- name: Set platform managed tag keys from platform_tags_config.yml
-  set_fact:
-    _platform_managed_tag_keys: "{{ _platform_tags_config_loaded.platform_tags.managed_keys | default([]) }}"
-  run_once: false
-
-- name: Load virtual firewall tags config for managed tag keys
-  set_fact:
-    _vfw_tags_config_loaded: "{{ lookup('file', virtual_fw_tags_config_path) | from_yaml }}"
-  run_once: false
-
-- name: Set virtual firewall managed tag keys
-  set_fact:
-    _vfw_managed_tag_keys: "{{ _vfw_tags_config_loaded.virtual_fw_tags.managed_keys | default([]) }}"
-  run_once: false
+# Tag configs and zbx_tpl_map/zbx_type_map/zbx_dc_map are loaded once in load_role_configuration.yml.
 
 - name: Set effective managed tag keys for this record
   set_fact:
@@ -78,16 +43,6 @@
         )
       }}
   run_once: false
-
-- name: Load mappings
-  vars:
-    _tpl_map_path: "{{ templates_map_path | default((playbook_dir | default(ansible_playbook_directory)) + '/../mappings/templates.yml') }}"
-    _type_map_path: "{{ (playbook_dir | default(ansible_playbook_directory)) + '/../mappings/template_types.yml' }}"
-    _dc_map_path: "{{ datacenters_map_path | default((playbook_dir | default(ansible_playbook_directory)) + '/../mappings/datacenters.yml') }}"
-  set_fact:
-    zbx_tpl_map: "{{ lookup('file', _tpl_map_path) | from_yaml }}"
-    zbx_type_map: "{{ lookup('file', _type_map_path) | from_yaml }}"
-    zbx_dc_map: "{{ lookup('file', _dc_map_path) | from_yaml }}"
 
 - name: Set default scenario if not provided
   set_fact:
@@ -284,60 +239,38 @@
       Test Numeric - PG: {{ _test_pg_numeric }}, Upper: {{ _test_upper_numeric }}, Extracted: {{ _test_dc_num_numeric }}
       Test Alpha - PG: {{ _test_pg_alpha }}, Upper: {{ _test_upper_alpha }}, Extracted: {{ _test_dc_num_alpha }}
       Available proxy groups: {{ zbx_proxy_group_map.keys() | list if zbx_proxy_group_map is defined else [] }}
+  when: debug_mode | default(false) | bool
 
 - name: Debug template names
   debug:
     msg: "Looking for templates: {{ zbx_template_names }}"
-
-- name: Resolve template IDs by name
-  vars:
-    _tpl_get_body: |
-      {
-        "jsonrpc": "2.0",
-        "method": "template.get",
-        "params": {"output": ["templateid","name"], "filter": {"name": %s}},
-        "auth": "%s",
-        "id": 1001
-      }
-  uri:
-    url: "{{ zabbix_url }}"
-    method: POST
-    body_format: json
-    validate_certs: "{{ zabbix_validate_certs | default(false) }}"
-    body: "{{ _tpl_get_body | format(zbx_template_names | to_json, zabbix_auth) | from_json }}"
-  register: zbx_tpl_get_resp
-
-- name: Debug template response
-  debug:
-    msg: "Template response: {{ zbx_tpl_get_resp.json.result | default([]) }}"
-
-- name: Deduplicate template rows by templateid
-  set_fact:
-    zbx_tpl_unique_templates: "{{ zbx_tpl_get_resp.json.result | default([]) | unique(attribute='templateid') }}"
-
-- name: Init template id list
-  set_fact:
-    zbx_template_id_list: []
-
-- name: Append each templateid as dict
-  set_fact:
-    zbx_template_id_list: "{{ zbx_template_id_list + [ { 'templateid': template_item.templateid } ] }}"
-  loop: "{{ zbx_tpl_unique_templates | default([]) }}"
-  loop_control:
-    loop_var: template_item
-  when: zbx_tpl_unique_templates | default([]) | length > 0
+  when: debug_mode | default(false) | bool
 
 - name: Unique template names expected from mapping
   set_fact:
     zbx_template_names_expected: "{{ zbx_template_names | unique | list }}"
 
-- name: Template names returned by Zabbix API
+- name: Resolve template IDs from bulk cache (no per-host template.get)
   set_fact:
-    zbx_templates_found_names: "{{ zbx_tpl_get_resp.json.result | default([]) | map(attribute='name') | list | unique | list }}"
-
-- name: Template names missing in Zabbix
-  set_fact:
+    zbx_templates_found_names: "{{ zbx_template_names_expected | select('in', zbx_template_id_cache.keys() | list) | list }}"
     zbx_templates_missing_names: "{{ zbx_template_names_expected | difference(zbx_templates_found_names) }}"
+    zbx_template_id_list: >-
+      {%- set out = [] -%}
+      {%- for tpl_name in zbx_template_names_expected -%}
+        {%- if tpl_name in (zbx_template_id_cache | default({})) -%}
+          {%- set _ = out.append({'templateid': (zbx_template_id_cache[tpl_name] | string)}) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ out }}
+  when: zbx_template_id_cache is defined
+
+- name: Initialize empty template cache when prefetch was skipped
+  set_fact:
+    zbx_template_id_cache: {}
+    zbx_template_id_list: []
+    zbx_templates_missing_names: "{{ zbx_template_names | unique | list }}"
+    zbx_templates_found_names: []
+  when: zbx_template_id_cache is not defined
 
 - name: Warn if no templates found
   debug:
@@ -352,10 +285,10 @@
   set_fact:
     zbx_required_groups_for_record: "{{ _all_target_groups }}"
 
-- name: Initialize zbx_group_map if not defined
+- name: Initialize zbx_group_map from global prefetch if not defined
   set_fact:
-    zbx_group_map: {}
-  when: zbx_group_map is not defined
+    zbx_group_map: "{{ zbx_group_map_global | default({}) }}"
+  when: zbx_group_map is not defined or (zbx_group_map | length) == 0
 
 - name: Identify groups not yet in map
   vars:
@@ -370,7 +303,9 @@
       Required groups: {{ zbx_required_groups_for_record }}
       Groups already in map: {{ zbx_group_map.keys() | list }}
       Groups to process: {{ zbx_groups_not_in_map }}
-  when: zbx_groups_not_in_map | length > 0
+  when:
+    - debug_mode | default(false) | bool
+    - zbx_groups_not_in_map | length > 0
 
 - name: Process missing groups (query and create if needed)
   when: zbx_groups_not_in_map | length > 0
@@ -443,6 +378,7 @@
         _new_groups_map: "{{ zbx_fetched_groups_resp.json.result | items2dict(key_name='name', value_name='groupid') }}"
       set_fact:
         zbx_group_map: "{{ zbx_group_map | combine(_new_groups_map) }}"
+        zbx_group_map_global: "{{ (zbx_group_map_global | default({})) | combine(_new_groups_map) }}"
       delegate_to: localhost
 
 - name: Initialize group ID list
@@ -554,6 +490,7 @@
       Tags: {{ zbx_tags | default([]) | to_nice_json }}
       ========================================
   when:
+    - debug_mode | default(false) | bool
     - zbx_scenario == 'create'
     - _missing_params | default([]) | length == 0
 
@@ -1096,9 +1033,59 @@
     - zbx_existing_host.name is defined
     - zbx_existing_host.name | string | trim != ''
 
-- name: Build interface for update
+- name: Determine if interface type changed (update path)
   set_fact:
-    _zbx_interface_update: "{{ [{'interfaceid': _interface_id, 'type': zbx_iface.type, 'main': 1, 'useip': 1, 'ip': zbx_record.HOST_IP, 'dns': zbx_iface.dns | default(''), 'port': (zbx_iface.port | default(161)) | string, 'details': zbx_iface.details | default(omit)}] if (zbx_iface is not none and zbx_iface is mapping and zbx_iface.type is defined) else omit }}"
+    _interface_type_changed: >-
+      {{
+        (
+          (_existing_interface.type | default(0) | int)
+          != (zbx_iface.type | default(0) | int)
+        ) | bool
+      }}
+    _interface_type_locked: false
+  when:
+    - zbx_scenario == 'update'
+    - zbx_iface is mapping
+    - zbx_iface.type is defined
+    - _existing_interface is defined
+    - _existing_interface.type is defined
+
+- name: Record INTERFACE_TYPE_LOCKED when interface type change is blocked
+  set_fact:
+    _interface_type_locked: true
+    _zbx_interface_update: "{{ omit }}"
+    _host_field_changes: >-
+      {%- set entries = _host_field_changes | default([]) -%}
+      {%- set _ = entries.append({
+        'field_name': 'interface_type',
+        'old_value': (_existing_interface.type | default('') | string),
+        'new_value': (zbx_iface.type | default('') | string),
+        'action': 'BLOCKED',
+        'merge_result': 'INTERFACE_TYPE_LOCKED',
+        'reason': 'Interface type change skipped: linked Zabbix items prevent interface replace'
+      }) -%}
+      {{ entries }}
+  when:
+    - zbx_scenario == 'update'
+    - _interface_type_changed | default(false) | bool
+    - _interface_id is defined
+    - _interface_id != ''
+    - _missing_params | default([]) | length == 0
+
+- name: Build interface for update (safe delta — IP/port only when type unchanged)
+  set_fact:
+    _zbx_interface_update: >-
+      {{
+        [
+          {
+            'interfaceid': _interface_id,
+            'ip': zbx_record.HOST_IP,
+            'dns': zbx_iface.dns | default(''),
+            'port': (zbx_iface.port | default(161)) | string,
+            'details': zbx_iface.details | default(omit)
+          }
+        ]
+      }}
   when:
     - zbx_scenario == 'update'
     - zbx_existing_host is defined
@@ -1106,6 +1093,10 @@
     - _interface_id is defined
     - _interface_id != ''
     - _missing_params | default([]) | length == 0
+    - not (_interface_type_changed | default(false) | bool)
+    - zbx_iface is not none
+    - zbx_iface is mapping
+    - zbx_iface.type is defined
 
 - name: Check if update is needed (compare with existing values)
   set_fact:
@@ -1173,7 +1164,9 @@
       Current proxy_groupid: {{ zbx_existing_host.proxy_groupid | default('N/A') }} -> New: {{ zbx_proxy_group_id }}
       Tags need update: {{ _tags_needs_update | default(false) }}
       Groups need update: {{ _groups_needs_update | default(false) }}
+      Interface type locked: {{ _interface_type_locked | default(false) }}
   when:
+    - debug_mode | default(false) | bool
     - zbx_scenario == 'update'
     - zbx_existing_host.hostid is defined
 
@@ -1193,6 +1186,7 @@
       Needs Update: {{ _needs_update | default(true) | bool }}
       ========================================
   when:
+    - debug_mode | default(false) | bool
     - zbx_scenario == 'update'
     - zbx_existing_host is defined
     - zbx_existing_host.hostid is defined
@@ -1207,7 +1201,6 @@
     _host_update_params:
       hostid: "{{ zbx_existing_host.hostid }}"
       host: "{{ zbx_record.HOSTNAME }}"
-      interfaces: "{{ _zbx_interface_update }}"
       monitored_by: "{{ zbx_monitored_by | int }}"
       proxy_groupid: "{{ zbx_proxy_group_id | default('0') | int }}"
   when:
@@ -1215,6 +1208,18 @@
     - zbx_existing_host.hostid is defined
     - _missing_params | default([]) | length == 0
     - _needs_update | default(true) | bool
+    - not (dry_run | default(false) | bool)
+
+- name: Add interfaces to host.update params when interface delta is present
+  set_fact:
+    _host_update_params: "{{ _host_update_params | combine({'interfaces': _zbx_interface_update}) }}"
+  when:
+    - zbx_scenario == 'update'
+    - _host_update_params is defined
+    - _host_update_params | length > 0
+    - _zbx_interface_update is defined
+    - _zbx_interface_update is not omit
+    - not (_interface_type_locked | default(false) | bool)
     - not (dry_run | default(false) | bool)
 
 - name: Add groups to host.update params when host groups changed

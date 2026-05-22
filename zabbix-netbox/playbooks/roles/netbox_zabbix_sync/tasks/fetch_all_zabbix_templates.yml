@@ -1,0 +1,38 @@
+---
+# Bulk-fetch all Zabbix templates once; per-host template.get is replaced by cache lookup.
+
+- name: Fetch all templates from Zabbix (bulk, run once)
+  uri:
+    url: "{{ zabbix_url }}"
+    method: POST
+    body_format: json
+    validate_certs: "{{ zabbix_validate_certs | default(false) }}"
+    body:
+      jsonrpc: "2.0"
+      method: "template.get"
+      params:
+        output: ["templateid", "name"]
+      auth: "{{ zabbix_auth }}"
+      id: 201
+  register: _zbx_all_templates_resp
+  run_once: true
+  delegate_to: localhost
+  when:
+    - zabbix_auth is defined
+    - not only_fetch | bool
+
+- name: Build template name to ID cache map
+  set_fact:
+    zbx_template_id_cache: "{{ _zbx_all_templates_resp.json.result | items2dict(key_name='name', value_name='templateid') }}"
+  run_once: true
+  delegate_to: localhost
+  when:
+    - _zbx_all_templates_resp is defined
+    - _zbx_all_templates_resp.json.result is defined
+
+- name: Initialize empty template cache when fetch skipped
+  set_fact:
+    zbx_template_id_cache: {}
+  run_once: true
+  delegate_to: localhost
+  when: zbx_template_id_cache is not defined

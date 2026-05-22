@@ -1,0 +1,26 @@
+---
+# Load all YAML mappings and tag key lists once per playbook run (not per host).
+
+- name: Load all role configuration (run once)
+  set_fact:
+    templates_map: "{{ lookup('file', templates_map_path) | from_yaml }}"
+    datacenters_map: "{{ lookup('file', datacenters_map_path) | from_yaml }}"
+    device_type_mapping: "{{ lookup('file', device_type_mapping_path) | from_yaml }}"
+    _tags_config_loaded: "{{ lookup('file', tags_config_path) | from_yaml }}"
+    _platform_tags_config_loaded: "{{ lookup('file', platform_tags_config_path) | from_yaml }}"
+    _vfw_tags_config_loaded: "{{ lookup('file', virtual_fw_tags_config_path) | from_yaml }}"
+    zbx_tpl_map: "{{ lookup('file', templates_map_path) | from_yaml }}"
+    zbx_type_map: "{{ lookup('file', (playbook_dir | default(ansible_playbook_directory)) + '/../mappings/template_types.yml') | from_yaml }}"
+    zbx_dc_map: "{{ lookup('file', datacenters_map_path) | from_yaml }}"
+    _hmdl_managed_tag_keys: >-
+      {%- set keys = [] -%}
+      {%- for defn in (lookup('file', tags_config_path) | from_yaml).tags.definitions | default([]) -%}
+        {%- if defn.enabled | default(true) | bool -%}
+          {%- set _ = keys.append(defn.tag_name) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ keys }}
+    _platform_managed_tag_keys: "{{ (lookup('file', platform_tags_config_path) | from_yaml).platform_tags.managed_keys | default([]) }}"
+    _vfw_managed_tag_keys: "{{ (lookup('file', virtual_fw_tags_config_path) | from_yaml).virtual_fw_tags.managed_keys | default([]) }}"
+  run_once: true
+  delegate_to: localhost

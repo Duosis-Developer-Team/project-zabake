@@ -1,0 +1,58 @@
+---
+# Fetch last HMDL sync row per source_device_id in one SQL query (replaces per-device SELECT).
+
+- name: Fetch HMDL baseline for all devices (single bulk SQL)
+  community.postgresql.postgresql_query:
+    db: "{{ hmdl_db_name }}"
+    login_host: "{{ hmdl_db_host }}"
+    login_port: "{{ hmdl_db_port | int }}"
+    login_user: "{{ hmdl_db_user }}"
+    login_password: "{{ hmdl_db_password }}"
+    query: |
+      SELECT DISTINCT ON (source_device_id)
+          source_device_id,
+          root_location_name,
+          last_location,
+          last_proxy_group_id,
+          expected_proxy_group_id,
+          zabbix_proxy_group_id,
+          last_visible_name,
+          zabbix_hostname,
+          proxy_manual_change_detected,
+          field_merge_actions,
+          extra_data,
+          processed_at
+      FROM {{ hmdl_log_schema }}.{{ hmdl_log_table }}
+      WHERE playbook_name = %(playbook_name)s
+        AND status IN ('eklendi', 'güncellendi', 'güncel', 'dry_run')
+        AND source_device_id IS NOT NULL
+      ORDER BY source_device_id, processed_at DESC NULLS LAST, id DESC
+    named_args:
+      playbook_name: "{{ hmdl_playbook_name | default('db_to_zabbix_sync') }}"
+  register: _hmdl_baseline_resp
+  changed_when: false
+  delegate_to: localhost
+  run_once: true
+  when: hmdl_log_enabled | bool
+
+- name: Build HMDL baseline map keyed by source_device_id
+  set_fact:
+    hmdl_baseline_by_device_id: >-
+      {%- set out = {} -%}
+      {%- for row in _hmdl_baseline_resp.query_result | default([]) -%}
+        {%- set key = row.source_device_id | string -%}
+        {%- set _ = out.update({key: row}) -%}
+      {%- endfor -%}
+      {{ out }}
+  run_once: true
+  delegate_to: localhost
+  when:
+    - hmdl_log_enabled | bool
+    - _hmdl_baseline_resp is defined
+
+- name: Initialize empty HMDL baseline map when logging disabled
+  set_fact:
+    hmdl_baseline_by_device_id: {}
+  run_once: true
+  delegate_to: localhost
+  when: not (hmdl_log_enabled | bool) or hmdl_baseline_by_device_id is not defined

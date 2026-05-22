@@ -22,6 +22,9 @@ location_filter: ""  # Optional: Filter devices by location name (e.g., "DC11", 
 # Execution mode
 only_fetch: false  # When true, only fetch and log NetBox devices/platforms; skip Zabbix operations and email reporting
 dry_run: false     # When true, runs all mapping/validation/Zabbix checks but skips host.create/host.update API calls
+debug_mode: false  # When true, emit verbose debug tasks (per-host); keep false in production for performance
+sync_throttle: 10  # Max concurrent compare-phase workers (async); tune for AWX EE CPU and Zabbix API capacity
+use_two_phase_device_sync: true  # Phase A: parallel compare (no Zabbix writes); Phase B: sequential apply (host.create/update)
 
 # Per-host-type inventory source: loki (NetBox REST API) | datalake (PostgreSQL discovery DB)
 device_source: datalake

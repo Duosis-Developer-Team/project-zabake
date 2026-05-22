@@ -1,9 +1,10 @@
 ---
-- name: Load template mappings
-  set_fact:
-    templates_map: "{{ lookup('file', templates_map_path) | from_yaml }}"
-    datacenters_map: "{{ lookup('file', datacenters_map_path) | from_yaml }}"
-    device_type_mapping: "{{ lookup('file', device_type_mapping_path) | from_yaml }}"
+- name: Load all role configuration once
+  include_tasks: load_role_configuration.yml
+
+- name: Bootstrap HMDL log schema and helpers (run once)
+  include_tasks: bootstrap_hmdl_log.yml
+  when: hmdl_log_enabled | bool
 
 - name: Generate HMDL run_id for this playbook run
   set_fact:
@@ -40,6 +41,34 @@
   when:
     - not only_fetch | bool
     - (sync_devices | bool) or (sync_platforms | bool) or (sync_virtual_fws | bool)
+
+- name: Prefetch all Zabbix templates (bulk, run once)
+  include_tasks: fetch_all_zabbix_templates.yml
+  when:
+    - not only_fetch | bool
+    - (sync_devices | bool) or (sync_platforms | bool) or (sync_virtual_fws | bool)
+
+- name: Prefetch all Zabbix host groups (bulk, run once)
+  include_tasks: fetch_all_zabbix_hostgroups.yml
+  when:
+    - not only_fetch | bool
+    - (sync_devices | bool) or (sync_platforms | bool) or (sync_virtual_fws | bool)
+
+- name: Prefetch HMDL baseline for all devices (bulk SQL, run once)
+  include_tasks: fetch_hmdl_baseline_bulk.yml
+  when:
+    - not only_fetch | bool
+    - hmdl_log_enabled | bool
+    - (sync_devices | bool) or (sync_platforms | bool) or (sync_virtual_fws | bool)
+
+- name: Clean up leftover device plan and result temp files from previous runs
+  shell: "rm -f /tmp/device_plan_*.json /tmp/zabbix_host_operation_result_*.json"
+  delegate_to: localhost
+  run_once: true
+  changed_when: false
+  when:
+    - sync_devices | bool
+    - not only_fetch | bool
 
 - name: Set filtered devices (mapping-based filters already applied in Python script)
   set_fact:
@@ -119,7 +148,7 @@
     - sync_devices | bool
     - netbox_devices_final | length > 0
 
-- name: Process each device
+- name: Phase A — parallel device compare (no Zabbix writes)
   include_tasks: process_device.yml
   loop: "{{ netbox_devices_final }}"
   loop_control:
@@ -127,7 +156,59 @@
     label: "{{ outer_device_item.name | default('Unknown') }}"
   vars:
     netbox_device: "{{ outer_device_item }}"
-  when: sync_devices | bool
+    device_sync_phase: compare
+  async: 120
+  poll: 0
+  throttle: "{{ sync_throttle | default(10) }}"
+  register: device_compare_async
+  when:
+    - sync_devices | bool
+    - use_two_phase_device_sync | default(true) | bool
+
+- name: Wait for all device compare jobs to finish
+  async_status:
+    jid: "{{ item.ansible_job_id }}"
+  loop: "{{ device_compare_async.results | default([]) }}"
+  register: device_compare_poll
+  until: device_compare_poll.finished
+  retries: 120
+  delay: 5
+  when:
+    - sync_devices | bool
+    - use_two_phase_device_sync | default(true) | bool
+    - device_compare_async is defined
+
+- name: Fail when any compare-phase job failed
+  fail:
+    msg: "Device compare phase failed for one or more hosts. Check AWX logs."
+  when:
+    - device_compare_async is defined
+    - device_compare_async.results | default([]) | selectattr('failed', 'defined') | selectattr('failed') | list | length > 0
+
+- name: Phase B — sequential Zabbix apply from device plans
+  include_tasks: process_device_apply.yml
+  loop: "{{ netbox_devices_final }}"
+  loop_control:
+    loop_var: outer_device_item
+    label: "{{ outer_device_item.name | default('Unknown') }} (apply)"
+  vars:
+    netbox_device: "{{ outer_device_item }}"
+  when:
+    - sync_devices | bool
+    - use_two_phase_device_sync | default(true) | bool
+
+- name: Process each device (legacy single-phase, sequential)
+  include_tasks: process_device.yml
+  loop: "{{ netbox_devices_final }}"
+  loop_control:
+    loop_var: outer_device_item
+    label: "{{ outer_device_item.name | default('Unknown') }}"
+  vars:
+    netbox_device: "{{ outer_device_item }}"
+    device_sync_phase: full
+  when:
+    - sync_devices | bool
+    - not (use_two_phase_device_sync | default(true) | bool)
 
 - name: Collect all device results from temporary files
   find:

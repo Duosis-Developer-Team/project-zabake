@@ -1,16 +1,5 @@
 ---
-# HMDL Sync Log - hmdl.zabbix_sync_log tablosuna kayıt atar.
-#
-# Çağıran task'ın sağlaması gereken değişkenler:
-#   hmdl_log_entry       : log alanlarını içeren dict
-#   hmdl_log_device_id   : temp dosya adı için benzersiz ID (örn. device.id)
-#
-# DB bağlantı değişkenleri defaults/main.yml'den gelir:
-#   hmdl_db_host, hmdl_db_port, hmdl_db_name, hmdl_db_user, hmdl_db_password
-#   hmdl_log_schema, hmdl_log_table
-
-# Schema/table bootstrap runs once via bootstrap_hmdl_log.yml at role start.
-# Per-device path below only writes log rows.
+# One-time HMDL schema/table bootstrap per playbook run (not per device).
 
 - name: Create HMDL value preparer script
   copy:
@@ -37,7 +26,6 @@
               return None
 
       def to_jsonb_str(v):
-          """Returns a JSON string for JSONB fields, or None for empty/null values."""
           if v is None or v == "" or v == {} or v == []:
               return None
           if isinstance(v, (dict, list)):
@@ -100,9 +88,7 @@
     mode: '0755'
   delegate_to: localhost
   run_once: true
-  when:
-    - hmdl_log_enabled | bool
-    - not (_hmdl_bootstrap_done | default(false) | bool)
+  when: hmdl_log_enabled | bool
 
 - name: Ensure HMDL log schema exists
   community.postgresql.postgresql_query:
@@ -115,9 +101,7 @@
   delegate_to: localhost
   run_once: true
   changed_when: false
-  when:
-    - hmdl_log_enabled | bool
-    - not (_hmdl_bootstrap_done | default(false) | bool)
+  when: hmdl_log_enabled | bool
 
 - name: Ensure HMDL log table exists
   community.postgresql.postgresql_query:
@@ -172,9 +156,7 @@
   delegate_to: localhost
   run_once: true
   changed_when: false
-  when:
-    - hmdl_log_enabled | bool
-    - not (_hmdl_bootstrap_done | default(false) | bool)
+  when: hmdl_log_enabled | bool
 
 - name: Ensure HMDL log table has merge/proxy audit columns
   community.postgresql.postgresql_query:
@@ -200,9 +182,7 @@
   delegate_to: localhost
   run_once: true
   changed_when: false
-  when:
-    - hmdl_log_enabled | bool
-    - not (_hmdl_bootstrap_done | default(false) | bool)
+  when: hmdl_log_enabled | bool
 
 - name: Ensure HMDL log table indexes exist
   community.postgresql.postgresql_query:
@@ -218,82 +198,15 @@
     - "CREATE INDEX IF NOT EXISTS idx_{{ hmdl_log_table }}_source_device_id ON {{ hmdl_log_schema }}.{{ hmdl_log_table }} (source_device_id)"
     - "CREATE INDEX IF NOT EXISTS idx_{{ hmdl_log_table }}_run_id ON {{ hmdl_log_schema }}.{{ hmdl_log_table }} (run_id)"
     - "CREATE INDEX IF NOT EXISTS idx_{{ hmdl_log_table }}_zabbix_hostname ON {{ hmdl_log_schema }}.{{ hmdl_log_table }} (zabbix_hostname)"
+    - "CREATE INDEX IF NOT EXISTS idx_{{ hmdl_log_table }}_hostid_time ON {{ hmdl_log_schema }}.{{ hmdl_log_table }} (source_device_id, processed_at DESC)"
   delegate_to: localhost
   run_once: true
   changed_when: false
-  when:
-    - hmdl_log_enabled | bool
-    - not (_hmdl_bootstrap_done | default(false) | bool)
-
-- name: Write HMDL log entry to temp file
-  copy:
-    content: "{{ hmdl_log_entry | to_json }}"
-    dest: "/tmp/hmdl_log_entry_{{ hmdl_log_device_id | default('tmp') }}.json"
-  delegate_to: localhost
   when: hmdl_log_enabled | bool
 
-- name: Prepare HMDL log entry values
-  command: >
-    python3 /tmp/hmdl_prepare_values.py
-    "/tmp/hmdl_log_entry_{{ hmdl_log_device_id | default('tmp') }}.json"
-  register: _hmdl_prepared
-  changed_when: false
+- name: Mark HMDL bootstrap as completed for this run
+  set_fact:
+    _hmdl_bootstrap_done: true
+  run_once: true
   delegate_to: localhost
-  when: hmdl_log_enabled | bool
-
-- name: Insert HMDL log entry into database
-  block:
-    - name: Run HMDL log INSERT
-      community.postgresql.postgresql_query:
-        db: "{{ hmdl_db_name }}"
-        login_host: "{{ hmdl_db_host }}"
-        login_port: "{{ hmdl_db_port | int }}"
-        login_user: "{{ hmdl_db_user }}"
-        login_password: "{{ hmdl_db_password }}"
-        query: |
-          INSERT INTO {{ hmdl_log_schema }}.{{ hmdl_log_table }} (
-              run_id, awx_job_id, playbook_name,
-              source_device_id, source_device_name, source_table,
-              host_entity_type, inventory_source,
-              zabbix_hostid, zabbix_hostname, zabbix_host_ip, last_visible_name,
-              device_type, device_role, manufacturer_name,
-              site_name, location_name, location_parent_name,
-              root_location_name, last_location, tenant_name, cluster_name,
-              operation, status, reason, dry_run,
-              expected_proxy_group_id, last_proxy_group_id, zabbix_proxy_group_id,
-              proxy_location_change, proxy_manual_change_detected,
-              field_merge_actions, last_managed_groups,
-              request_payload, response_payload, error_payload, extra_data
-          ) VALUES (
-              %(run_id)s, %(awx_job_id)s, %(playbook_name)s,
-              %(source_device_id)s, %(source_device_name)s, %(source_table)s,
-              %(host_entity_type)s, %(inventory_source)s,
-              %(zabbix_hostid)s, %(zabbix_hostname)s, %(zabbix_host_ip)s, %(last_visible_name)s,
-              %(device_type)s, %(device_role)s, %(manufacturer_name)s,
-              %(site_name)s, %(location_name)s, %(location_parent_name)s,
-              %(root_location_name)s, %(last_location)s, %(tenant_name)s, %(cluster_name)s,
-              %(operation)s, %(status)s, %(reason)s, %(dry_run)s,
-              %(expected_proxy_group_id)s, %(last_proxy_group_id)s, %(zabbix_proxy_group_id)s,
-              %(proxy_location_change)s, %(proxy_manual_change_detected)s,
-              %(field_merge_actions)s::jsonb, %(last_managed_groups)s::jsonb,
-              %(request_payload)s::jsonb, %(response_payload)s::jsonb,
-              %(error_payload)s::jsonb, %(extra_data)s::jsonb
-          )
-        named_args: "{{ _hmdl_prepared.stdout | from_json }}"
-      delegate_to: localhost
-      changed_when: false
-
-    - name: Debug HMDL log insert success
-      debug:
-        msg: "HMDL_LOG_OK: {{ hmdl_log_entry.zabbix_hostname | default('?') }} / status={{ hmdl_log_entry.status | default('?') }}"
-
-  rescue:
-    - name: Debug HMDL log insert failure (rescued)
-      debug:
-        msg: >
-          HMDL log insert başarısız oldu —
-          device: {{ hmdl_log_entry.source_device_name | default('unknown') }},
-          status: {{ hmdl_log_entry.status | default('unknown') }},
-          hata: {{ ansible_failed_result.msg | default('bilinmeyen hata') }}
-
   when: hmdl_log_enabled | bool

@@ -1,5 +1,6 @@
 ---
 # Read last successful HMDL sync row for a device (proxy/location/visible name baseline).
+# Uses bulk map hmdl_baseline_by_device_id when available (fetch_hmdl_baseline_bulk.yml).
 
 - name: Reset HMDL last sync facts
   set_fact:
@@ -9,7 +10,33 @@
     hmdl_last_visible_name: ""
   run_once: false
 
-- name: Query last HMDL sync log row for device
+- name: Load HMDL baseline for device from bulk map
+  set_fact:
+    hmdl_last_sync: "{{ hmdl_baseline_by_device_id.get(hmdl_read_device_id | string, {}) }}"
+    hmdl_last_location: >-
+      {% set row = hmdl_baseline_by_device_id.get(hmdl_read_device_id | string, {}) %}
+      {{ row.last_location | default(row.root_location_name | default('')) }}
+    hmdl_last_proxy_group_id: >-
+      {% set row = hmdl_baseline_by_device_id.get(hmdl_read_device_id | string, {}) %}
+      {% set pg = row.last_proxy_group_id | default('') %}
+      {% if pg | string | trim != '' %}
+      {{ pg }}
+      {% else %}
+      {% set extra = row.extra_data | default({}) %}
+      {{ extra.get('last_proxy_group_id', '') if (extra is mapping) else '' }}
+      {% endif %}
+    hmdl_last_visible_name: >-
+      {% set row = hmdl_baseline_by_device_id.get(hmdl_read_device_id | string, {}) %}
+      {{ row.last_visible_name | default(row.zabbix_hostname | default('')) }}
+  when:
+    - hmdl_log_enabled | bool
+    - hmdl_baseline_by_device_id is defined
+    - hmdl_read_device_id is defined
+    - hmdl_read_device_id | string | trim != ''
+    - hmdl_read_device_id | string | trim != 'None'
+    - hmdl_baseline_by_device_id.get(hmdl_read_device_id | string, {}) | length > 0
+
+- name: Query last HMDL sync log row for device (fallback when bulk map miss)
   community.postgresql.postgresql_query:
     db: "{{ hmdl_db_name }}"
     login_host: "{{ hmdl_db_host }}"
@@ -44,8 +71,9 @@
     - hmdl_read_device_id is defined
     - hmdl_read_device_id | string | trim != ''
     - hmdl_read_device_id | string | trim != 'None'
+    - hmdl_last_sync | default({}) | length == 0
 
-- name: Parse last HMDL sync row
+- name: Parse last HMDL sync row (fallback query)
   set_fact:
     hmdl_last_sync: "{{ (_hmdl_last_sync_query.query_result | default([]))[0] | default({}) }}"
     hmdl_last_location: >-
