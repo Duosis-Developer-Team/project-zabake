@@ -2,6 +2,19 @@
 - name: Load all role configuration once
   include_tasks: load_role_configuration.yml
 
+- name: Normalize dry_run flag (AWX extra vars may be string "true"/"false")
+  set_fact:
+    dry_run: "{{ dry_run | default(false) | bool }}"
+  run_once: true
+
+- name: Log dry_run mode for operators
+  debug:
+    msg: >-
+      dry_run={{ dry_run | bool }} —
+      host.create / host.update / hostgroup.create are SKIPPED when true;
+      host.get, template.get, and compare phase still run.
+  run_once: true
+
 - name: Bootstrap HMDL log schema and helpers (run once)
   include_tasks: bootstrap_hmdl_log.yml
   when: hmdl_log_enabled | bool

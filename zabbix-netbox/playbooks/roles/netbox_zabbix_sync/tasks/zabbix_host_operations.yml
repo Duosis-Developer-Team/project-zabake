@@ -357,7 +357,9 @@
         loop_var: missing_group_item
       register: zbx_created_groups_resp
       delegate_to: localhost
-      when: zbx_groups_to_create | length > 0
+      when:
+        - zbx_groups_to_create | length > 0
+        - not (dry_run | default(false) | bool)
 
     - name: Fetch all processed groups to get their IDs
       uri:
@@ -847,7 +849,9 @@
         loop_var: merged_missing_group_item
       register: zbx_merged_created_groups_resp
       delegate_to: localhost
-      when: _merged_groups_to_create | length > 0
+      when:
+        - _merged_groups_to_create | length > 0
+        - not (dry_run | default(false) | bool)
 
     - name: Fetch merged host groups to refresh zbx_group_map
       uri:

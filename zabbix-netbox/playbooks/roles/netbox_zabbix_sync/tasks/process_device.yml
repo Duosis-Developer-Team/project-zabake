@@ -958,6 +958,7 @@
     zabbix_auth: "{{ _zabbix_auth_for_role }}"
     zbx_existing_host: "{{ _zbx_existing_host_for_role }}"
     zbx_scenario: "{{ _zbx_scenario_for_role }}"
+    dry_run: "{{ dry_run | default(false) | bool }}"
   when:
     - device_sync_phase | default('full') in ['full', 'apply']
     - device_info.device_type is not none

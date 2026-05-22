@@ -39,6 +39,7 @@
     zabbix_auth: "{{ _zabbix_auth_for_platform }}"
     zbx_existing_host: "{{ _zbx_existing_host_for_platform }}"
     zbx_scenario: "{{ _zbx_scenario_for_platform }}"
+    dry_run: "{{ dry_run | default(false) | bool }}"
   when:
     - _platform_sync_plan_loaded is defined
     - _platform_sync_plan_loaded.action | default('skip') in ['create', 'update']

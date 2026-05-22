@@ -39,6 +39,7 @@
     zabbix_auth: "{{ _zabbix_auth_for_vfw }}"
     zbx_existing_host: "{{ _zbx_existing_host_for_vfw }}"
     zbx_scenario: "{{ _zbx_scenario_for_vfw }}"
+    dry_run: "{{ dry_run | default(false) | bool }}"
   when:
     - _vfw_sync_plan_loaded is defined
     - _vfw_sync_plan_loaded.action | default('skip') in ['create', 'update']
