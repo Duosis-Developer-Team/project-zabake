@@ -1,0 +1,33 @@
+---
+- name: Run TCP/ICMP checks for all targets (localhost runner)
+  command: >
+    python3 {{ role_path }}/files/tcp_telnet_check.py
+    --targets {{ collector_work_dir }}/all_targets.json
+    --output {{ collector_work_dir }}/check_results.json
+    --icmp-count {{ icmp_count }}
+    --icmp-timeout {{ icmp_timeout_sec }}
+    --tcp-timeout {{ tcp_timeout_sec }}
+  register: check_cmd
+  when: collector_all_targets | length > 0
+  changed_when: false
+
+- name: Load check results
+  set_fact:
+    collector_check_report: "{{ lookup('file', collector_work_dir + '/check_results.json') | from_json }}"
+  when: collector_all_targets | length > 0
+
+- name: Write check results to HMDL database
+  command: >
+    python3 {{ role_path }}/files/hmdl_collector_db.py
+    write-checks
+    --db-host {{ hmdl_db_host | quote }}
+    --db-port {{ hmdl_db_port }}
+    --db-name {{ hmdl_db_name | quote }}
+    --db-user {{ hmdl_db_user | quote }}
+    --db-password {{ hmdl_db_password | quote }}
+    --run-id {{ collector_run_id | quote }}
+    --checks-file {{ collector_work_dir }}/check_results.json
+  no_log: true
+  when:
+    - hmdl_log_enabled | bool
+    - collector_all_targets | length > 0

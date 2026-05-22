@@ -1,0 +1,78 @@
+---
+- name: Resolve proxy assignment for {{ reconcile_proxy_id }}
+  set_fact:
+    current_proxy_cfg: "{{ proxy_assignment_map[reconcile_proxy_id] | default({}) }}"
+
+- name: Skip reconcile when proxy host is placeholder
+  debug:
+    msg: "Skipping proxy {{ reconcile_proxy_id }} — replace REPLACE_* host in proxy_assignment.yml"
+  when: "'REPLACE_' in (current_proxy_cfg.proxy_nifi_host | default('REPLACE_'))"
+
+- name: Reconcile block for {{ reconcile_proxy_id }}
+  when: "'REPLACE_' not in (current_proxy_cfg.proxy_nifi_host | default('REPLACE_'))"
+  block:
+    - name: Fetch current configuration from proxy via SSH
+      slurp:
+        src: "{{ current_proxy_cfg.conf_path | default('/Datalake_Project/configuration_file.json') }}"
+      delegate_to: "{{ current_proxy_cfg.proxy_nifi_host }}"
+      remote_user: "{{ current_proxy_cfg.ssh_user | default('nifi') }}"
+      register: remote_conf_slurp
+      ignore_errors: true
+
+    - name: Set current config fact (empty if missing)
+      set_fact:
+        proxy_current_config: >-
+          {{
+            (remote_conf_slurp.content | b64decode | from_json)
+            if (remote_conf_slurp is succeeded and remote_conf_slurp.content is defined)
+            else {}
+          }}
+
+    - name: Write current config file for reconcile script
+      copy:
+        content: "{{ proxy_current_config | to_nice_json }}"
+        dest: "{{ collector_work_dir }}/current_{{ reconcile_proxy_id }}.json"
+        mode: "0640"
+
+    - name: Run reconcile for proxy {{ reconcile_proxy_id }}
+      command: >
+        python3 {{ role_path }}/files/reconcile_proxy_batch.py
+        --current {{ collector_work_dir }}/current_{{ reconcile_proxy_id }}.json
+        --targets {{ collector_work_dir }}/all_targets.json
+        --collector-types {{ collector_types_path | quote }}
+        --vault-json {{ collector_work_dir }}/vault_by_dir.json
+        --proxy-id {{ reconcile_proxy_id | quote }}
+        --output {{ collector_work_dir }}/reconciled_{{ reconcile_proxy_id }}.json
+        --diff-output {{ collector_work_dir }}/diffs_{{ reconcile_proxy_id }}.json
+      register: reconcile_cmd
+
+    - name: Load diff report for proxy
+      set_fact:
+        proxy_diffs: "{{ lookup('file', collector_work_dir + '/diffs_' + reconcile_proxy_id + '.json') | from_json }}"
+
+    - name: Append to global diff report
+      set_fact:
+        collector_diff_report: "{{ collector_diff_report + proxy_diffs }}"
+
+    - name: Write diffs to HMDL database
+      command: >
+        python3 {{ role_path }}/files/hmdl_collector_db.py
+        write-diffs
+        --db-host {{ hmdl_db_host | quote }}
+        --db-port {{ hmdl_db_port }}
+        --db-name {{ hmdl_db_name | quote }}
+        --db-user {{ hmdl_db_user | quote }}
+        --db-password {{ hmdl_db_password | quote }}
+        --run-id {{ collector_run_id | quote }}
+        --diffs-file {{ collector_work_dir }}/diffs_{{ reconcile_proxy_id }}.json
+      no_log: true
+      when: hmdl_log_enabled | bool
+
+    - name: Deploy reconciled configuration to proxy
+      copy:
+        content: "{{ lookup('file', collector_work_dir + '/reconciled_' + reconcile_proxy_id + '.json') }}"
+        dest: "{{ current_proxy_cfg.conf_path }}"
+        mode: "0644"
+      delegate_to: "{{ current_proxy_cfg.proxy_nifi_host }}"
+      remote_user: "{{ current_proxy_cfg.ssh_user | default('nifi') }}"
+      when: not (dry_run | bool)

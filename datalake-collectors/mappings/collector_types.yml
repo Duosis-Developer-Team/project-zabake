@@ -1,0 +1,148 @@
+# Collector type -> configuration_file.json section mapping.
+# ip_format: comma_string | single_string
+# source_type: platform | device | manual_only
+
+VmWare:
+  conf_key: VmWare
+  script_path: datalake/collectors/VMware/vmware_data_collector.py
+  ip_field: VMwareIP
+  ip_format: comma_string
+  check_ports: [443]
+  vault_key: vmware
+  source_type: platform
+  other_fields:
+    VMwarePort: "443"
+
+Nutanix:
+  conf_key: Nutanix
+  script_path: datalake/collectors/Nutanix/nutanix_cluster_dyn.py
+  ip_field: PRISM_IP
+  ip_format: comma_string
+  check_ports: [9440]
+  vault_key: nutanix
+  source_type: platform
+
+IBM-HMC:
+  conf_key: IBM-HMC
+  script_path: datalake/collectors/IBM/IBM_hmc_performance_data_collector.py
+  ip_field: hmc_hostname
+  ip_format: single_string
+  check_ports: [22]
+  vault_key: ibm_hmc
+  source_type: platform
+  other_fields:
+    output_nchart: 0
+    output_json: 1
+    output_csv: 0
+    output_influx: 0
+    debug: 1
+
+IBM-Virtualize:
+  conf_key: IBM-Virtualize
+  script_path: datalake/collectors/IBM/IBM_Storage/IBM_storage_pysvc.py
+  ip_field: host
+  ip_format: comma_string
+  check_ports: [22, 7443]
+  vault_key: ibm_virtualize
+  source_type: platform
+  secondary_fields:
+    link: "https://{ip}:7443"
+  other_fields:
+    port: 22
+    remote_path: "/dumps/iostats/"
+    local_path: "/Datalake_Project/IBM/IBM_Storage/SSH/iostats/"
+
+Veeam:
+  conf_key: Veeam
+  script_path: datalake/collectors/Zabbix/Veeam/get_veeam_data.py
+  ip_field: ips
+  ip_format: single_string
+  check_ports: [9419]
+  vault_key: veeam
+  source_type: platform
+  other_fields:
+    created_after: 1
+    lastrun_after: 1
+    limit: 10000
+
+Zerto:
+  conf_key: Zerto
+  ip_field: IpAddress
+  ip_format: comma_string
+  check_ports: [9669]
+  vault_key: zerto
+  source_type: platform
+
+Netbackup:
+  conf_key: Netbackup
+  script_path: datalake/collectors/Netbackup/netbackup_data_collector.py
+  ip_field: IpAddress
+  ip_format: comma_string
+  check_ports: [1556, 443]
+  vault_key: netbackup
+  source_type: platform
+  manual_extras:
+    - Hostname
+
+ILO-Redfish:
+  conf_key: ILO-Redfish
+  script_path: datalake/collectors/ILO/Redfis-API/
+  ip_field: IpAddress
+  ip_format: comma_string
+  check_ports: [443]
+  vault_key: ilo_redfish
+  source_type: device
+
+Inspur-Redfish:
+  conf_key: Inspur-Redfish
+  ip_field: IpAddress
+  ip_format: comma_string
+  check_ports: [443]
+  vault_key: inspur_redfish
+  source_type: device
+
+s3icos:
+  conf_key: s3icos
+  script_path: datalake/collectors/Storage/S3/
+  ip_field: IpAddress
+  ip_format: single_string
+  check_ports: [443, 80]
+  vault_key: s3icos
+  source_type: device
+
+IBM-SAN:
+  conf_key: IBM-SAN
+  script_path: datalake/collectors/Storage/IBM-SAN/
+  ip_field: IpAddress
+  ip_format: single_string
+  check_ports: [22]
+  vault_key: ibm_san
+  source_type: device
+
+Zabbix:
+  conf_key: Zabbix
+  source_type: manual_only
+  vault_key: zabbix_connection
+
+Loki:
+  conf_key: Loki
+  script_path: datalake/collectors/NetBox/loki_get_device.py
+  source_type: manual_only
+  vault_key: loki_connection
+
+ServiceCore:
+  conf_key: ServiceCore
+  script_path: datalake/collectors/ServiceCore/
+  source_type: manual_only
+  vault_key: servicecore
+
+Dynamics365:
+  conf_key: Dynamics365
+  script_path: datalake/collectors/CRM/Dynamics365/
+  source_type: manual_only
+  vault_key: dynamics365
+
+Netbackup_old:
+  conf_key: Netbackup_old
+  source_type: manual_only
+  vault_key: netbackup_old

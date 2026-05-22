@@ -1,0 +1,11 @@
+# Manual-only Zabbix section — full keys from production configuration_file.json
+zabbixHostName: "REPLACE_ME"
+zabUrl: "https://REPLACE/zabbix/api_jsonrpc.php"
+zabUser: "REPLACE_ME"
+zabPassword: "REPLACE_ME"
+pdu_group_id: ""
+vertiv_pdu_group_id: ""
+zabbix_IP: ""
+zabbixIP: ""
+networkTemplates: ""
+storageTemplates: ""

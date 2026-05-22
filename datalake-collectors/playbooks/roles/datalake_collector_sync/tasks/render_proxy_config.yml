@@ -1,0 +1,16 @@
+---
+- name: Determine active proxy IDs from targets
+  set_fact:
+    active_proxy_ids: "{{ collector_all_targets | map(attribute='proxy_id') | unique | list }}"
+
+- name: Filter proxies when proxy_filter set
+  set_fact:
+    active_proxy_ids: "{{ active_proxy_ids | select('match', '^' ~ proxy_filter ~ '$') | list }}"
+  when: proxy_filter | default('') | length > 0
+
+- name: Reconcile configuration per proxy
+  include_tasks: reconcile_proxy.yml
+  loop: "{{ active_proxy_ids }}"
+  loop_control:
+    loop_var: reconcile_proxy_id
+  when: active_proxy_ids | length > 0

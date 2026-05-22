@@ -1,0 +1,70 @@
+---
+# Discovery / HMDL PostgreSQL
+discovery_db_host: ""
+discovery_db_port: 5432
+discovery_db_name: ""
+discovery_db_user: ""
+discovery_db_password: ""
+
+# NetBox (Loki) API — required when sync_platforms or sync_devices
+netbox_url: ""
+netbox_token: ""
+netbox_verify_ssl: false
+
+# Gitea vault repo (datalake-collectors-vault, Gitea-only)
+gitea_vault_url: ""
+gitea_vault_token: ""
+gitea_vault_branch: "main"
+gitea_vault_local_path: "/tmp/datalake-collectors-vault"
+
+# Sync scope (platform-first)
+sync_platforms: true
+sync_devices: false
+dry_run: true
+run_basic_checks: true
+only_fetch: false
+
+# Filters
+location_filter: ""
+proxy_filter: ""
+collector_filter: ""
+
+# Mapping paths (resolved from role)
+collector_types_path: "{{ role_path }}/../../mappings/collector_types.yml"
+platform_collector_mapping_path: "{{ role_path }}/../../mappings/netbox_platform_collector_mapping.yml"
+device_collector_mapping_path: "{{ role_path }}/../../mappings/netbox_device_collector_mapping.yml"
+proxy_assignment_path: "{{ role_path }}/../../mappings/proxy_assignment.yml"
+collector_defaults_path: "{{ role_path }}/../../mappings/collector_defaults.yml"
+target_conf_filename: "configuration_file.json"
+
+# Reconcile
+reconcile_strategy: ssh
+reconcile_preserve_unknown_sections: true
+
+# HMDL audit
+hmdl_log_enabled: true
+hmdl_log_schema: hmdl
+hmdl_playbook_name: datalake_collector_sync
+hmdl_db_host: "{{ discovery_db_host }}"
+hmdl_db_port: "{{ discovery_db_port }}"
+hmdl_db_name: "{{ discovery_db_name }}"
+hmdl_db_user: "{{ discovery_db_user }}"
+hmdl_db_password: "{{ discovery_db_password }}"
+
+# Email (ADR-0003 standard variable names)
+mail_smtp_host: "10.34.8.191"
+mail_smtp_port: 587
+mail_smtp_username: ""
+mail_smtp_password: ""
+mail_smtp_use_tls: false
+mail_recipients: []
+mail_from: "infrareport@alert.bulutistan.com"
+send_email: true
+
+# Check defaults
+icmp_count: 3
+icmp_timeout_sec: 1
+tcp_timeout_sec: 3
+
+# Runtime work dirs
+collector_work_dir: "/tmp/datalake_collector_sync_{{ ansible_date_time.epoch | default('run') }}"

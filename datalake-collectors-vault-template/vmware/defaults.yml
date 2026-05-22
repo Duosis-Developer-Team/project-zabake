@@ -1,0 +1,4 @@
+# VMware vCenter credentials (REPLACE before use)
+VMwarePort: "443"
+VMware_userName: "zabbix@blt.vc"
+VMware_password: "REPLACE_ME"

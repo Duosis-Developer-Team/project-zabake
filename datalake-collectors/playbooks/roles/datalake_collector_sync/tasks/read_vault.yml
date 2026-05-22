@@ -1,0 +1,38 @@
+---
+- name: Clone datalake-collectors-vault from Gitea
+  git:
+    repo: "{{ gitea_vault_url }}"
+    dest: "{{ gitea_vault_local_path }}"
+    version: "{{ gitea_vault_branch }}"
+    force: true
+  no_log: true
+
+- name: Build vault sections map from defaults files
+  shell: |
+    python3 - <<'PYEOF'
+    import json, os, yaml
+    from pathlib import Path
+    root = Path("{{ gitea_vault_local_path }}")
+    out = {}
+    for yml in root.rglob("defaults.yml"):
+        key_dir = yml.parent.name
+        if key_dir in ("per_device", "manual_extras"):
+            continue
+        data = yaml.safe_load(yml.read_text(encoding="utf-8")) or {}
+        # Map directory name to conf_key via vault_key_map is done in Ansible; store by dir name
+        out[key_dir] = data
+    print(json.dumps(out))
+    PYEOF
+  register: vault_build_cmd
+  changed_when: false
+  no_log: true
+
+- name: Set vault credentials fact
+  set_fact:
+    vault_credentials_by_dir: "{{ vault_build_cmd.stdout | from_json }}"
+
+- name: Write vault credentials JSON for reconcile scripts
+  copy:
+    content: "{{ vault_credentials_by_dir | default({}) | to_nice_json }}"
+    dest: "{{ collector_work_dir }}/vault_by_dir.json"
+    mode: "0640"

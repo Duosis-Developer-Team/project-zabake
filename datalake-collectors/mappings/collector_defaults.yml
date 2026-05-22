@@ -1,0 +1,16 @@
+---
+# Default timeouts and check settings per collector_type (non-secret).
+
+defaults:
+  icmp_timeout_sec: 1
+  icmp_count: 3
+  tcp_timeout_sec: 3
+  reconcile_preserve_unknown_sections: true
+
+per_collector:
+  VmWare:
+    tcp_timeout_sec: 5
+  Nutanix:
+    tcp_timeout_sec: 5
+  IBM-HMC:
+    icmp_count: 2

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>HMDL Datalake Collector Sync</title></head>
+<body>
+<h2>HMDL Datalake Collector Sync Report</h2>
+<p><strong>Run ID:</strong> {{ collector_run_id }}</p>
+<p><strong>Dry run:</strong> {{ dry_run | default(true) }}</p>
+<p><strong>Platforms sync:</strong> {{ sync_platforms | default(true) }} |
+   <strong>Devices sync:</strong> {{ sync_devices | default(false) }}</p>
+
+<h3>Added IPs ({{ collector_email_added | default([]) | length }})</h3>
+<table border="1" cellpadding="4">
+<tr><th>Proxy</th><th>Collector</th><th>IP</th><th>Entity</th></tr>
+{% for row in collector_email_added | default([]) %}
+<tr>
+  <td>{{ row.proxy_id | default('') }}</td>
+  <td>{{ row.collector_type | default(row.conf_key) }}</td>
+  <td>{{ row.ip }}</td>
+  <td>{{ row.reason | default('') }}</td>
+</tr>
+{% else %}
+<tr><td colspan="4">None</td></tr>
+{% endfor %}
+</table>
+
+<h3>Removed IPs ({{ collector_email_removed | default([]) | length }})</h3>
+<table border="1" cellpadding="4">
+<tr><th>Proxy</th><th>Collector</th><th>IP</th><th>Reason</th></tr>
+{% for row in collector_email_removed | default([]) %}
+<tr>
+  <td>{{ row.proxy_id | default('') }}</td>
+  <td>{{ row.collector_type | default(row.conf_key) }}</td>
+  <td>{{ row.ip }}</td>
+  <td>{{ row.reason | default('') }}</td>
+</tr>
+{% else %}
+<tr><td colspan="4">None</td></tr>
+{% endfor %}
+</table>
+
+<h3>Connectivity failures ({{ collector_email_failed_checks | default([]) | length }})</h3>
+<table border="1" cellpadding="4">
+<tr><th>IP</th><th>Check</th><th>Port</th><th>Status</th><th>Error</th></tr>
+{% for row in collector_email_failed_checks | default([]) %}
+<tr>
+  <td>{{ row.ip }}</td>
+  <td>{{ row.check_type }}</td>
+  <td>{{ row.port | default('') }}</td>
+  <td>{{ row.status }}</td>
+  <td>{{ row.error_text | default('') }}</td>
+</tr>
+{% else %}
+<tr><td colspan="5">None</td></tr>
+{% endfor %}
+</table>
+</body>
+</html>

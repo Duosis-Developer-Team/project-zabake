@@ -10,6 +10,12 @@ project-zabake/
 ├── .gitignore                   # Git ignore kuralları
 ├── PROJECT_STRUCTURE.md         # Bu dosya
 │
+├── datalake-collectors/         # NetBox → Proxy NiFi configuration_file.json (HMDL)
+│   ├── mappings/
+│   ├── playbooks/
+│   ├── docs/
+│   └── tests/
+├── datalake-collectors-vault-template/  # Gitea-only vault repo şablonu (secret)
 ├── zabbix-netbox/               # Zabbix-Netbox entegrasyonu modülü
 │   ├── README.md                # Zabbix migration dokümantasyonu
 │   ├── requirements.yml         # Ansible collection gereksinimleri

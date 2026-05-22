@@ -1,0 +1,24 @@
+---
+# Maps collector_types.yml vault_key -> vault repo directory (no secrets here).
+
+vault_directories:
+  vmware: vmware/defaults.yml
+  nutanix: nutanix/defaults.yml
+  ibm_hmc: ibm_hmc/defaults.yml
+  ibm_virtualize: ibm_virtualize/defaults.yml
+  veeam: veeam/defaults.yml
+  zerto: zerto/defaults.yml
+  netbackup: netbackup/defaults.yml
+  ilo_redfish: ilo_redfish/defaults.yml
+  inspur_redfish: inspur_redfish/defaults.yml
+  s3icos: s3icos/defaults.yml
+  ibm_san: ibm_san/defaults.yml
+  zabbix_connection: zabbix_connection/defaults.yml
+  loki_connection: loki_connection/defaults.yml
+  servicecore: servicecore/defaults.yml
+  dynamics365: dynamics365/defaults.yml
+  netbackup_old: netbackup_old/defaults.yml
+
+manual_extras_paths:
+  netbackup:
+    Hostname: manual_extras/netbackup/hostnames.yml
