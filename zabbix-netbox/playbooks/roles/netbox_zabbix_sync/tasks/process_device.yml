@@ -184,10 +184,41 @@
 
           return False
 
+      def mapping_tenant_allowlist(mapping):
+          if 'tenants' in mapping and mapping.get('tenants') is not None:
+              raw = mapping.get('tenants')
+              if isinstance(raw, list):
+                  names = [str(x).strip() for x in raw if x is not None and str(x).strip()]
+              else:
+                  names = [str(raw).strip()] if str(raw).strip() else []
+              return names if names else None
+          t1 = mapping.get('tenant')
+          if t1 is not None and str(t1).strip():
+              return [str(t1).strip()]
+          return None
+
+      def mapping_applies_for_tenant(device, mapping):
+          allow = mapping_tenant_allowlist(mapping)
+          if not allow:
+              return True
+          tenant_obj = device.get('tenant') or {}
+          if isinstance(tenant_obj, dict):
+              dev_name = (tenant_obj.get('name') or '').strip()
+          else:
+              dev_name = ''
+          if not dev_name:
+              dev_name = (device.get('tenant_name') or '').strip()
+          if not dev_name:
+              return False
+          dev_u = dev_name.upper()
+          return any(n.strip().upper() == dev_u for n in allow)
+
       def find_matching_mapping(device, device_type_mapping):
           mappings = device_type_mapping.get('mappings', [])
           sorted_mappings = sorted(mappings, key=lambda x: x.get('priority', 999))
           for mapping in sorted_mappings:
+              if not mapping_applies_for_tenant(device, mapping):
+                  continue
               conditions = mapping.get('conditions', {})
               if all(check_condition(device, k, v) for k, v in conditions.items()):
                   return mapping
