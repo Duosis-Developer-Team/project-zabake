@@ -148,7 +148,7 @@
     - sync_devices | bool
     - netbox_devices_final | length > 0
 
-- name: Phase A — parallel device compare (no Zabbix writes)
+- name: Phase A — device compare (no Zabbix writes, sequential loop)
   include_tasks: process_device.yml
   loop: "{{ netbox_devices_final }}"
   loop_control:
@@ -157,7 +157,6 @@
   vars:
     netbox_device: "{{ outer_device_item }}"
     device_sync_phase: compare
-  throttle: "{{ sync_throttle | default(10) }}"
   when:
     - sync_devices | bool
     - use_two_phase_device_sync | default(true) | bool

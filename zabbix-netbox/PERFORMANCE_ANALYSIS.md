@@ -21,7 +21,7 @@ Measured from AWX job `109471` (764 monitor devices, sync_devices only):
 - `fetch_all_zabbix_hostgroups.yml` — single `hostgroup.get` + shared `zbx_group_map_global`
 - `fetch_hmdl_baseline_bulk.yml` — one SQL for all device baselines
 - `debug_mode: false` — suppress per-host debug tasks
-- Two-phase sync: parallel compare (`throttle` on `include_tasks`; no `async`/`poll` — invalid on TaskInclude) + sequential apply (Zabbix writes)
+- Two-phase sync: sequential compare (no Zabbix writes) + sequential apply (Zabbix writes); `async`/`poll`/`throttle` are invalid on `include_tasks`
 - `ansible.cfg`: `profile_tasks` for post-run timing
 
 **Target** (1000+ monitor devices, all sync flags): 30–90 minutes vs ~12 hours.
