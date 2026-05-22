@@ -1,0 +1,110 @@
+---
+# Phase B: sequential Zabbix writes for platforms from compare-phase plan files.
+# Mirrors process_device_apply.yml for the platform entity type.
+
+- name: Load platform sync plan from compare phase
+  set_fact:
+    _platform_sync_plan_loaded: >-
+      {{ lookup('file', '/tmp/platform_plan_' ~ (netbox_platform.id | string) ~ '.json') | from_json }}
+  when: netbox_platform.id is defined
+
+- name: Restore facts from platform sync plan
+  set_fact:
+    zbx_record: "{{ _platform_sync_plan_loaded.zbx_record | default({}) }}"
+    zbx_existing_host: "{{ _platform_sync_plan_loaded.zbx_existing_host | default({}) }}"
+    zbx_scenario: "{{ _platform_sync_plan_loaded.zbx_scenario | default('create') }}"
+    _zbx_record_for_platform: "{{ _platform_sync_plan_loaded.zbx_record | default({}) }}"
+    _zbx_existing_host_for_platform: "{{ _platform_sync_plan_loaded.zbx_existing_host | default({}) }}"
+    _zbx_scenario_for_platform: "{{ _platform_sync_plan_loaded.zbx_scenario | default('create') }}"
+    _zabbix_auth_for_platform: "{{ zabbix_auth }}"
+  when:
+    - _platform_sync_plan_loaded is defined
+    - _platform_sync_plan_loaded.action | default('skip') in ['create', 'update']
+
+- name: Use precomputed result for skip action (no Zabbix API call)
+  set_fact:
+    current_platform_result: "{{ _platform_sync_plan_loaded.current_platform_result | default({}) }}"
+  when:
+    - _platform_sync_plan_loaded is defined
+    - _platform_sync_plan_loaded.action | default('skip') == 'skip'
+
+- name: Apply Zabbix host operations from platform plan (sequential write phase)
+  include_tasks: zabbix_host_operations.yml
+  vars:
+    zbx_record: "{{ _zbx_record_for_platform }}"
+    zabbix_url: "{{ zabbix_url }}"
+    zabbix_user: "{{ zabbix_user }}"
+    zabbix_password: "{{ zabbix_password }}"
+    zabbix_validate_certs: "{{ zabbix_validate_certs }}"
+    zabbix_auth: "{{ _zabbix_auth_for_platform }}"
+    zbx_existing_host: "{{ _zbx_existing_host_for_platform }}"
+    zbx_scenario: "{{ _zbx_scenario_for_platform }}"
+  when:
+    - _platform_sync_plan_loaded is defined
+    - _platform_sync_plan_loaded.action | default('skip') in ['create', 'update']
+    - _zbx_record_for_platform is defined
+    - _zabbix_auth_for_platform is defined
+
+- name: Collect platform result from Zabbix host operations (apply phase)
+  set_fact:
+    current_platform_result: "{{ device_result }}"
+  when:
+    - device_result is defined
+    - device_result | length > 0
+    - device_result.hostname is defined
+
+- name: Save platform result to temporary file (apply phase)
+  copy:
+    content: "{{ current_platform_result | to_json }}"
+    dest: "/tmp/zabbix_platform_operation_result_{{ netbox_platform.id | default('unknown') }}.json"
+  when:
+    - current_platform_result is defined
+    - current_platform_result | length > 0
+  delegate_to: localhost
+
+- name: Log platform result to HMDL audit table (apply phase)
+  include_tasks: hmdl_sync_log.yml
+  vars:
+    hmdl_log_device_id: "{{ netbox_platform.id | default('unknown') }}"
+    hmdl_log_entry:
+      run_id: "{{ hmdl_run_id | default('') }}"
+      awx_job_id: "{{ lookup('env', 'AWX_JOB_ID') | default('', true) }}"
+      playbook_name: "{{ hmdl_playbook_name | default('db_to_zabbix_sync') }}"
+      source_device_id: "{{ netbox_platform.id | default(None) }}"
+      source_device_name: "{{ netbox_platform.name | default(netbox_platform.display | default('')) }}"
+      source_table: "netbox_api_dcim_platform"
+      host_entity_type: platform
+      inventory_source: "{{ platform_source | default('loki') }}"
+      zabbix_hostid: "{{ zbx_existing_host.hostid | default('') }}"
+      zabbix_hostname: "{{ current_platform_result.hostname | default('') }}"
+      zabbix_host_ip: "{{ current_platform_result.ip | default('') }}"
+      device_type: "{{ zbx_record.DEVICE_TYPE | default('') }}"
+      device_role: "PLATFORM"
+      manufacturer_name: "{{ current_platform_result.manufacturer | default('') }}"
+      site_name: "{{ current_platform_result.site | default('') }}"
+      location_name: "{{ current_platform_result.location | default('') }}"
+      location_parent_name: ""
+      root_location_name: ""
+      tenant_name: ""
+      cluster_name: ""
+      operation: "{{ zbx_scenario | default('none') }}"
+      status: "{{ current_platform_result.status | default('eklenemedi') }}"
+      reason: "{{ current_platform_result.reason | default('') }}"
+      last_visible_name: "{{ zbx_record.HOST_VISIBLE_NAME | default('') }}"
+      last_location: "{{ zbx_record.DC_ID | default('') }}"
+      expected_proxy_group_id: ""
+      last_proxy_group_id: ""
+      zabbix_proxy_group_id: ""
+      proxy_location_change: false
+      proxy_manual_change_detected: false
+      field_merge_actions: {}
+      last_managed_groups: []
+      dry_run: "{{ dry_run | default(false) | bool }}"
+      extra_data: {}
+      request_payload: "{{ zbx_record | default({}) }}"
+      response_payload: {}
+      error_payload: {}
+  when:
+    - hmdl_log_enabled | bool
+    - current_platform_result is defined
+    - current_platform_result | length > 0

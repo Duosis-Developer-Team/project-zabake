@@ -1,0 +1,154 @@
+---
+# Phase A: parallel compare for devices, platforms, and virtual firewalls.
+# Runs parallel_compare_engine.py once (run_once: true); writes plan files to /tmp.
+# Ansible apply loops (Phase B) consume these plan files sequentially.
+
+- name: Copy parallel compare engine to runner
+  copy:
+    src: parallel_compare_engine.py
+    dest: /tmp/parallel_compare_engine.py
+    mode: '0755'
+  delegate_to: localhost
+  run_once: true
+
+- name: Write devices JSON for compare engine
+  copy:
+    content: "{{ netbox_devices_final | default([]) | to_json }}"
+    dest: /tmp/pce_devices.json
+  delegate_to: localhost
+  run_once: true
+  when: sync_devices | bool
+
+- name: Write empty devices JSON when device sync disabled
+  copy:
+    content: "[]"
+    dest: /tmp/pce_devices.json
+  delegate_to: localhost
+  run_once: true
+  when: not (sync_devices | bool)
+
+- name: Write platforms JSON for compare engine
+  copy:
+    content: "{{ netbox_platforms_raw | default([]) | to_json }}"
+    dest: /tmp/pce_platforms.json
+  delegate_to: localhost
+  run_once: true
+  when: sync_platforms | bool
+
+- name: Write empty platforms JSON when platform sync disabled
+  copy:
+    content: "[]"
+    dest: /tmp/pce_platforms.json
+  delegate_to: localhost
+  run_once: true
+  when: not (sync_platforms | bool)
+
+- name: Write virtual firewalls JSON for compare engine
+  copy:
+    content: "{{ netbox_virtual_fws_raw | default([]) | to_json }}"
+    dest: /tmp/pce_vfws.json
+  delegate_to: localhost
+  run_once: true
+  when: sync_virtual_fws | bool
+
+- name: Write empty VFWs JSON when VFW sync disabled
+  copy:
+    content: "[]"
+    dest: /tmp/pce_vfws.json
+  delegate_to: localhost
+  run_once: true
+  when: not (sync_virtual_fws | bool)
+
+- name: Write Zabbix hosts by Loki_ID map for compare engine
+  copy:
+    content: "{{ zabbix_hosts_by_loki_id | default({}) | to_json }}"
+    dest: /tmp/pce_zbx_by_loki.json
+  delegate_to: localhost
+  run_once: true
+
+- name: Write Zabbix hosts by hostname map for compare engine
+  copy:
+    content: "{{ zabbix_hosts_by_hostname | default({}) | to_json }}"
+    dest: /tmp/pce_zbx_by_hostname.json
+  delegate_to: localhost
+  run_once: true
+
+- name: Write Zabbix hosts by visible name map for compare engine
+  copy:
+    content: "{{ zabbix_hosts_by_visible_name | default({}) | to_json }}"
+    dest: /tmp/pce_zbx_by_visible.json
+  delegate_to: localhost
+  run_once: true
+
+- name: Run parallel compare engine (Phase A)
+  command: >
+    python3 /tmp/parallel_compare_engine.py
+    --devices-json /tmp/pce_devices.json
+    --platforms-json /tmp/pce_platforms.json
+    --vfws-json /tmp/pce_vfws.json
+    --mappings-dir {{ (playbook_dir | default(ansible_playbook_directory)) + '/../mappings' }}
+    --zbx-hosts-loki-map /tmp/pce_zbx_by_loki.json
+    --zbx-hosts-hostname-map /tmp/pce_zbx_by_hostname.json
+    --zbx-hosts-visible-map /tmp/pce_zbx_by_visible.json
+    --output-dir /tmp
+    --workers {{ parallel_compare_workers | default(20) | int }}
+    {{ '--create-devices-disabled' if (create_devices_disabled | default(false) | bool) else '' }}
+    {{ '--create-platforms-disabled' if (create_platforms_disabled | default(false) | bool) else '' }}
+    {{ '--create-vfws-disabled' if (create_virtual_fws_disabled | default(false) | bool) else '' }}
+  register: pce_result
+  delegate_to: localhost
+  run_once: true
+  changed_when: false
+  failed_when: false
+
+- name: Show compare engine progress output
+  debug:
+    msg: "{{ item }}"
+  loop: "{{ (pce_result.stdout_lines | default([])) }}"
+  delegate_to: localhost
+  run_once: true
+  when:
+    - pce_result.stdout_lines is defined
+    - pce_result.stdout_lines | length > 0
+
+- name: Fail when compare engine exited with error
+  fail:
+    msg: >
+      parallel_compare_engine.py exited with code {{ pce_result.rc }}.
+      stderr: {{ pce_result.stderr | default('') }}
+  when:
+    - pce_result.rc is defined
+    - pce_result.rc != 0
+    - not (parallel_compare_ignore_errors | default(false) | bool)
+  delegate_to: localhost
+  run_once: true
+
+- name: Parse compare engine summary
+  set_fact:
+    pce_summary: >-
+      {%- set lines = pce_result.stdout_lines | default([]) -%}
+      {%- set found = {} -%}
+      {%- for line in lines -%}
+        {%- set parsed = line | from_json -%}
+        {%- if parsed.type is defined and parsed.type == 'summary' -%}
+          {%- set found = parsed -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ found }}
+  delegate_to: localhost
+  run_once: true
+  when: pce_result.stdout_lines is defined
+
+- name: Display compare engine summary
+  debug:
+    msg: |
+      ============================================
+      PHASE A COMPARE ENGINE SUMMARY
+      ============================================
+      Devices:   total={{ pce_summary.devices.total | default(0) }}  create={{ pce_summary.devices.create | default(0) }}  update={{ pce_summary.devices.update | default(0) }}  skip={{ pce_summary.devices.skip | default(0) }}  error={{ pce_summary.devices.error | default(0) }}
+      Platforms: total={{ pce_summary.platforms.total | default(0) }}  create={{ pce_summary.platforms.create | default(0) }}  update={{ pce_summary.platforms.update | default(0) }}  skip={{ pce_summary.platforms.skip | default(0) }}  error={{ pce_summary.platforms.error | default(0) }}
+      VFWs:      total={{ pce_summary.vfws.total | default(0) }}  create={{ pce_summary.vfws.create | default(0) }}  update={{ pce_summary.vfws.update | default(0) }}  skip={{ pce_summary.vfws.skip | default(0) }}  error={{ pce_summary.vfws.error | default(0) }}
+      ============================================
+  delegate_to: localhost
+  run_once: true
+  when: pce_summary is defined

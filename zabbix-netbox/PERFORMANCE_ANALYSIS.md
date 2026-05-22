@@ -30,6 +30,57 @@ Re-run AWX with `callback_whitelist=profile_tasks` after deploy to capture after
 
 ---
 
+## 🚀 Architecture v2: Parallel Compare Engine (2026-05-22)
+
+### Problem (job 109487)
+- **127 devices compare + apply: 47 minutes**, then fatal abort
+- `zbx_templates_found_names` undefined error (self-reference in same `set_fact` block)
+- Ansible `async`/`poll`/`throttle` invalid on `include_tasks` → forced sequential compare
+
+### New Architecture
+
+```
+Bootstrap + prefetch (run_once)
+    ↓
+Phase A: parallel_compare_engine.py (ThreadPoolExecutor, 20 workers)
+    Devices + Platforms + VFWs in parallel
+    ↓
+device_plan_*.json / platform_plan_*.json / vfw_plan_*.json
+    ↓
+Phase B: Ansible sequential apply (Zabbix host.create / host.update)
+    process_device_apply.yml / process_platform_apply.yml / process_virtual_fw_apply.yml
+    ↓
+HMDL log (hmdl_sync_log.yml — existing audit infrastructure unchanged)
+```
+
+### Time Estimate (120 devices)
+
+| Phase | Duration |
+|-------|----------|
+| Bootstrap + prefetch | ~30s (unchanged) |
+| Phase A: Python parallel compare (20 workers) | **~60–120s** (vs. ~22 min before) |
+| Phase B: Ansible sequential apply (~3–5s/host) | ~6–10 min |
+| **Total** | **8–12 minutes** ✅ (target < 15 min) |
+
+### Caveats
+
+- **2643 hosts (full inventory)**: Apply phase remains sequential → ~3 hours. This is a separate feature
+  requiring either sliced AWX jobs or a Python apply pool (ZBX-4134 trade-off).
+- **Feature flag**: `use_python_parallel_compare: false` falls back to legacy single-phase Ansible loop
+  (for rollback without code changes).
+- **Error isolation**: A single item exception in the compare engine writes an error plan (action=skip)
+  and does not abort the other items. Compare errors are surfaced in the AWX job log.
+
+### Reliability fixes included (v2)
+
+| Bug | Fix |
+|-----|-----|
+| `zbx_templates_found_names` undefined (job 109487) | Split into two separate `set_fact` tasks |
+| Tab characters in hostnames (reliability D) | `sanitize_hostname()` in engine |
+| Platform canonical-host collision (reliability E) | Canonical hostname override check in `compare_one_platform()` |
+
+---
+
 ## 📊 Current Performance Issue
 
 ### Observed Metrics (job_597.txt)
