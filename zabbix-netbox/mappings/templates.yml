@@ -177,7 +177,7 @@ Oracle Storage:
     host_groups: 
       - "Storage Devices"
 Purestorage:
-  - name: BLT - Pure Storage FlashArray v2 by HTTP
+  - name: BLT - Pure Storage FlashArray v1 by HTTP
     type: API
     host_groups: 
       - "Storage Devices"
