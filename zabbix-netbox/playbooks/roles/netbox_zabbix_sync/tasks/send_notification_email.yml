@@ -7,6 +7,11 @@
     current_devices_count: "{{ processing_results | default([]) | selectattr('status', 'equalto', 'güncel') | list | length | int }}"
     total_devices_count: "{{ processing_results | default([]) | length | int }}"
     skipped_izlenmeyecek_count: "{{ processing_results | default([]) | selectattr('status', 'equalto', 'atlandı') | list | length | int }}"
+    dry_run_count: "{{ processing_results | default([]) | selectattr('status', 'equalto', 'dry_run') | list | length | int }}"
+    dry_run_create_count: "{{ processing_results | default([]) | selectattr('status', 'equalto', 'dry_run') | selectattr('planned_operation', 'equalto', 'create') | list | length | int }}"
+    dry_run_update_count: "{{ processing_results | default([]) | selectattr('status', 'equalto', 'dry_run') | selectattr('planned_operation', 'equalto', 'update') | list | length | int }}"
+    dry_run_create_list: "{{ processing_results | default([]) | selectattr('status', 'equalto', 'dry_run') | selectattr('planned_operation', 'equalto', 'create') | list }}"
+    dry_run_update_list: "{{ processing_results | default([]) | selectattr('status', 'equalto', 'dry_run') | selectattr('planned_operation', 'equalto', 'update') | list }}"
 
 - name: Generate email HTML content (Summary + Failures Only)
   set_fact:
@@ -20,23 +25,99 @@
           th { background-color: #f44336; color: white; }
           tr:nth-child(even) { background-color: #f2f2f2; }
           .status-eklenemedi { color: #f44336; font-weight: bold; }
+          .status-dryrun-create { color: #1565c0; font-weight: bold; }
+          .status-dryrun-update { color: #ef6c00; font-weight: bold; }
           .summary { margin: 20px 0; padding: 15px; background-color: #f9f9f9; border-left: 4px solid #4CAF50; }
           .summary-warning { border-left-color: #f44336; }
+          .summary-dryrun { border-left-color: #ff9800; background-color: #fff8e1; }
           .section-header { margin-top: 30px; padding: 10px; background-color: #ffebee; border-left: 4px solid #f44336; }
+          .section-header-dryrun { margin-top: 30px; padding: 10px; background-color: #fff3e0; border-left: 4px solid #ff9800; }
           .info-box { padding: 10px; background-color: #e3f2fd; border-left: 4px solid #2196F3; margin: 20px 0; }
         </style>
       </head>
       <body>
-        <h2>Loki - Zabbix Entegrasyonu Raporu</h2>
-        <div class="summary {%- if failed_devices_count | int > 0 %} summary-warning{%- endif %}">
+        <h2>Loki - Zabbix Entegrasyonu Raporu{% if dry_run | default(false) | bool %} <span style="color:#e65100;">[DRY-RUN]</span>{% endif %}</h2>
+        <div class="summary {%- if dry_run | default(false) | bool %} summary-dryrun{%- elif failed_devices_count | int > 0 %} summary-warning{%- endif %}">
           <h3>📊 Özet</h3>
+          {% if dry_run | default(false) | bool %}
+          <p><strong>⚠️ Mod:</strong> DRY-RUN — Zabbix host.create / host.update API çağrıları yapılmadı.</p>
+          {% endif %}
           <p><strong>Toplam İşlem:</strong> {{ total_devices_count }}</p>
+          {% if dry_run | default(false) | bool %}
+          <p><strong>➕ Eklenecekti (planlanan create):</strong> {{ dry_run_create_count }}</p>
+          <p><strong>🔄 Güncellenecekti (planlanan update):</strong> {{ dry_run_update_count }}</p>
+          {% else %}
           <p><strong>✅ Başarılı (Eklendi):</strong> {{ added_devices_count }}</p>
           <p><strong>🔄 Güncellendi:</strong> {{ updated_devices_count }}</p>
+          {% endif %}
           <p><strong>ℹ️ Güncel (Değişiklik Yok):</strong> {{ current_devices_count }}</p>
           <p><strong>❌ Başarısız (Eklenemedi):</strong> {{ failed_devices_count }}</p>
           <p><strong>⏭️ Atlandı (İzlenmeyecek):</strong> {{ skipped_izlenmeyecek_count }}</p>
         </div>
+
+        {%- if dry_run | default(false) | bool and dry_run_create_list | length > 0 -%}
+        <div class="section-header-dryrun"><h3>➕ DRY-RUN: Eklenecek Hostlar ({{ dry_run_create_count }})</h3></div>
+        <table>
+          <thead>
+            <tr>
+              <th>Sunucu Adı</th>
+              <th>Device Role</th>
+              <th>Lokasyon</th>
+              <th>Site</th>
+              <th>Tenant</th>
+              <th>IP Adresi</th>
+              <th>Planlanan İşlem</th>
+              <th>Açıklama</th>
+            </tr>
+          </thead>
+          <tbody>
+            {%- for result in dry_run_create_list -%}
+            <tr>
+              <td>{{ result.hostname | default('N/A') }}</td>
+              <td>{{ result.device_role | default('N/A') }}</td>
+              <td>{{ result.location | default('N/A') }}</td>
+              <td>{{ result.site | default('N/A') }}</td>
+              <td>{{ result.tenant | default('N/A') }}</td>
+              <td>{{ result.ip | default('N/A') }}</td>
+              <td class="status-dryrun-create">CREATE (host.create)</td>
+              <td>{{ result.reason | default('-') }}</td>
+            </tr>
+            {%- endfor -%}
+          </tbody>
+        </table>
+        {%- endif -%}
+
+        {%- if dry_run | default(false) | bool and dry_run_update_list | length > 0 -%}
+        <div class="section-header-dryrun"><h3>🔄 DRY-RUN: Güncellenecek Hostlar ({{ dry_run_update_count }})</h3></div>
+        <table>
+          <thead>
+            <tr>
+              <th>Sunucu Adı</th>
+              <th>Device Role</th>
+              <th>Lokasyon</th>
+              <th>Site</th>
+              <th>Tenant</th>
+              <th>IP Adresi</th>
+              <th>Planlanan İşlem</th>
+              <th>Açıklama / Değişiklikler</th>
+            </tr>
+          </thead>
+          <tbody>
+            {%- for result in dry_run_update_list -%}
+            <tr>
+              <td>{{ result.hostname | default('N/A') }}</td>
+              <td>{{ result.device_role | default('N/A') }}</td>
+              <td>{{ result.location | default('N/A') }}</td>
+              <td>{{ result.site | default('N/A') }}</td>
+              <td>{{ result.tenant | default('N/A') }}</td>
+              <td>{{ result.ip | default('N/A') }}</td>
+              <td class="status-dryrun-update">UPDATE (host.update)</td>
+              <td>{{ result.reason | default('-') }}</td>
+            </tr>
+            {%- endfor -%}
+          </tbody>
+        </table>
+        {%- endif -%}
         
         {%- set failed_list = processing_results | default([]) | selectattr('status', 'equalto', 'eklenemedi') | list -%}
         {%- if failed_list | length > 0 -%}
@@ -71,7 +152,7 @@
             {%- endfor -%}
           </tbody>
         </table>
-        {%- else -%}
+        {%- elif not (dry_run | default(false) | bool) -%}
         <div class="info-box">
           <h3>✅ Tüm Cihazlar Başarıyla İşlendi</h3>
           <p>Hiçbir hata oluşmadı. Tüm cihazlar başarıyla eklendi veya güncellendi.</p>
@@ -128,17 +209,57 @@
 - name: Generate email plain text content (Summary + Failures Only)
   set_fact:
     email_text_content: >-
-      LOKI - ZABBIX ENTEGRASYONU RAPORU
+      LOKI - ZABBIX ENTEGRASYONU RAPORU{% if dry_run | default(false) | bool %} [DRY-RUN]{% endif %}
       ==================================
       
       ÖZET:
       -----
+      {% if dry_run | default(false) | bool %}
+      MOD: DRY-RUN — Zabbix host.create / host.update yapılmadı.
+      {% endif %}
       Toplam İşlem: {{ total_devices_count }}
+      {% if dry_run | default(false) | bool %}
+      ➕ Eklenecekti (create): {{ dry_run_create_count }}
+      🔄 Güncellenecekti (update): {{ dry_run_update_count }}
+      {% else %}
       ✅ Başarılı (Eklendi): {{ added_devices_count }}
       🔄 Güncellendi: {{ updated_devices_count }}
+      {% endif %}
       ℹ️ Güncel (Değişiklik Yok): {{ current_devices_count }}
       ❌ Başarısız (Eklenemedi): {{ failed_devices_count }}
       ⏭️ Atlandı (İzlenmeyecek): {{ skipped_izlenmeyecek_count }}
+
+      {%- if dry_run | default(false) | bool and dry_run_create_list | length > 0 %}
+
+      ➕ DRY-RUN: EKLENECEK HOSTLAR ({{ dry_run_create_count }}):
+      ------------------------------------------
+      {%- for result in dry_run_create_list %}
+
+      Sunucu: {{ result.hostname | default('N/A') }}
+      Rol: {{ result.device_role | default('N/A') }}
+      Lokasyon: {{ result.location | default('N/A') }}
+      Tenant: {{ result.tenant | default('N/A') }}
+      IP: {{ result.ip | default('N/A') }}
+      Plan: CREATE (host.create)
+      Açıklama: {{ result.reason | default('-') }}
+      {%- endfor -%}
+      {%- endif %}
+
+      {%- if dry_run | default(false) | bool and dry_run_update_list | length > 0 %}
+
+      🔄 DRY-RUN: GÜNCELLENECEK HOSTLAR ({{ dry_run_update_count }}):
+      ------------------------------------------
+      {%- for result in dry_run_update_list %}
+
+      Sunucu: {{ result.hostname | default('N/A') }}
+      Rol: {{ result.device_role | default('N/A') }}
+      Lokasyon: {{ result.location | default('N/A') }}
+      Tenant: {{ result.tenant | default('N/A') }}
+      IP: {{ result.ip | default('N/A') }}
+      Plan: UPDATE (host.update)
+      Açıklama: {{ result.reason | default('-') }}
+      {%- endfor -%}
+      {%- endif %}
       
       {%- set failed_list = processing_results | default([]) | selectattr('status', 'equalto', 'eklenemedi') | list -%}
       {%- if failed_list | length > 0 %}
@@ -157,7 +278,7 @@
       Durum: EKLENEMEDI
       Hata Sebebi: {{ result.reason | default('-') }}
       {%- endfor -%}
-      {%- else %}
+      {%- elif not (dry_run | default(false) | bool) %}
       
       ✅ TÜM CİHAZLAR BAŞARIYLA İŞLENDİ
       ------------------------------------------
@@ -193,7 +314,9 @@
 - name: Generate email subject
   set_fact:
     email_subject: >-
-      {%- if failed_devices_count | int > 0 -%}
+      {%- if dry_run | default(false) | bool -%}
+      [DRY-RUN] Loki - Zabbix Entegrasyonu - {{ dry_run_create_count }} Eklenecek, {{ dry_run_update_count }} Güncellenecek{% if failed_devices_count | int > 0 %}, {{ failed_devices_count }} Hata{% endif %}
+      {%- elif failed_devices_count | int > 0 -%}
       Loki - Zabbix Entegrasyonu Raporu - {{ failed_devices_count }} Sunucu Eklenemedi
       {%- else -%}
       Loki - Zabbix Entegrasyonu Raporu - Tüm İşlemler Başarılı ({{ added_devices_count }} Eklendi, {{ updated_devices_count }} Güncellendi)
@@ -275,7 +398,9 @@
       - Güncellendi: {{ updated_devices_count }}
       - Güncel: {{ current_devices_count }}
       - Başarısız: {{ failed_devices_count }}
-      {% if failed_devices_count | int > 0 %}
+      {% if dry_run | default(false) | bool %}
+      DRY-RUN: {{ dry_run_create_count }} eklenecek, {{ dry_run_update_count }} güncellenecek (API yazımı yok)
+      {% elif failed_devices_count | int > 0 %}
       UYARI: Başarısız işlem var - {{ failed_devices_count }} sunucu eklenemedi
       {% else %}
       BAŞARILI: Tüm işlemler başarılı

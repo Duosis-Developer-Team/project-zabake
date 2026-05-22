@@ -59,3 +59,41 @@ def test_build_csv_attachment_defaults_missing_report_fields_to_na():
     assert data_cols[4] == "N/A"
     assert data_cols[5] == "N/A"
     assert data_cols[6] == "N/A"
+
+
+def test_build_csv_attachment_dry_run_create_and_update_labels():
+    mod = _load_smtp_module()
+    rows = [
+        {
+            "hostname": "new-host",
+            "device_role": "HOST",
+            "location": "DC14",
+            "site": "DC14",
+            "tenant": "CPE-Tenant",
+            "ownership": "Team",
+            "ip": "10.0.0.2",
+            "status": "dry_run",
+            "planned_operation": "create",
+            "reason": "Dry-run: host.create çağrısı yapılmadı — eklenecekti",
+        },
+        {
+            "hostname": "upd-host",
+            "device_role": "HOST",
+            "location": "DC14",
+            "site": "DC14",
+            "tenant": "CPE-Tenant",
+            "ownership": "Team",
+            "ip": "10.0.0.3",
+            "status": "dry_run",
+            "planned_operation": "update",
+            "reason": "Dry-run: host.update çağrısı yapılmadı — güncellenecekti",
+        },
+    ]
+    attachment = mod.build_csv_attachment(rows)
+    raw = attachment.get_payload(decode=True)
+    assert raw is not None
+    text = raw.decode("utf-8-sig")
+    assert "DRY-RUN — CREATE (host.create)" in text
+    assert "DRY-RUN — UPDATE (host.update)" in text
+    assert "eklenecekti" in text
+    assert "güncellenecekti" in text

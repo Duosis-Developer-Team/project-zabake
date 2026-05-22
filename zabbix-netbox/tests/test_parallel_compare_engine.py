@@ -28,7 +28,9 @@ from parallel_compare_engine import (
     compare_one_device,
     compare_one_platform,
     compare_one_vfw,
+    process_device_info,
     run_parallel_compare,
+    _find_matching_mapping_safe,
     zabbix_platform_technical_hostname,
     zabbix_vfw_technical_hostname,
     zabbix_vfw_display_name,
@@ -147,6 +149,54 @@ def _make_vfw(hostname="ACME-FW1", vfw_id=3001, vendor="Fortinet", model="FortiG
 # ---------------------------------------------------------------------------
 # Device tests
 # ---------------------------------------------------------------------------
+
+HPE_MONEYGRAM_MAPPING = {
+    "mappings": [
+        {
+            "device_type": "HPE IPMI Moneygram",
+            "tenant": "Moneygram",
+            "conditions": {"device_role": "HOST", "manufacturer": ["HPE", "HP"]},
+            "hostname_suffix": " - BMC",
+            "priority": 1,
+        },
+        {
+            "device_type": "HPE IPMI",
+            "conditions": {"device_role": "HOST", "manufacturer": ["HPE", "HP"]},
+            "hostname_suffix": " - BMC",
+            "priority": 1,
+        },
+    ]
+}
+
+
+class TestHpeMoneygramTenantGate:
+    def test_hpe_host_without_moneygram_tenant_gets_generic_ipmi(self):
+        device = {
+            "id": 9001,
+            "name": "srv01",
+            "device_role_name": "HOST",
+            "manufacturer_name": "HPE",
+            "device_model": "DL380",
+            "primary_ip_address": "10.0.0.1",
+            "tenant": {},
+            "tenant_name": "CPE-Tenant",
+        }
+        info = process_device_info(device, HPE_MONEYGRAM_MAPPING, None, None, TEMPLATES_MAP)
+        assert info["device_type"] == "HPE IPMI"
+
+    def test_find_matching_mapping_safe_skips_moneygram_without_tenant(self):
+        device = {
+            "id": 9002,
+            "name": "srv02",
+            "device_role_name": "HOST",
+            "manufacturer_name": "HPE",
+            "tenant": {},
+            "tenant_name": "",
+        }
+        mapping = _find_matching_mapping_safe(device, HPE_MONEYGRAM_MAPPING)
+        assert mapping is not None
+        assert mapping.get("device_type") == "HPE IPMI"
+
 
 class TestCompareOneDevice:
     def test_create_scenario_when_not_in_zabbix(self):

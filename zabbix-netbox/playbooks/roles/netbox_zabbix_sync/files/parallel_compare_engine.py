@@ -295,36 +295,59 @@ def _check_condition(device: Dict, key: str, value: Any) -> bool:
     return False
 
 
-def _mapping_applies_for_tenant(device: Dict, mapping: Dict) -> bool:
+def _resolve_device_tenant_name(device: Dict) -> str:
+    """
+    Resolve NetBox tenant label from nested tenant object or flat tenant_name (datalake/Loki).
+    Empty tenant dict must not hide a valid flat tenant_name field.
+    """
+    tenant_obj = device.get("tenant")
+    if isinstance(tenant_obj, dict):
+        name = (tenant_obj.get("name") or "").strip()
+        if name:
+            return name
+    return (device.get("tenant_name") or "").strip()
+
+
+def _mapping_tenant_allowlist(mapping: Dict) -> Optional[List[str]]:
     if "tenants" in mapping and mapping.get("tenants") is not None:
         raw = mapping["tenants"]
         if isinstance(raw, list):
             names = [str(x).strip() for x in raw if x is not None and str(x).strip()]
         else:
             names = [str(raw).strip()] if str(raw).strip() else []
-        if not names:
-            return True
-        tenant_obj = device.get("tenant")
-        dev_name = ""
-        if isinstance(tenant_obj, dict):
-            dev_name = (tenant_obj.get("name") or "").strip()
-        else:
-            dev_name = (device.get("tenant_name") or "").strip()
-        if not dev_name:
-            return False
-        return any(n.strip().upper() == dev_name.upper() for n in names)
+        return names if names else None
     t1 = mapping.get("tenant")
     if t1 is not None and str(t1).strip():
-        tenant_obj = device.get("tenant")
-        dev_name = ""
-        if isinstance(tenant_obj, dict):
-            dev_name = (tenant_obj.get("name") or "").strip()
-        else:
-            dev_name = (device.get("tenant_name") or "").strip()
-        if not dev_name:
-            return False
-        return str(t1).strip().upper() == dev_name.upper()
-    return True
+        return [str(t1).strip()]
+    return None
+
+
+def _mapping_applies_for_tenant(device: Dict, mapping: Dict) -> bool:
+    allow = _mapping_tenant_allowlist(mapping)
+    if not allow:
+        return True
+    dev_name = _resolve_device_tenant_name(device)
+    if not dev_name:
+        return False
+    dev_u = dev_name.upper()
+    return any(n.strip().upper() == dev_u for n in allow)
+
+
+def _mapping_is_tenant_scoped(mapping: Dict) -> bool:
+    return _mapping_tenant_allowlist(mapping) is not None
+
+
+def _device_type_mapping_without_tenant_scope(
+    device_type_mapping: Dict, excluded_tenant_labels: List[str]
+) -> Dict:
+    excluded = {str(t).strip().upper() for t in excluded_tenant_labels if str(t).strip()}
+    filtered = []
+    for mapping in device_type_mapping.get("mappings", []):
+        allow = _mapping_tenant_allowlist(mapping)
+        if allow and any(label in excluded for label in (a.upper() for a in allow)):
+            continue
+        filtered.append(mapping)
+    return {"mappings": filtered}
 
 
 def _find_matching_mapping(device: Dict, device_type_mapping: Dict) -> Optional[Dict]:
@@ -336,6 +359,22 @@ def _find_matching_mapping(device: Dict, device_type_mapping: Dict) -> Optional[
         if all(_check_condition(device, k, v) for k, v in conditions.items()):
             return mapping
     return None
+
+
+def _find_matching_mapping_safe(device: Dict, device_type_mapping: Dict) -> Optional[Dict]:
+    """
+    Pick device_type mapping; if a tenant-scoped row matched without tenant proof, retry without it.
+    Prevents HPE HOST -> HPE IPMI Moneygram when tenant_name is missing/wrong on empty tenant dict.
+    """
+    matching = _find_matching_mapping(device, device_type_mapping)
+    if not matching or not _mapping_is_tenant_scoped(matching):
+        return matching
+    allow = _mapping_tenant_allowlist(matching) or []
+    dev_tenant = _resolve_device_tenant_name(device).upper()
+    if dev_tenant and any(a.strip().upper() == dev_tenant for a in allow):
+        return matching
+    stripped = _device_type_mapping_without_tenant_scope(device_type_mapping, allow)
+    return _find_matching_mapping(device, stripped)
 
 
 def _extract_host_groups_from_config(
@@ -532,7 +571,7 @@ def process_device_info(
     templates_map: Optional[Dict],
 ) -> Dict:
     """Run the device processing logic (equivalent to netbox_device_processor.py)."""
-    matching_mapping = _find_matching_mapping(device, device_type_mapping)
+    matching_mapping = _find_matching_mapping_safe(device, device_type_mapping)
     device_type = matching_mapping.get("device_type") if matching_mapping else None
     hostname_prefix = (matching_mapping.get("hostname_prefix") or "") if matching_mapping else ""
     hostname_suffix = (matching_mapping.get("hostname_suffix") or "") if matching_mapping else ""

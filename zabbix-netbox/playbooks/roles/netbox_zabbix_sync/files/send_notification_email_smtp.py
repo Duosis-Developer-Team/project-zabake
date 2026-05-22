@@ -42,7 +42,7 @@ def build_csv_attachment(processing_results) -> MIMEApplication:
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    status_order = {"eklenemedi": 1, "eklendi": 2, "güncellendi": 3, "güncel": 4}
+    status_order = {"eklenemedi": 1, "dry_run": 2, "eklendi": 3, "güncellendi": 4, "güncel": 5}
     sorted_results = sorted(
         processing_results,
         key=lambda x: status_order.get(str(x.get("status", "")).lower(), 5),
@@ -53,6 +53,12 @@ def build_csv_attachment(processing_results) -> MIMEApplication:
         "GÜNCELLENDI": "GÜNCELLENDİ",
         "GÜNCEL": "GÜNCEL",
         "EKLENEMEDI": "EKLENEMEDI",
+        "DRY_RUN": "DRY-RUN (PLANLANMIŞ)",
+    }
+
+    planned_op_tr = {
+        "create": "CREATE (host.create)",
+        "update": "UPDATE (host.update)",
     }
 
     for idx, result in enumerate(sorted_results, 1):
@@ -65,8 +71,11 @@ def build_csv_attachment(processing_results) -> MIMEApplication:
         ip_addr = result.get("ip", "N/A")
         status = str(result.get("status", "N/A")).upper()
         reason = result.get("reason", "-")
+        planned_op = str(result.get("planned_operation", "") or "").strip().lower()
 
         status_tr = status_tr_map.get(status, status)
+        if status == "DRY_RUN" and planned_op in planned_op_tr:
+            status_tr = f"DRY-RUN — {planned_op_tr[planned_op]}"
 
         writer.writerow(
             [

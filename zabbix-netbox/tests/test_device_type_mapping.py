@@ -77,15 +77,22 @@ def mapping_tenant_allowlist(mapping):
     return None
 
 
+def resolve_device_tenant_name(device):
+    """Mirror production: nested tenant.name, else flat tenant_name."""
+    tenant_obj = device.get('tenant')
+    if isinstance(tenant_obj, dict):
+        name = (tenant_obj.get('name') or '').strip()
+        if name:
+            return name
+    return (device.get('tenant_name') or '').strip()
+
+
 def mapping_applies_for_tenant(device, mapping):
     """If mapping has tenant/tenants, device must have tenant.name in allowlist."""
     allow = mapping_tenant_allowlist(mapping)
     if not allow:
         return True
-    tenant_obj = device.get('tenant') or {}
-    if not isinstance(tenant_obj, dict):
-        return False
-    dev_name = (tenant_obj.get('name') or '').strip()
+    dev_name = resolve_device_tenant_name(device)
     if not dev_name:
         return False
     dev_u = dev_name.upper()
@@ -499,6 +506,57 @@ class TestMoneygramDeviceTypeMappings(unittest.TestCase):
             'tenant_name': 'CPE-Tenant',
             'manufacturer_name': 'HPE',
             'device_model': 'Proliant Compute DL380a Gen12',
+        }
+        mapping = {
+            'mappings': [
+                {
+                    'device_type': 'HPE IPMI Moneygram',
+                    'tenant': 'Moneygram',
+                    'conditions': {'device_role': 'HOST', 'manufacturer': ['HPE', 'HP']},
+                    'priority': 1,
+                },
+                {
+                    'device_type': 'HPE IPMI',
+                    'conditions': {'device_role': 'HOST', 'manufacturer': ['HPE', 'HP']},
+                    'priority': 1,
+                },
+            ]
+        }
+        self.assertEqual(determine_device_type(device, mapping), 'HPE IPMI')
+
+    def test_hpe_host_empty_tenant_dict_uses_flat_tenant_name_not_moneygram(self):
+        """Regression: tenant={} must not block flat tenant_name from skipping Moneygram row."""
+        device = {
+            'name': 'srv-hpe-01',
+            'device_role_name': 'HOST',
+            'tenant': {},
+            'tenant_name': 'CPE-Tenant',
+            'manufacturer_name': 'HPE',
+            'device_model': 'DL380',
+        }
+        mapping = {
+            'mappings': [
+                {
+                    'device_type': 'HPE IPMI Moneygram',
+                    'tenant': 'Moneygram',
+                    'conditions': {'device_role': 'HOST', 'manufacturer': ['HPE', 'HP']},
+                    'priority': 1,
+                },
+                {
+                    'device_type': 'HPE IPMI',
+                    'conditions': {'device_role': 'HOST', 'manufacturer': ['HPE', 'HP']},
+                    'priority': 1,
+                },
+            ]
+        }
+        self.assertEqual(determine_device_type(device, mapping), 'HPE IPMI')
+
+    def test_hpe_host_empty_tenant_dict_without_tenant_name_skips_moneygram(self):
+        device = {
+            'name': 'srv-hpe-02',
+            'device_role_name': 'HOST',
+            'tenant': {},
+            'manufacturer_name': 'HPE',
         }
         mapping = {
             'mappings': [
