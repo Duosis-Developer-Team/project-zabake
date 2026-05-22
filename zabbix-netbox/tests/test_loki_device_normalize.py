@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "playbooks/roles/netbox_zabbix_sync/files"))
 
 from netbox_device_normalize import (  # noqa: E402
+    build_location_root_map,
     device_role_name,
     extract_primary_ip_address,
     manufacturer_name,
@@ -88,6 +89,23 @@ class TestLokiDeviceNormalize(unittest.TestCase):
         check_condition(record, key, value),
         msg=f"condition {key}={value} failed on normalized record",
       )
+
+  def test_normalize_uses_location_root_map_without_filter(self):
+    """Nested location: TELCO A3 under DC14 resolves root via map."""
+    locations = [
+      {"id": 1, "name": "DC14", "parent": None},
+      {"id": 2, "name": "TELCO A3", "parent": {"id": 1, "name": "DC14"}},
+    ]
+    root_map = build_location_root_map(locations)
+    device = {
+      "name": "H3C DEMO SERVER 1",
+      "role": {"name": "HOST"},
+      "location": {"id": 2, "name": "TELCO A3"},
+      "site": {"name": "ANKARA"},
+    }
+    record = normalize_device_record(device, location_root_map=root_map)
+    self.assertEqual(record["location_name"], "TELCO A3")
+    self.assertEqual(record["root_location_name"], "DC14")
 
   def test_flat_only_record_still_works(self):
     flat = {

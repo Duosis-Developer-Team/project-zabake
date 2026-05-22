@@ -115,3 +115,38 @@ def test_bfs_collect_descendant_location_ids():
         "https://n", "t", 1, True, session=session
     )
     assert ids == [1, 2, 3]
+
+
+def test_build_location_root_map_dc14_telco_a3():
+    """DC14 -> TELCO A3: leaf resolves to DC14."""
+    locations = [
+        {"id": 1, "name": "DC14", "parent": None},
+        {"id": 2, "name": "TELCO A3", "parent": {"id": 1, "name": "DC14"}},
+    ]
+    root_map = lh.build_location_root_map(locations)
+    assert root_map[1] == "DC14"
+    assert root_map[2] == "DC14"
+
+
+def test_build_location_root_map_three_levels():
+    """DC18 -> DH3 -> Rack-A1: deepest leaf resolves to DC18."""
+    locations = [
+        {"id": 10, "name": "DC18", "parent": None},
+        {"id": 20, "name": "DH3", "parent": {"id": 10, "name": "DC18"}},
+        {"id": 30, "name": "Rack-A1", "parent": {"id": 20, "name": "DH3"}},
+    ]
+    root_map = lh.build_location_root_map(locations)
+    assert root_map[10] == "DC18"
+    assert root_map[20] == "DC18"
+    assert root_map[30] == "DC18"
+
+
+def test_build_location_root_map_cycle_safe():
+    """Broken parent cycle does not infinite-loop."""
+    locations = [
+        {"id": 1, "name": "A", "parent": {"id": 2}},
+        {"id": 2, "name": "B", "parent": {"id": 1}},
+    ]
+    root_map = lh.build_location_root_map(locations)
+    assert root_map[1] in ("A", "B")
+    assert root_map[2] in ("A", "B")

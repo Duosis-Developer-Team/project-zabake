@@ -5,7 +5,7 @@ Normalize NetBox API device dicts to datalake-flat field names used by process_d
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Set
 
 
 def _nested_name(obj: Any) -> str:
@@ -61,6 +61,48 @@ def extract_primary_ip_address(device: Dict[str, Any]) -> str:
     return ""
 
 
+def build_location_root_map(locations: List[Dict[str, Any]]) -> Dict[int, str]:
+    """
+    Build a map from location id to root (top-level) location name.
+
+    Standalone copy aligned with scripts/netbox_location_hierarchy.py.
+    """
+    parent_of: Dict[int, Optional[int]] = {}
+    name_of: Dict[int, str] = {}
+
+    for loc in locations:
+        lid = loc.get("id")
+        if lid is None:
+            continue
+        name_of[lid] = str(loc.get("name") or "").strip()
+        parent = loc.get("parent")
+        if isinstance(parent, dict):
+            parent_of[lid] = parent.get("id")
+        elif isinstance(parent, int):
+            parent_of[lid] = parent
+        else:
+            parent_of[lid] = None
+
+    root_cache: Dict[int, str] = {}
+
+    def get_root(lid: int, visited: Optional[Set[int]] = None) -> str:
+        if lid in root_cache:
+            return root_cache[lid]
+        if visited is None:
+            visited = set()
+        if lid in visited:
+            return name_of.get(lid, "")
+        visited.add(lid)
+        pid = parent_of.get(lid)
+        if pid is None or pid not in parent_of:
+            root_cache[lid] = name_of.get(lid, "")
+        else:
+            root_cache[lid] = get_root(pid, visited)
+        return root_cache[lid]
+
+    return {lid: get_root(lid) for lid in name_of}
+
+
 def get_location_name_flat(device: Dict[str, Any], location_filter: str = "") -> str:
     """DC_ID-style label: root_location_name -> location_parent_name -> location_name -> site_name."""
     for key in (
@@ -99,11 +141,14 @@ def get_location_name_flat(device: Dict[str, Any], location_filter: str = "") ->
 
 
 def normalize_device_record(
-    device: Dict[str, Any], location_filter: str = ""
+    device: Dict[str, Any],
+    location_filter: str = "",
+    location_root_map: Optional[Dict[int, str]] = None,
 ) -> Dict[str, Any]:
     """Return shallow copy with flat fields for datalake-compatible processing."""
     record = dict(device)
     loc_filter = (location_filter or "").strip()
+    root_map = location_root_map or {}
 
     record["device_role_name"] = device_role_name(device)
     record["manufacturer_name"] = manufacturer_name(device)
@@ -141,13 +186,25 @@ def normalize_device_record(
 
     if loc_filter:
         record["root_location_name"] = loc_filter
-    elif not record.get("root_location_name"):
-        record["root_location_name"] = (
-            record.get("location_parent_name")
-            or record.get("location_name")
-            or record.get("site_name")
-            or ""
-        )
+    else:
+        resolved_root = ""
+        location_obj_for_root = device.get("location")
+        if isinstance(location_obj_for_root, dict) and root_map:
+            loc_id = location_obj_for_root.get("id")
+            if loc_id is not None and loc_id in root_map:
+                resolved_root = root_map[loc_id]
+        elif isinstance(location_obj_for_root, int) and root_map:
+            if location_obj_for_root in root_map:
+                resolved_root = root_map[location_obj_for_root]
+        if resolved_root:
+            record["root_location_name"] = resolved_root
+        elif not record.get("root_location_name"):
+            record["root_location_name"] = (
+                record.get("location_parent_name")
+                or record.get("location_name")
+                or record.get("site_name")
+                or ""
+            )
 
     cf = record.get("custom_fields")
     if cf is None:

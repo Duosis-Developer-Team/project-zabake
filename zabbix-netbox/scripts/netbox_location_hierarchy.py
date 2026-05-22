@@ -145,3 +145,71 @@ def bfs_collect_descendant_location_ids(
             child_url = data.get("next")
 
     return result
+
+
+def build_location_root_map(locations: List[Dict[str, Any]]) -> Dict[int, str]:
+    """
+    Build a map from location id to root (top-level) location name.
+
+    Uses parent pointers from a full locations list (e.g. paginated
+    GET /api/dcim/locations/). Cycle-safe via visited set per walk.
+    """
+    parent_of: Dict[int, Optional[int]] = {}
+    name_of: Dict[int, str] = {}
+
+    for loc in locations:
+        lid = loc.get("id")
+        if lid is None:
+            continue
+        name_of[lid] = str(loc.get("name") or "").strip()
+        parent = loc.get("parent")
+        if isinstance(parent, dict):
+            parent_of[lid] = parent.get("id")
+        elif isinstance(parent, int):
+            parent_of[lid] = parent
+        else:
+            parent_of[lid] = None
+
+    root_cache: Dict[int, str] = {}
+
+    def get_root(lid: int, visited: Optional[Set[int]] = None) -> str:
+        if lid in root_cache:
+            return root_cache[lid]
+        if visited is None:
+            visited = set()
+        if lid in visited:
+            return name_of.get(lid, "")
+        visited.add(lid)
+        pid = parent_of.get(lid)
+        if pid is None or pid not in parent_of:
+            root_cache[lid] = name_of.get(lid, "")
+        else:
+            root_cache[lid] = get_root(pid, visited)
+        return root_cache[lid]
+
+    return {lid: get_root(lid) for lid in name_of}
+
+
+def fetch_all_locations_paginated(
+    netbox_url: str,
+    netbox_token: str,
+    verify_ssl: bool,
+    *,
+    session: Optional[requests.Session] = None,
+) -> List[Dict[str, Any]]:
+    """Fetch all DCIM locations via paginated list API."""
+    http = session or requests
+    base = netbox_url.rstrip("/")
+    headers = {
+        "Authorization": f"Token {netbox_token}",
+        "Accept": "application/json",
+    }
+    all_locations: List[Dict[str, Any]] = []
+    url: Optional[str] = f"{base}/api/dcim/locations/?limit=1000"
+    while url:
+        response = http.get(url, headers=headers, verify=verify_ssl, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        all_locations.extend(data.get("results", []))
+        url = data.get("next")
+    return all_locations
