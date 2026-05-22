@@ -185,6 +185,11 @@
           return False
 
       def mapping_tenant_allowlist(mapping):
+          """
+          Optional tenant restriction on a mapping row (same level as conditions).
+          If 'tenants' key is present, only that list is used; otherwise 'tenant' if set.
+          Returns None when there is no restriction.
+          """
           if 'tenants' in mapping and mapping.get('tenants') is not None:
               raw = mapping.get('tenants')
               if isinstance(raw, list):
@@ -198,15 +203,14 @@
           return None
 
       def mapping_applies_for_tenant(device, mapping):
+          """If mapping has tenant/tenants, device must have tenant.name in allowlist."""
           allow = mapping_tenant_allowlist(mapping)
           if not allow:
               return True
-          tenant_obj = device.get('tenant') or {}
+          tenant_obj = device.get('tenant')
           if isinstance(tenant_obj, dict):
               dev_name = (tenant_obj.get('name') or '').strip()
           else:
-              dev_name = ''
-          if not dev_name:
               dev_name = (device.get('tenant_name') or '').strip()
           if not dev_name:
               return False

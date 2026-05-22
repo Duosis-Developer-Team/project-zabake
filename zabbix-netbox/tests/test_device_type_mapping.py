@@ -83,12 +83,9 @@ def mapping_applies_for_tenant(device, mapping):
     if not allow:
         return True
     tenant_obj = device.get('tenant') or {}
-    if isinstance(tenant_obj, dict):
-        dev_name = (tenant_obj.get('name') or '').strip()
-    else:
-        dev_name = ''
-    if not dev_name:
-        dev_name = (device.get('tenant_name') or '').strip()
+    if not isinstance(tenant_obj, dict):
+        return False
+    dev_name = (tenant_obj.get('name') or '').strip()
     if not dev_name:
         return False
     dev_u = dev_name.upper()
@@ -464,8 +461,18 @@ class TestMoneygramDeviceTypeMappings(unittest.TestCase):
         }
         self.assertEqual(determine_device_type(device, mapping), 'HPE Management Switch Moneygram')
 
-    def _hpe_host_moneygram_vs_generic_mapping(self):
-        return {
+    def test_hpe_host_cpe_tenant_matches_generic_not_moneygram(self):
+        """Regression: IST2HW7H2004-style HPE HOST must not match HPE IPMI Moneygram."""
+        device = {
+            'name': 'IST2HW7H2004',
+            'role': {'name': 'HOST'},
+            'tenant': {'name': 'CPE-Tenant'},
+            'device_type': {
+                'manufacturer': {'name': 'HPE'},
+                'model': 'Proliant Compute DL380a Gen12',
+            },
+        }
+        mapping = {
             'mappings': [
                 {
                     'device_type': 'HPE IPMI Moneygram',
@@ -482,25 +489,10 @@ class TestMoneygramDeviceTypeMappings(unittest.TestCase):
                 },
             ]
         }
+        self.assertEqual(determine_device_type(device, mapping), 'HPE IPMI')
 
-    def test_cpe_tenant_hpe_host_matches_hpe_ipmi_not_moneygram(self):
-        """CPE-Tenant + HPE HOST must map to HPE IPMI, not Moneygram tenant row."""
-        device = {
-            'name': 'IST2HW7H2004',
-            'role': {'name': 'HOST'},
-            'tenant': {'name': 'CPE-Tenant'},
-            'device_type': {
-                'manufacturer': {'name': 'HPE'},
-                'model': 'Proliant Compute DL380a Gen12',
-            },
-        }
-        self.assertEqual(
-            determine_device_type(device, self._hpe_host_moneygram_vs_generic_mapping()),
-            'HPE IPMI',
-        )
-
-    def test_flat_tenant_name_field_hpe_host_matches_hpe_ipmi(self):
-        """Flat DB format: tenant_name=CPE-Tenant + HPE HOST -> HPE IPMI."""
+    def test_hpe_host_cpe_tenant_flat_tenant_name_matches_generic(self):
+        """Datalake flat tenant_name field must also skip Moneygram-scoped rows."""
         device = {
             'name': 'IST2HW7H2004',
             'device_role_name': 'HOST',
@@ -508,26 +500,22 @@ class TestMoneygramDeviceTypeMappings(unittest.TestCase):
             'manufacturer_name': 'HPE',
             'device_model': 'Proliant Compute DL380a Gen12',
         }
-        self.assertEqual(
-            determine_device_type(device, self._hpe_host_moneygram_vs_generic_mapping()),
-            'HPE IPMI',
-        )
-
-    def test_moneygram_tenant_hpe_host_still_matches_moneygram_row(self):
-        """Moneygram tenant + HPE HOST must still use HPE IPMI Moneygram."""
-        device = {
-            'name': 'MNYHOST1',
-            'role': {'name': 'HOST'},
-            'tenant': {'name': 'Moneygram'},
-            'device_type': {
-                'manufacturer': {'name': 'HPE'},
-                'model': 'ProLiant DL380 Gen10',
-            },
+        mapping = {
+            'mappings': [
+                {
+                    'device_type': 'HPE IPMI Moneygram',
+                    'tenant': 'Moneygram',
+                    'conditions': {'device_role': 'HOST', 'manufacturer': ['HPE', 'HP']},
+                    'priority': 1,
+                },
+                {
+                    'device_type': 'HPE IPMI',
+                    'conditions': {'device_role': 'HOST', 'manufacturer': ['HPE', 'HP']},
+                    'priority': 1,
+                },
+            ]
         }
-        self.assertEqual(
-            determine_device_type(device, self._hpe_host_moneygram_vs_generic_mapping()),
-            'HPE IPMI Moneygram',
-        )
+        self.assertEqual(determine_device_type(device, mapping), 'HPE IPMI')
 
 
 def merge_proxy_group_by_dc_from_templates(zbx_templates):
