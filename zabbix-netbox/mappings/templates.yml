@@ -5,7 +5,7 @@
 # exact Zabbix proxy group names when auto DC-regex matching does not apply.
 Lenovo IPMI:
   - name: BLT - Lenovo ICT XCC Monitoring
-    type: snmpv2
+    type: snmpv3
     host_groups: 
       - "Physical Hosts"
     macros:
