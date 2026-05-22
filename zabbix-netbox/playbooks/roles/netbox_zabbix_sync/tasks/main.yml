@@ -148,18 +148,12 @@
     - sync_devices | bool
     - netbox_devices_final | length > 0
 
-- name: Phase A — device compare (no Zabbix writes, sequential loop)
-  include_tasks: process_device.yml
-  loop: "{{ netbox_devices_final }}"
-  loop_control:
-    loop_var: outer_device_item
-    label: "{{ outer_device_item.name | default('Unknown') }}"
-  vars:
-    netbox_device: "{{ outer_device_item }}"
-    device_sync_phase: compare
+- name: Phase A — parallel compare engine (devices + platforms + vfws)
+  include_tasks: run_parallel_compare.yml
   when:
-    - sync_devices | bool
-    - use_two_phase_device_sync | default(true) | bool
+    - use_python_parallel_compare | default(true) | bool
+    - not only_fetch | bool
+    - (sync_devices | bool) or (sync_platforms | bool) or (sync_virtual_fws | bool)
 
 - name: Phase B — sequential Zabbix apply from device plans
   include_tasks: process_device_apply.yml
@@ -171,9 +165,9 @@
     netbox_device: "{{ outer_device_item }}"
   when:
     - sync_devices | bool
-    - use_two_phase_device_sync | default(true) | bool
+    - use_python_parallel_compare | default(true) | bool
 
-- name: Process each device (legacy single-phase, sequential)
+- name: Process each device (legacy single-phase, sequential — use_python_parallel_compare=false)
   include_tasks: process_device.yml
   loop: "{{ netbox_devices_final }}"
   loop_control:
@@ -184,7 +178,7 @@
     device_sync_phase: full
   when:
     - sync_devices | bool
-    - not (use_two_phase_device_sync | default(true) | bool)
+    - not (use_python_parallel_compare | default(true) | bool)
 
 - name: Collect all device results from temporary files
   find:
@@ -266,7 +260,19 @@
       (sync_platforms={{ sync_platforms | bool }})
   when: sync_platforms | bool
 
-- name: Process each platform
+- name: Phase B — sequential Zabbix apply from platform plans
+  include_tasks: process_platform_apply.yml
+  loop: "{{ netbox_platforms_raw | default([]) }}"
+  loop_control:
+    loop_var: outer_platform_item
+    label: "{{ outer_platform_item.name | default(outer_platform_item.display | default('Unknown Platform')) }} (apply)"
+  vars:
+    netbox_platform: "{{ outer_platform_item }}"
+  when:
+    - sync_platforms | bool
+    - use_python_parallel_compare | default(true) | bool
+
+- name: Process each platform (legacy single-phase — use_python_parallel_compare=false)
   include_tasks: process_platform.yml
   loop: "{{ netbox_platforms_raw | default([]) }}"
   loop_control:
@@ -274,7 +280,9 @@
     label: "{{ outer_platform_item.name | default(outer_platform_item.display | default('Unknown Platform')) }}"
   vars:
     netbox_platform: "{{ outer_platform_item }}"
-  when: sync_platforms | bool
+  when:
+    - sync_platforms | bool
+    - not (use_python_parallel_compare | default(true) | bool)
 
 - name: Collect all platform results from temporary files
   find:
@@ -328,7 +336,19 @@
   changed_when: false
   when: sync_virtual_fws | bool
 
-- name: Process each virtual firewall
+- name: Phase B — sequential Zabbix apply from virtual firewall plans
+  include_tasks: process_virtual_fw_apply.yml
+  loop: "{{ netbox_virtual_fws_raw | default([]) }}"
+  loop_control:
+    loop_var: outer_virtual_fw_item
+    label: "{{ outer_virtual_fw_item.hostname | default(outer_virtual_fw_item.name | default('Unknown')) }} (apply)"
+  vars:
+    netbox_virtual_fw: "{{ outer_virtual_fw_item }}"
+  when:
+    - sync_virtual_fws | bool
+    - use_python_parallel_compare | default(true) | bool
+
+- name: Process each virtual firewall (legacy single-phase — use_python_parallel_compare=false)
   include_tasks: process_virtual_fw.yml
   loop: "{{ netbox_virtual_fws_raw | default([]) }}"
   loop_control:
@@ -336,7 +356,9 @@
     label: "{{ outer_virtual_fw_item.hostname | default(outer_virtual_fw_item.name | default('Unknown')) }}"
   vars:
     netbox_virtual_fw: "{{ outer_virtual_fw_item }}"
-  when: sync_virtual_fws | bool
+  when:
+    - sync_virtual_fws | bool
+    - not (use_python_parallel_compare | default(true) | bool)
 
 - name: Collect all virtual firewall results from temporary files
   find:

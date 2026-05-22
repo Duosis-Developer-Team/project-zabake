@@ -253,7 +253,6 @@
 - name: Resolve template IDs from bulk cache (no per-host template.get)
   set_fact:
     zbx_templates_found_names: "{{ zbx_template_names_expected | select('in', zbx_template_id_cache.keys() | list) | list }}"
-    zbx_templates_missing_names: "{{ zbx_template_names_expected | difference(zbx_templates_found_names) }}"
     zbx_template_id_list: >-
       {%- set out = [] -%}
       {%- for tpl_name in zbx_template_names_expected -%}
@@ -262,6 +261,11 @@
         {%- endif -%}
       {%- endfor -%}
       {{ out }}
+  when: zbx_template_id_cache is defined
+
+- name: Resolve missing template names from bulk cache
+  set_fact:
+    zbx_templates_missing_names: "{{ zbx_template_names_expected | difference(zbx_templates_found_names | default([])) }}"
   when: zbx_template_id_cache is defined
 
 - name: Initialize empty template cache when prefetch was skipped
