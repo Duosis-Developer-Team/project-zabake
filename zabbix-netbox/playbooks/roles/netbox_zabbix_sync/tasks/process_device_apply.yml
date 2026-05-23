@@ -127,7 +127,7 @@
       hostname: "{{ _device_sync_plan_loaded.zbx_record.HOSTNAME | default(netbox_device.name | default('')) }}"
       device_role: "{{ _device_sync_plan_loaded.zbx_record.DEVICE_ROLE | default('N/A') }}"
       status: "güncellendi"
-      reason: ""
+      reason: "{{ (_device_sync_plan_loaded.update_reasons | default([])) | join('; ') }}"
       ip: "{{ _device_sync_plan_loaded.zbx_record.HOST_IP | default('N/A') }}"
       location: "{{ _device_sync_plan_loaded.zbx_record.REPORT_LOCATION | default('N/A', true) }}"
       site: "{{ _device_sync_plan_loaded.zbx_record.REPORT_SITE | default('N/A', true) }}"
@@ -164,7 +164,7 @@
       hostname: "{{ _device_sync_plan_loaded.zbx_record.HOSTNAME | default(netbox_device.name | default('')) }}"
       device_role: "{{ _device_sync_plan_loaded.zbx_record.DEVICE_ROLE | default('N/A') }}"
       status: "dry_run"
-      reason: "Dry-run: host.update çağrısı yapılmadı — güncellenecekti"
+      reason: "Dry-run: host.update çağrısı yapılmadı — güncellenecekti ({{ (_device_sync_plan_loaded.update_reasons | default([])) | join('; ') }})"
       ip: "{{ _device_sync_plan_loaded.zbx_record.HOST_IP | default('N/A') }}"
       location: "{{ _device_sync_plan_loaded.zbx_record.REPORT_LOCATION | default('N/A', true) }}"
       site: "{{ _device_sync_plan_loaded.zbx_record.REPORT_SITE | default('N/A', true) }}"
@@ -222,7 +222,7 @@
       zabbix_proxy_group_id: "{{ _device_sync_plan_loaded.zbx_existing_host.proxy_groupid | default('') }}"
       proxy_location_change: false
       proxy_manual_change_detected: "{{ _device_sync_plan_loaded.proxy_manual_change_detected | default(false) | bool }}"
-      field_merge_actions: {}
+      field_merge_actions: "{{ {'update_reasons': _device_sync_plan_loaded.update_reasons | default([])} }}"
       last_managed_groups: >-
         {{ (_device_sync_plan_loaded.zbx_record.HOST_GROUPS | default('')).split(',') | map('trim') | reject('equalto', '') | list }}
       dry_run: "{{ dry_run | default(false) | bool }}"
