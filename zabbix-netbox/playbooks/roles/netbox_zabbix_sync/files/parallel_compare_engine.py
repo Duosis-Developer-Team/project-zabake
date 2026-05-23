@@ -1091,7 +1091,15 @@ def compare_one_vfw(
 # Main parallel runner
 # ---------------------------------------------------------------------------
 
-def _progress(entity_type: str, item_id: Any, name: str, action: str, error: Optional[str] = None):
+def _progress(
+    entity_type: str,
+    item_id: Any,
+    name: str,
+    action: str,
+    error: Optional[str] = None,
+    update_reasons: Optional[List[str]] = None,
+    needs_update: Optional[bool] = None,
+):
     """Emit one JSON-line to stdout (AWX streams this line-by-line)."""
     record = {
         "type": entity_type,
@@ -1101,6 +1109,10 @@ def _progress(entity_type: str, item_id: Any, name: str, action: str, error: Opt
     }
     if error:
         record["error"] = error
+    if update_reasons:
+        record["update_reasons"] = update_reasons
+    if needs_update is not None:
+        record["needs_update"] = needs_update
     print(json.dumps(record, ensure_ascii=False), flush=True)
 
 
@@ -1153,7 +1165,14 @@ def run_parallel_compare(
                     if grp:
                         all_missing_groups.add(str(grp))
                 action = plan.get("action", "skip")
-                _progress(entity_type, item_id, item_name, action)
+                _progress(
+                    entity_type,
+                    item_id,
+                    item_name,
+                    action,
+                    update_reasons=plan.get("update_reasons"),
+                    needs_update=plan.get("needs_update"),
+                )
                 summary[f"{entity_type}s"][action if action in ("create", "update", "skip") else "skip"] += 1
 
                 # Write plan file

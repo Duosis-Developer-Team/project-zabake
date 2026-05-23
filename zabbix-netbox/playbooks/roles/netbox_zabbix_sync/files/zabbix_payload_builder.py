@@ -118,8 +118,9 @@ class ZabbixPayloadBuilder:
             name = row.get("name")
             if name:
                 names.append(str(name))
+            type_str = str(row.get("type", "") or "").strip()
             for key in ("snmpv2", "snmpv3", "agent", "api", "API", "none"):
-                if row.get(key):
+                if row.get(key) or type_str == key:
                     types.append(key if key != "API" else "api")
                     break
         return list(dict.fromkeys(names)), list(dict.fromkeys(types)), rows
@@ -177,7 +178,16 @@ class ZabbixPayloadBuilder:
         ifaces = existing_host.get("interfaces") or []
         if not ifaces or not iface_spec:
             return [], False
-        iface_id = ifaces[0].get("interfaceid")
+        existing_iface = ifaces[0]
+        existing_snmp_version = int(
+            (existing_iface.get("details") or {}).get("version", 0) or 0
+        )
+        new_snmp_version = int(
+            (iface_spec.get("details") or {}).get("version", 0) or 0
+        )
+        if existing_snmp_version == 3 and new_snmp_version == 2:
+            return [], True
+        iface_id = existing_iface.get("interfaceid")
         if not iface_id:
             return [], False
         row: Dict[str, Any] = {
@@ -293,6 +303,7 @@ class ZabbixPayloadBuilder:
             plan.setdefault("update_payload", None)
             plan.setdefault("missing_groups", [])
             plan.setdefault("needs_update", False)
+            plan.setdefault("update_reasons", [])
             plan.setdefault("validation_errors", [])
             return plan
 
@@ -425,6 +436,27 @@ class ZabbixPayloadBuilder:
         proxy_apply = bool(proxy_decision.get("apply_update"))
 
         existing_ip = (existing_iface.get("ip") or "") if existing_iface else ""
+        update_reasons: List[str] = []
+        if existing_ip != zbx_record.get("HOST_IP", ""):
+            update_reasons.append(
+                f"ip_changed:{existing_ip}->{zbx_record.get('HOST_IP', '')}"
+            )
+        if zbx_existing.get("host", "") != zbx_record.get("HOSTNAME", ""):
+            update_reasons.append("hostname_changed")
+        if str(zbx_existing.get("monitored_by", "")) != str(monitored_by):
+            update_reasons.append("monitored_by_changed")
+        if proxy_apply:
+            update_reasons.append("proxy_group_changed")
+        if tags_needs_update:
+            changed_tags = [
+                e.get("key_name", "")
+                for e in tag_change_log
+                if e.get("action") in ("added", "updated")
+            ]
+            update_reasons.append(f"tags:{changed_tags}")
+        if groups_needs_update:
+            update_reasons.append("groups_changed")
+
         needs_update = bool(
             (existing_ip != zbx_record.get("HOST_IP", ""))
             or (zbx_existing.get("host", "") != zbx_record.get("HOSTNAME", ""))
@@ -433,6 +465,12 @@ class ZabbixPayloadBuilder:
             or tags_needs_update
             or groups_needs_update
         )
+        if needs_update and iface_update and not iface_locked:
+            update_reasons.append("interface_changed")
+        if iface_locked:
+            update_reasons.append("interface_type_locked")
+
+        plan["update_reasons"] = update_reasons
 
         plan["needs_update"] = needs_update
         plan["proxy_manual_change_detected"] = bool(
@@ -453,6 +491,7 @@ class ZabbixPayloadBuilder:
                 "device_role": device_role or "N/A",
                 "status": "güncel",
                 "reason": "",
+                "update_reasons": [],
                 "ip": zbx_record.get("HOST_IP", "N/A"),
                 "location": zbx_record.get("REPORT_LOCATION", "N/A"),
                 "site": zbx_record.get("REPORT_SITE", "N/A"),
@@ -478,4 +517,21 @@ class ZabbixPayloadBuilder:
 
         plan["update_payload"] = update_payload
         plan["create_payload"] = None
+        result_key = (
+            "current_device_result"
+            if "device_id" in plan
+            else ("current_platform_result" if "platform_id" in plan else "current_vfw_result")
+        )
+        plan[result_key] = {
+            "hostname": zbx_record.get("HOSTNAME", "N/A"),
+            "device_role": device_role or "N/A",
+            "status": "güncellenecek",
+            "reason": "; ".join(update_reasons) if update_reasons else "",
+            "update_reasons": update_reasons,
+            "ip": zbx_record.get("HOST_IP", "N/A"),
+            "location": zbx_record.get("REPORT_LOCATION", "N/A"),
+            "site": zbx_record.get("REPORT_SITE", "N/A"),
+            "tenant": zbx_record.get("REPORT_TENANT", "N/A"),
+            "ownership": zbx_record.get("REPORT_OWNERSHIP", "N/A"),
+        }
         return plan
