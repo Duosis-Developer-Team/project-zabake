@@ -16,10 +16,6 @@ mappings:
   - vendor: "FORTINET"
     device_type: "Fortinet Virtual Firewall VM"
 
-  - vendor: "FORTINET"
-    model_prefix: "FortiGate"
-    device_type: "Fortigate Virtual Firewall VM"
-
   # # Other Fortinet virtual FW models ÔåÆ HTTP API template (existing)
   # - vendor: "FORTINET"
   #   device_type: "Fortinet Firewall"
