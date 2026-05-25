@@ -14,6 +14,7 @@
 mappings:
   # Fortinet virtual FW with model starting with VM ÔåÆ SNMP template
   - vendor: "FORTINET"
+    model_prefix: "VM"
     device_type: "Fortinet Virtual Firewall VM"
 
   # # Other Fortinet virtual FW models ÔåÆ HTTP API template (existing)
@@ -30,6 +31,3 @@ mappings:
 
   - vendor: "Palo Alto Networks"
     device_type: "Palo Alto Virtual Firewall"
-
-  - vendor: "TARGITAS"
-    device_type: "Targitas Virtual Firewall"
