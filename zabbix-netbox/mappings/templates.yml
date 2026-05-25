@@ -561,6 +561,12 @@ KVM:
   - name: BLT - Template Module ICMP Ping
     type: agent
 
+Targitas Virtual Firewall:
+  - name: BLT - Targitas FW by SNMP
+    type: snmpv2
+    host_groups:
+      - "Network Devices"
+      - "Virtual Firewall"
 # # Placeholder logical type for NetBox custom-objects virtual firewalls (virtual_fw_mapping.yml).
 # # Point new vendor rows to this key until a dedicated Zabbix template is confirmed.
 # Virtual Firewall Default:
