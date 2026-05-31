@@ -14,6 +14,11 @@ Lenovo IPMI:
       "{$REDFISH.API.URL}": "https://{HOST.IP}/"
       "{$REDFISH.PASSWORD}": "S7G3y9TtmRSm"
       "{$REDFISH.USER}": "zabbix"
+    interface_override:
+      details:
+        securityname: "monitor"
+        authpassphrase: "S7G3y9TtmRSm"
+        privpassphrase: "ZFlK0O44y412!!"
 Inspur M6:
   - name: BLT - Inspur M6 Template
     type: snmpv2
