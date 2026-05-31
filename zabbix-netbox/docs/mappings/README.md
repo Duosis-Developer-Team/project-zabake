@@ -36,7 +36,7 @@ flowchart LR
 | [`mappings/netbox_device_type_mapping.yml`](../../mappings/netbox_device_type_mapping.yml) | Map NetBox **device** records to a logical `device_type` string | New manufacturer / model / role rules; optional `tenant` / `tenants` for customer-specific types; `hostname_prefix` / `hostname_suffix`; `priority` ordering |
 | [`mappings/netbox_platform_mapping.yml`](../../mappings/netbox_platform_mapping.yml) | Map NetBox **`platform.manufacturer.name`** to `device_type` and optional **per-DC limits**; optional **name/site** substring rules and **priority** (e.g. Moneygram-specific VMware row) | New virtualization / backup platform rows; `limit_per_dc` (`0` or omitted = no limit); `priority`, `name_contains`, `site_contains`, `match_logic` |
 | [`mappings/virtual_fw_mapping.yml`](../../mappings/virtual_fw_mapping.yml) | Map NetBox **custom-objects `virtual_fws`** (`vendor.name` + optional model prefix/suffix) to `device_type` | New firewall vendors/models; enable with role flag `sync_virtual_fws` |
-| [`mappings/templates.yml`](../../mappings/templates.yml) | Map `device_type` → list of Zabbix templates, interface `type`, macros, extra host groups | Multiple templates per type; `macros` with `{HOST.IP}` / `{HOST.NAME}`; `host_groups`; `proxy_group_by_dc` |
+| [`mappings/templates.yml`](../../mappings/templates.yml) | Map `device_type` → list of Zabbix templates, interface `type`, macros, extra host groups | Multiple templates per type; `macros` with `{HOST.IP}` / `{HOST.NAME}`; `host_groups`; `proxy_group_by_dc`; optional `interface_override` (create-only merge into `template_types.yml` interface spec) |
 | [`mappings/platform_tags_config.yml`](../../mappings/platform_tags_config.yml) | Managed tag keys for NetBox **platform** sync on `host.update` (`IP`, `Port`, `Loki_ID`, …) | Add/remove platform tag names; used with `zabbix_merge_tags` (dedupe by tag name) |
 | [`mappings/tags_config.yml`](../../mappings/tags_config.yml) | Managed tag keys for **device** sync from datalake/Loki flat fields | Device metadata tags; pairs with `platform_tags_config.yml` for `DEVICE_ROLE: PLATFORM` |
 
@@ -73,6 +73,7 @@ flowchart LR
 ### `templates.yml`
 
 - **Structure:** Top-level key = `device_type`; value = YAML **list** of template objects. Each object needs at least `name` (exact Zabbix template name) and `type` (must exist in [`template_types.yml`](../../mappings/template_types.yml)).
+- **`interface_override` (optional, create-only):** Merges into the global interface spec from `template_types.yml` when building `host.create` payloads. Supports field-level merge on `details` (e.g. SNMPv3 `securityname`, `authpassphrase`) and optional top-level `port` / `dns`. Never applied on `host.update` — update sends only interface IP when NetBox primary IP changed.
 - **Secrets:** Do not commit production passwords or tokens. Prefer AWX credentials, Ansible Vault, or templated extra vars; see [Template macros guide](../guides/TEMPLATE_MACROS_GUIDE.md).
 
 ## Ansible path variables

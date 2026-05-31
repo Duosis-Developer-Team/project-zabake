@@ -5,14 +5,14 @@ def test_interface_type_unchanged_allows_ip_only_delta():
     existing_type = 2
     mapped_type = 2
     assert existing_type == mapped_type
-    # When equal, payload must omit type/main/useip and send only ip/dns/port.
+    # When equal and IP changed, host.update sends only interfaceid + ip (no port/dns/details).
 
 
 def test_interface_type_changed_blocks_full_replace():
     existing_type = 1
     mapped_type = 2
     assert existing_type != mapped_type
-    # When different, interfaces key must be omitted from host.update (INTERFACE_TYPE_LOCKED).
+    # When different, interfaces key must be omitted from host.update (interface_type_locked).
 
 
 def test_zabbix_error_interface_linked_to_item():

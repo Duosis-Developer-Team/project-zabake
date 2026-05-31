@@ -150,6 +150,27 @@ class ZabbixPayloadBuilder:
             return None
         return deepcopy(iface) if isinstance(iface, dict) else None
 
+    def resolve_interface_spec_with_override(
+        self,
+        iface_type: str,
+        template_rows: List[Dict],
+    ) -> Optional[Dict[str, Any]]:
+        """Merge global template_types spec with optional templates.yml interface_override (create-only)."""
+        spec = self.resolve_interface_spec(iface_type)
+        if spec is None:
+            return None
+        for row in template_rows:
+            override = row.get("interface_override")
+            if not isinstance(override, dict):
+                continue
+            if "details" in override and isinstance(override["details"], dict):
+                spec.setdefault("details", {})
+                spec["details"].update(deepcopy(override["details"]))
+            for field in ("port", "dns"):
+                if field in override:
+                    spec[field] = override[field]
+        return spec
+
     def build_interface_create(self, zbx_record: Dict, iface_spec: Optional[Dict]) -> List[Dict]:
         if not iface_spec or not isinstance(iface_spec, dict) or "type" not in iface_spec:
             return []
@@ -172,33 +193,26 @@ class ZabbixPayloadBuilder:
         existing_host: Dict,
         interface_type_changed: bool,
     ) -> Tuple[List[Dict], bool]:
-        """Returns (interface_update_list, interface_type_locked)."""
+        """Returns (interface_update_list, interface_type_locked).
+
+        Update policy: only primary IP may change. port, dns, and SNMP details are
+        create-only (from template_types.yml / interface_override) and are never sent
+        on host.update.
+        """
         if interface_type_changed:
             return [], True
         ifaces = existing_host.get("interfaces") or []
-        if not ifaces or not iface_spec:
+        if not ifaces:
             return [], False
         existing_iface = ifaces[0]
-        existing_snmp_version = int(
-            (existing_iface.get("details") or {}).get("version", 0) or 0
-        )
-        new_snmp_version = int(
-            (iface_spec.get("details") or {}).get("version", 0) or 0
-        )
-        if existing_snmp_version == 3 and new_snmp_version == 2:
-            return [], True
         iface_id = existing_iface.get("interfaceid")
         if not iface_id:
             return [], False
-        row: Dict[str, Any] = {
-            "interfaceid": str(iface_id),
-            "ip": zbx_record.get("HOST_IP", ""),
-            "dns": iface_spec.get("dns", "") or "",
-            "port": str(iface_spec.get("port", 161)),
-        }
-        if iface_spec.get("details"):
-            row["details"] = deepcopy(iface_spec["details"])
-        return [row], False
+        existing_ip = existing_iface.get("ip") or ""
+        new_ip = zbx_record.get("HOST_IP", "") or ""
+        if existing_ip == new_ip:
+            return [], False
+        return [{"interfaceid": str(iface_id), "ip": new_ip}], False
 
     def resolve_proxy(
         self,
@@ -316,6 +330,11 @@ class ZabbixPayloadBuilder:
         template_ids, missing_templates = self.resolve_template_ids(template_names)
         iface_type = self.resolve_interface_type(template_types)
         iface_spec = self.resolve_interface_spec(iface_type)
+        create_iface_spec = (
+            self.resolve_interface_spec_with_override(iface_type, template_rows)
+            if action == "create"
+            else iface_spec
+        )
         monitored_by, proxy_group_id, _ = self.resolve_proxy(zbx_record, template_rows)
         required_groups = self.resolve_required_group_names(zbx_record, template_rows)
         missing_groups = self.detect_missing_groups(required_groups)
@@ -372,7 +391,7 @@ class ZabbixPayloadBuilder:
                 "host": zbx_record["HOSTNAME"],
                 "name": visible_name,
                 "status": int(zbx_record.get("HOST_STATUS", 0) or 0),
-                "interfaces": self.build_interface_create(zbx_record, iface_spec),
+                "interfaces": self.build_interface_create(zbx_record, create_iface_spec),
                 "templates": template_ids,
                 "groups": self.format_groups(
                     [g for g in required_groups if g in self.group_id_cache]
