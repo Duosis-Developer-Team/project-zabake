@@ -579,6 +579,19 @@ Targitas Virtual Firewall:
       - "Network Devices"
       - "Virtual Firewall"
 
+Citrix Virtual Load Balancer:
+  - name:	BLT - Template Citrix ADC
+    type: snmpv2
+    host_groups:
+      - "Network Devices"
+      - "Virtual Load Balancer"
+
+PFSense Virtual Firewall:
+  - name: BLT - PFSense by SNMP
+    type: snmpv2
+    host_groups:
+      - "Network Devices"
+      - "Virtual Firewall"
 # # Placeholder logical type for NetBox custom-objects virtual firewalls (virtual_fw_mapping.yml).
 # # Point new vendor rows to this key until a dedicated Zabbix template is confirmed.
 # Virtual Firewall Default:

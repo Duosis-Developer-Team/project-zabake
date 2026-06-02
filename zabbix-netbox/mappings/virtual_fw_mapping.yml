@@ -33,3 +33,9 @@ mappings:
 
   - vendor: "TARGITAS"
     device_type: "Targitas Virtual Firewall"
+
+  - vendor: "Citrix"
+    device_type: "Citrix Virtual Load Balancer"
+
+  - vendor: "PFSENSE"
+    device_type: "PFSense Virtual Firewall"
