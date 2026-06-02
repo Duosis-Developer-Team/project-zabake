@@ -580,7 +580,7 @@ Targitas Virtual Firewall:
       - "Virtual Firewall"
 
 Citrix Virtual Load Balancer:
-  - name:	BLT - Template Citrix ADC
+  - name: BLT - Template Citrix ADC
     type: snmpv2
     host_groups:
       - "Network Devices"
