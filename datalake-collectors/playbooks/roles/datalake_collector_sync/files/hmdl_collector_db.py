@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """HMDL collector schema: ensure tables, upsert targets, write logs."""
 
+from __future__ import annotations
+
 import argparse
 import ipaddress
 import json
