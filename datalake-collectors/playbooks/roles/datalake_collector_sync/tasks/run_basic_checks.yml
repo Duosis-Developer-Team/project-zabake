@@ -19,12 +19,12 @@
 - name: Write check results to HMDL database
   command: >
     python3 {{ role_path }}/files/hmdl_collector_db.py
-    write-checks
     --db-host {{ hmdl_db_host | quote }}
     --db-port {{ hmdl_db_port }}
     --db-name {{ hmdl_db_name | quote }}
     --db-user {{ hmdl_db_user | quote }}
     --db-password {{ hmdl_db_password | quote }}
+    write-checks
     --run-id {{ collector_run_id | quote }}
     --checks-file {{ collector_work_dir }}/check_results.json
   no_log: true

@@ -57,12 +57,12 @@
     - name: Write diffs to HMDL database
       command: >
         python3 {{ role_path }}/files/hmdl_collector_db.py
-        write-diffs
         --db-host {{ hmdl_db_host | quote }}
         --db-port {{ hmdl_db_port }}
         --db-name {{ hmdl_db_name | quote }}
         --db-user {{ hmdl_db_user | quote }}
         --db-password {{ hmdl_db_password | quote }}
+        write-diffs
         --run-id {{ collector_run_id | quote }}
         --diffs-file {{ collector_work_dir }}/diffs_{{ reconcile_proxy_id }}.json
       no_log: true

@@ -14,24 +14,24 @@
 - name: Ensure HMDL collector tables exist
   command: >
     python3 {{ role_path }}/files/hmdl_collector_db.py
-    ensure-schema
     --db-host {{ hmdl_db_host | quote }}
     --db-port {{ hmdl_db_port }}
     --db-name {{ hmdl_db_name | quote }}
     --db-user {{ hmdl_db_user | quote }}
     --db-password {{ hmdl_db_password | quote }}
+    ensure-schema
   no_log: true
   changed_when: false
 
 - name: Upsert collector targets to HMDL database
   command: >
     python3 {{ role_path }}/files/hmdl_collector_db.py
-    upsert-targets
     --db-host {{ hmdl_db_host | quote }}
     --db-port {{ hmdl_db_port }}
     --db-name {{ hmdl_db_name | quote }}
     --db-user {{ hmdl_db_user | quote }}
     --db-password {{ hmdl_db_password | quote }}
+    upsert-targets
     --targets-file {{ collector_work_dir }}/all_targets.json
     --collector-types-file {{ collector_work_dir }}/collector_types.json
   no_log: true
