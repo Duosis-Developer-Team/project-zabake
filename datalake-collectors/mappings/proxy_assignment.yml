@@ -3,7 +3,8 @@
 # Replace placeholder hostnames with real proxy NiFi addresses before production use.
 
 DC13:
-  proxy_nifi_host: "10.134.16.10"
+  # AWX inventory host name (dc13-nifi-1 -> ansible_host 10.134.16.10)
+  proxy_nifi_host: "dc13-nifi-1"
   ssh_user: "root"
   conf_path: "/Datalake_Project/configuration_file.json"
   gitea_audit_path: "proxies/dc13/configuration_file.json"
