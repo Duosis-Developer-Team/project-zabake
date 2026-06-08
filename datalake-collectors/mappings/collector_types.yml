@@ -24,10 +24,11 @@ Nutanix:
 
 IBM-HMC:
   conf_key: IBM-HMC
-  script_path: datalake/collectors/IBM/IBM_hmc_performance_data_collector.py
+  # DC13 NiFi runs /Datalake_Project/IBM/ibm_data_collector.py (multi-HMC via comma-separated hmc_hostname)
+  script_path: datalake/collectors/IBM/ibm_data_collector.py
   ip_field: hmc_hostname
-  ip_format: single_string
-  check_ports: [22]
+  ip_format: comma_string
+  check_ports: [12443]
   vault_key: ibm_hmc
   source_type: platform
   other_fields:
@@ -54,9 +55,10 @@ IBM-Virtualize:
 
 Veeam:
   conf_key: Veeam
+  # DC13 NiFi: /Datalake_Project/Veeam/get_veeam_data.py — multiple BR/CC instances per DC
   script_path: datalake/collectors/Zabbix/Veeam/get_veeam_data.py
   ip_field: ips
-  ip_format: single_string
+  ip_format: comma_string
   check_ports: [9419]
   vault_key: veeam
   source_type: platform

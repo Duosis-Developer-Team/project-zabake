@@ -6,10 +6,10 @@ Production format uses **comma-separated strings** for multi-IP fields (not JSON
 
 | conf_key | ip_field | ip_format |
 |----------|----------|-----------|
-| Veeam | ips | single_string |
+| Veeam | ips | comma_string |
 | VmWare | VMwareIP | comma_string |
 | IBM-Virtualize | host | comma_string (+ link computed) |
-| IBM-HMC | hmc_hostname | single_string |
+| IBM-HMC | hmc_hostname | comma_string |
 | Nutanix | PRISM_IP | comma_string |
 | Netbackup | IpAddress | comma_string |
 | Zerto | IpAddress | comma_string |

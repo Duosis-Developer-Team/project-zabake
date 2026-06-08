@@ -58,6 +58,29 @@ def test_reconcile_section_add_remove():
     assert "removed" in actions
 
 
+def test_reconcile_hmc_multi_host_comma_string():
+    collector_types = {
+        "IBM-HMC": {
+            "conf_key": "IBM-HMC",
+            "ip_field": "hmc_hostname",
+            "ip_format": "comma_string",
+            "source_type": "platform",
+        },
+    }
+    current = {"IBM-HMC": {"hmc_hostname": "10.34.2.110", "hmc_user": "zabbix"}}
+    desired = {
+        "IBM-HMC": {
+            "hmc_hostname": "10.34.2.110,10.34.10.110",
+            "hmc_user": "zabbix",
+        },
+    }
+    reconciled, diffs = reconcile_proxy_config(current, desired, collector_types)
+    assert "10.34.2.110" in reconciled["IBM-HMC"]["hmc_hostname"]
+    assert "10.34.10.110" in reconciled["IBM-HMC"]["hmc_hostname"]
+    actions = {d["action"] for d in diffs}
+    assert "added" in actions
+
+
 def test_reconcile_proxy_preserves_manual_only():
     collector_types = {
         "VmWare": {
