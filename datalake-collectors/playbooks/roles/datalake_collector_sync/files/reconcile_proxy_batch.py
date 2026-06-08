@@ -36,7 +36,7 @@ def main() -> int:
     parser.add_argument("--current", required=True)
     parser.add_argument("--targets", required=True)
     parser.add_argument("--collector-types", required=True)
-    parser.add_argument("--vault-json", default="{}")
+    parser.add_argument("--vault-json", default="{}", help="Path to vault_by_dir.json file")
     parser.add_argument("--proxy-id", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--diff-output", required=True)
@@ -45,7 +45,8 @@ def main() -> int:
     current = json.loads(Path(args.current).read_text(encoding="utf-8"))
     targets = json.loads(Path(args.targets).read_text(encoding="utf-8"))
     collector_types = load_yaml(args.collector_types)
-    vault_by_dir = json.loads(args.vault_json)
+    vault_path = Path(args.vault_json)
+    vault_by_dir = json.loads(vault_path.read_text(encoding="utf-8")) if vault_path.exists() else {}
 
     proxy_targets = [t for t in targets if t.get("proxy_id") == args.proxy_id]
     grouped = group_targets_by_proxy_and_conf(proxy_targets)
