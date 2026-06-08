@@ -1,4 +1,16 @@
 ---
+- name: Install Python dependencies for HMDL collector scripts
+  ansible.builtin.pip:
+    name:
+      - psycopg2-binary>=2.9.0
+      - PyYAML>=6.0
+      - requests>=2.28.0
+    extra_args: "--user"
+  when: hmdl_log_enabled | bool
+  register: collector_pip_install
+  failed_when: false
+  changed_when: collector_pip_install is changed
+
 - name: Create collector sync work directory
   file:
     path: "{{ collector_work_dir }}"

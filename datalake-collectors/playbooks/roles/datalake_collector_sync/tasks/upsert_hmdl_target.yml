@@ -20,7 +20,8 @@
     --db-user {{ hmdl_db_user | quote }}
     --db-password {{ hmdl_db_password | quote }}
     ensure-schema
-  no_log: true
+  register: ensure_schema_result
+  failed_when: ensure_schema_result.rc != 0
   changed_when: false
 
 - name: Upsert collector targets to HMDL database
