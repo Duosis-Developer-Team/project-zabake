@@ -11,6 +11,7 @@ zabbix_url: ""
 zabbix_user: ""
 zabbix_password: ""
 zabbix_validate_certs: false
+zabbix_api_timeout: 300  # seconds (5 minutes); applies to all Zabbix JSON-RPC uri calls
 
 # Device filtering
 device_limit: 0  # 0 means no limit, process all matching devices

@@ -34,6 +34,7 @@ Always validated in playbook `pre_tasks`:
 | `discovery_db_port` | Default `5000` in role; often `5432` in AWX |
 | `zabbix_url`, `zabbix_user`, `zabbix_password` | Zabbix API (required even when `only_fetch: true`) |
 | `zabbix_validate_certs` | Default `false` |
+| `zabbix_api_timeout` | Default `300` (seconds); timeout for all Zabbix JSON-RPC `uri` calls |
 
 ## Conditional: NetBox (Loki) API
 
