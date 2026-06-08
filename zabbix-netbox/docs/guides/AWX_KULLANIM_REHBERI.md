@@ -94,6 +94,7 @@ Playbook **her zaman** doğrular (`only_fetch: true` olsa bile — job şablonun
 | `zabbix_user` | string | `""` | API kullanıcısı |
 | `zabbix_password` | string | `""` | API şifresi |
 | `zabbix_validate_certs` | bool | `false` | TLS sertifika doğrulama |
+| `zabbix_api_timeout` | int | `300` | Zabbix JSON-RPC `uri` çağrıları için timeout (saniye); varsayılan 5 dakika |
 
 ---
 

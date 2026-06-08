@@ -2,6 +2,9 @@
 - name: DB Zabbix Sync
   hosts: localhost
   gather_facts: no
+  module_defaults:
+    ansible.builtin.uri:
+      timeout: "{{ zabbix_api_timeout | default(300) | int }}"
   vars:
     # Discovery database credentials (required)
     _discovery_db_host: "{{ discovery_db_host | default('') }}"
