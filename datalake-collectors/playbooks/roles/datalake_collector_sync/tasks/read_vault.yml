@@ -1,7 +1,17 @@
 ---
+- name: Build authenticated Gitea vault clone URL
+  set_fact:
+    gitea_vault_clone_url: >-
+      {{
+        ('http://' + gitea_vault_token + '@' + (gitea_vault_url | regex_replace('^https?://', '')))
+        if (gitea_vault_token | default('') | length > 0)
+        else gitea_vault_url
+      }}
+  no_log: true
+
 - name: Clone datalake-collectors-vault from Gitea
   git:
-    repo: "{{ gitea_vault_url }}"
+    repo: "{{ gitea_vault_clone_url }}"
     dest: "{{ gitea_vault_local_path }}"
     version: "{{ gitea_vault_branch }}"
     force: true
