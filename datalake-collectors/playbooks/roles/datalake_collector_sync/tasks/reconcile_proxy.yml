@@ -65,7 +65,8 @@
         write-diffs
         --run-id {{ collector_run_id | quote }}
         --diffs-file {{ collector_work_dir }}/diffs_{{ reconcile_proxy_id }}.json
-      no_log: true
+      register: write_diffs_result
+      failed_when: write_diffs_result.rc != 0
       when: hmdl_log_enabled | bool
 
     - name: Deploy reconciled configuration to proxy

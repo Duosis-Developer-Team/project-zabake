@@ -2,6 +2,7 @@
 """HMDL collector schema: ensure tables, upsert targets, write logs."""
 
 import argparse
+import ipaddress
 import json
 import sys
 from datetime import datetime, timezone
@@ -127,10 +128,27 @@ def cmd_upsert_targets(conn, args) -> None:
         conn.commit()
 
 
+def _normalize_inet(value: str | None) -> str | None:
+    """Return IP string suitable for INET column, or None for hostnames."""
+    if not value:
+        return None
+    host = str(value).strip().split("/")[0]
+    try:
+        return str(ipaddress.ip_address(host))
+    except ValueError:
+        return None
+
+
 def cmd_write_diffs(conn, args) -> None:
     diffs = json.loads(Path(args.diffs_file).read_text(encoding="utf-8"))
     with conn.cursor() as cur:
         for d in diffs:
+            action = d.get("action")
+            if action not in ("added", "removed"):
+                continue
+            ip_value = _normalize_inet(d.get("ip"))
+            if ip_value is None:
+                continue
             cur.execute(
                 """
                 INSERT INTO hmdl.collector_diff_log
@@ -138,11 +156,11 @@ def cmd_write_diffs(conn, args) -> None:
                 VALUES (%s, %s, %s, %s, %s::inet, %s)
                 """,
                 (
-                    args.run_id,
+                    str(args.run_id),
                     d.get("proxy_id", ""),
                     d.get("conf_key"),
-                    d.get("action"),
-                    d.get("ip"),
+                    action,
+                    ip_value,
                     d.get("reason"),
                 ),
             )
