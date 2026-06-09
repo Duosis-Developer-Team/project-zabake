@@ -80,7 +80,7 @@ discovery_db_password: "{{ vault_db_password }}"
 netbox_url: "https://loki.bulutistan.com/"
 netbox_token: "{{ vault_netbox_token }}"
 
-gitea_vault_url: "https://gitea.example.local/org/datalake-collectors-vault.git"
+gitea_vault_url: "http://10.134.16.135:3000/Admin/datalake-collectors-vault.git"
 gitea_vault_token: "{{ vault_gitea_token }}"
 
 sync_platforms: true
