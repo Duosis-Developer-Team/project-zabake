@@ -4,42 +4,45 @@
 
 - [x] SQL DDL applied (`SQL/datalake-collectors/*.sql` + `migrations/002_collector_check_phase.sql`)
 - [x] DC13 pilot validated (platform sync, Gitea vault, AWX job)
-- [ ] Gitea `datalake-collectors-vault` populated from [vault-template](../../datalake-collectors-vault-template/README.md)
-- [ ] AWX credentials: PostgreSQL, NetBox, Gitea token, SSH (per NiFi host)
-- [ ] AWX inventory lists every `*-nifi-*` host referenced in [proxy_assignment.yml](../../mappings/proxy_assignment.yml)
-- [ ] Job Template extra vars documented in [AWX_KULLANIM_REHBERI.md](AWX_KULLANIM_REHBERI.md)
+- [x] Gitea `Admin/datalake-collectors-vault` populated from DC13 `configuration_file.json`
+- [x] `proxy_assignment.yml` synced from AWX inventory **NiFi_Prod_Envanter** (17 NiFi hosts)
+- [ ] AWX Job Template uses inventory **NiFi_Prod_Envanter** + credential **NiFi_Prod_Root** (id 7)
+- [ ] Job extra var `gitea_vault_url`: `http://10.134.16.135:3000/Admin/datalake-collectors-vault.git`
 
-Verify proxy hostnames before each rollout wave:
+Verify readiness:
 
 ```bash
 python3 scripts/verify_proxy_rollout.py
-python3 scripts/verify_proxy_rollout.py --dc-filter DC16
 ```
 
 ## Per-DC rollout loop
 
-Replace `<DC>` with `DC16`, `MAIN`, or the next site code.
+1. AWX run: `dry_run: true`, `sync_platforms: true`, `proxy_filter: <DC>`, `removal_guard_enabled: true`
+2. Review email + `hmdl.collector_diff_log`, `hmdl.collector_sync_log`
+3. AWX run: `dry_run: false`, same filters
+4. On dual-NiFi DCs: compare `md5sum /Datalake_Project/configuration_file.json` on both nodes
+5. Confirm NiFi collectors ingest with updated config
 
-1. Set real AWX inventory hostnames in `proxy_assignment.yml` (both NiFi nodes when applicable).
-2. AWX run: `dry_run: true`, `sync_platforms: true`, `proxy_filter: <DC>`, `removal_guard_enabled: true`
-3. Review email + `hmdl.collector_diff_log`, `hmdl.collector_sync_log`, `hmdl.collector_check_log`
-4. Confirm **blocked removals** are expected (IPs still reachable but absent from NetBox)
-5. AWX run: `dry_run: false`, same filters
-6. Optional: `deploy_scripts: true` to rsync platform collector scripts from `datalake/collectors/`
-7. Verify both NiFi nodes have identical `configuration_file.json` hash
-8. Confirm NiFi collectors ingest with updated IPs
+## DC status (AWX NiFi_Prod_Envanter)
 
-## DC status
+| DC | Proxy IDs | NiFi hosts | Nodes | Rollout |
+|----|-----------|------------|-------|---------|
+| DC11 | DC11-NIFI1/2 | 10.6.116.250, .251 | 2 | Pending |
+| DC12 | DC12-NIFI1/2 | 10.35.16.250, .251 | 2 | Pending |
+| DC13 | DC13-NIFI1 | 10.134.16.10 | 1 | **Validated** |
+| DC14 | DC14-NIFI1/2 | 10.50.16.250, .251 | 2 | Pending |
+| DC15 | DC15-NIFI1/2 | 10.40.16.250, .251 | 2 | Pending |
+| DC16 | DC16-NIFI1/2 | 10.60.16.250, .251 | 2 | Pending |
+| DC17 | DC17-NIFI1/2 | 10.90.16.250, .251 | 2 | Pending |
+| AZ11 | AZ11-NIFI1/2 | 10.81.18.250, .251 | 2 | Pending |
+| ICT11 | ICT11-NIFI1/2 | 10.70.16.250, .251 | 2 | Pending |
 
-| DC | Proxy IDs | NiFi nodes | Pilot / prod | Notes |
-|----|-----------|------------|--------------|-------|
-| DC13 | DC13-NIFI1 | 1 | **Prod validated** | AWX host `dc13-nifi-1`, ssh `root` |
-| DC16 | DC16-NIFI1, DC16-NIFI2 | 2 | Pending | Replace `REPLACE_DC16_NIFI*` in proxy_assignment |
-| MAIN | MAIN-NIFI1, MAIN-NIFI2 | 2 | Pending | Replace `REPLACE_MAIN_NIFI*` in proxy_assignment |
+Recommended order after DC13: **DC16 → DC15 → DC14 → DC12 → DC11 → DC17 → AZ11 → ICT11**
 
-## Expand
+Refresh vault from latest DC13 config:
 
-- Repeat per DC row above
-- Enable `sync_devices: true` after platform mapping validated on all target DCs
+```bash
+python3 ../../../scripts/setup_gitea_vault_and_proxy.py
+```
 
-See [DC_ROLLOUT_GUIDE.md](DC_ROLLOUT_GUIDE.md) for operational detail.
+See [DC_ROLLOUT_GUIDE.md](DC_ROLLOUT_GUIDE.md).
