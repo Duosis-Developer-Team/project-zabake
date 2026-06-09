@@ -120,6 +120,7 @@ def main() -> int:
     parser.add_argument("--icmp-count", type=int, default=3)
     parser.add_argument("--icmp-timeout", type=int, default=1)
     parser.add_argument("--tcp-timeout", type=int, default=3)
+    parser.add_argument("--check-phase", default="post_reconcile")
     args = parser.parse_args()
 
     targets = json.loads(Path(args.targets).read_text(encoding="utf-8"))
@@ -133,6 +134,7 @@ def main() -> int:
                     "proxy_id": t.get("proxy_id"),
                     "collector_type": t.get("collector_type"),
                     "conf_key": t.get("conf_key"),
+                    "check_phase": args.check_phase,
                     **c,
                     "target_status": summarize_checks(checks),
                 }

@@ -62,14 +62,108 @@ def extract_dc_code(site_or_dc: str) -> str:
     return m.group(0).upper() if m else ""
 
 
-def resolve_proxy_id(dc_code: str, proxy_assignment: dict) -> str:
-    """Map DC code to proxy_assignment.yml key; fallback MAIN."""
-    if dc_code and dc_code in proxy_assignment:
+def normalize_proxy_assignment(
+    proxy_assignment: dict,
+) -> tuple[dict[str, list[str]], dict[str, dict]]:
+    """
+    Normalize proxy_assignment.yml (legacy single-host or multi-NiFi schema).
+
+    Returns:
+        dc_to_proxy_ids: dc_code -> ordered proxy_id list
+        proxy_lookup: proxy_id -> SSH/conf settings for reconcile
+    """
+    dc_to_proxy_ids: dict[str, list[str]] = {}
+    proxy_lookup: dict[str, dict] = {}
+
+    for dc_key, entry in (proxy_assignment or {}).items():
+        if not isinstance(entry, dict):
+            continue
+
+        if entry.get("proxies"):
+            dc_code = _norm(entry.get("dc_code") or dc_key)
+            dc_to_proxy_ids.setdefault(dc_code, [])
+            for proxy in entry.get("proxies") or []:
+                if not isinstance(proxy, dict):
+                    continue
+                proxy_id = _norm(proxy.get("id") or f"{dc_code}-NIFI")
+                proxy_lookup[proxy_id] = {
+                    "id": proxy_id,
+                    "proxy_nifi_host": proxy.get("proxy_nifi_host", ""),
+                    "ssh_user": proxy.get("ssh_user", "nifi"),
+                    "conf_path": proxy.get(
+                        "conf_path", "/Datalake_Project/configuration_file.json"
+                    ),
+                    "gitea_audit_path": proxy.get("gitea_audit_path", ""),
+                    "dc_key": dc_key,
+                    "dc_code": dc_code,
+                }
+                if proxy_id not in dc_to_proxy_ids[dc_code]:
+                    dc_to_proxy_ids[dc_code].append(proxy_id)
+            continue
+
+        # Legacy single-host entry keyed by DC code
+        dc_code = _norm(entry.get("dc_code") or dc_key)
+        proxy_id = _norm(entry.get("proxy_id") or dc_key)
+        proxy_lookup[proxy_id] = {
+            "id": proxy_id,
+            "proxy_nifi_host": entry.get("proxy_nifi_host", ""),
+            "ssh_user": entry.get("ssh_user", "nifi"),
+            "conf_path": entry.get(
+                "conf_path", "/Datalake_Project/configuration_file.json"
+            ),
+            "gitea_audit_path": entry.get("gitea_audit_path", ""),
+            "dc_key": dc_key,
+            "dc_code": dc_code,
+        }
+        dc_to_proxy_ids.setdefault(dc_code, []).append(proxy_id)
+
+    return dc_to_proxy_ids, proxy_lookup
+
+
+def resolve_dc_code(dc_code: str, proxy_assignment: dict) -> str:
+    """Resolve NetBox DC code to proxy_assignment dc_code key."""
+    dc_to_proxy_ids, _ = normalize_proxy_assignment(proxy_assignment)
+    if dc_code and dc_code in dc_to_proxy_ids:
         return dc_code
-    for key in proxy_assignment:
+    for key in dc_to_proxy_ids:
         if key != "MAIN" and dc_code and dc_code.startswith(key):
             return key
-    return "MAIN" if "MAIN" in proxy_assignment else (next(iter(proxy_assignment), "MAIN"))
+    if "MAIN" in dc_to_proxy_ids:
+        return "MAIN"
+    return dc_code or "MAIN"
+
+
+def resolve_proxy_ids(dc_code: str, proxy_assignment: dict) -> list[str]:
+    """Map NetBox DC code to all proxy NiFi node IDs for that site."""
+    dc_to_proxy_ids, proxy_lookup = normalize_proxy_assignment(proxy_assignment)
+    resolved = resolve_dc_code(dc_code, proxy_assignment)
+    if resolved in dc_to_proxy_ids:
+        return list(dc_to_proxy_ids[resolved])
+    if dc_to_proxy_ids:
+        return list(next(iter(dc_to_proxy_ids.values())))
+    return [resolved or "MAIN"]
+
+
+def resolve_proxy_id(dc_code: str, proxy_assignment: dict) -> str:
+    """Backward-compatible: first proxy id for a DC code."""
+    ids = resolve_proxy_ids(dc_code, proxy_assignment)
+    return ids[0] if ids else (dc_code or "MAIN")
+
+
+def filter_proxy_ids(
+    proxy_lookup: dict[str, dict],
+    proxy_filter: str = "",
+) -> list[str]:
+    """Filter proxy ids by exact id or dc_code match."""
+    if not proxy_filter:
+        return sorted(proxy_lookup.keys())
+    filt = _norm(proxy_filter)
+    out = [
+        pid
+        for pid, cfg in proxy_lookup.items()
+        if pid == filt or _norm(cfg.get("dc_code")) == filt or _norm(cfg.get("dc_key")) == filt
+    ]
+    return sorted(out)
 
 
 def match_platform_mapping(
@@ -194,29 +288,45 @@ def reconcile_section_ips(
     ip_field: str,
     ip_format: str,
     secondary_fields: dict | None = None,
+    connectivity_map: dict[str, str] | None = None,
 ) -> tuple[dict, list[dict]]:
     """
     Smart-merge: update only ip_field (and computed secondary_fields).
+    When connectivity_map marks a removal candidate as ok, keep the IP (removal_blocked).
     Returns (updated_section, diff_entries).
     """
     section = copy.deepcopy(current_section) if current_section else {}
     current_ips = parse_ip_list(section.get(ip_field, ""))
     desired_set = set(desired_ips)
     current_set = set(current_ips)
+    connectivity_map = connectivity_map or {}
 
     diffs: list[dict] = []
     for ip in sorted(desired_set - current_set):
         diffs.append({"action": "added", "ip": ip, "reason": "new_in_netbox"})
     for ip in sorted(current_set - desired_set):
-        diffs.append({"action": "removed", "ip": ip, "reason": "missing_from_netbox"})
+        if connectivity_map.get(ip) == "ok":
+            diffs.append(
+                {
+                    "action": "removal_blocked",
+                    "ip": ip,
+                    "reason": "still_reachable",
+                }
+            )
+        else:
+            diffs.append(
+                {"action": "removed", "ip": ip, "reason": "missing_from_netbox"}
+            )
     for ip in sorted(current_set & desired_set):
         diffs.append({"action": "preserved", "ip": ip, "reason": "unchanged"})
 
-    # Preserve order: existing IPs that remain, then new ones
+    blocked = {d["ip"] for d in diffs if d["action"] == "removal_blocked"}
+    effective_desired = desired_set | blocked
+
     merged: list[str] = []
     seen: set[str] = set()
     for ip in current_ips:
-        if ip in desired_set and ip not in seen:
+        if ip in effective_desired and ip not in seen:
             merged.append(ip)
             seen.add(ip)
     for ip in desired_ips:
@@ -236,6 +346,7 @@ def reconcile_proxy_config(
     desired_by_conf_key: dict[str, dict],
     collector_types: dict,
     preserve_unknown: bool = True,
+    connectivity_map: dict[str, str] | None = None,
 ) -> tuple[dict, list[dict]]:
     """
     Reconcile full configuration_file.json.
@@ -259,7 +370,12 @@ def reconcile_proxy_config(
         current_section = result.get(conf_key, {})
         desired_ips = parse_ip_list(desired_section.get(ip_field, ""))
         updated, diffs = reconcile_section_ips(
-            current_section, desired_ips, ip_field, ip_format, secondary
+            current_section,
+            desired_ips,
+            ip_field,
+            ip_format,
+            secondary,
+            connectivity_map,
         )
         # Merge non-IP fields from desired (vault/other_fields) without wiping manual keys
         for k, v in desired_section.items():

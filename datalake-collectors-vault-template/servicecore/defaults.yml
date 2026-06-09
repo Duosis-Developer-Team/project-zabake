@@ -1,0 +1,3 @@
+# ServiceCore ITSM (manual-only section)
+api_url: "https://REPLACE_ME/"
+api_key: "REPLACE_ME"

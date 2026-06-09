@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS hmdl.collector_check_log (
     status       VARCHAR(30) NOT NULL,
     latency_ms   INTEGER NULL,
     error_text   TEXT NULL,
+    check_phase  VARCHAR(30) NULL,
     checked_at   TIMESTAMPTZ DEFAULT NOW() NULL
 );
 

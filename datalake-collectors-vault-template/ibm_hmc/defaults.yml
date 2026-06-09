@@ -1,0 +1,8 @@
+# IBM HMC credentials (REPLACE before use in Gitea vault repo)
+hmc_user: "zabbix@blt.vc"
+hmc_password: "REPLACE_ME"
+output_nchart: 0
+output_json: 1
+output_csv: 0
+output_influx: 0
+debug: 1

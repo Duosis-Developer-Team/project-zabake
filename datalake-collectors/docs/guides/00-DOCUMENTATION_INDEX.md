@@ -9,7 +9,8 @@
 | [AWX_GUIDE.md](AWX_GUIDE.md) | EN | AWX summary |
 | [GITEA_SETUP_GUIDE.md](GITEA_SETUP_GUIDE.md) | TR/EN | Gitea repos, tokens, SSH |
 | [VAULT_REPO_GUIDE.md](VAULT_REPO_GUIDE.md) | TR/EN | Vault repo structure |
-| [RECONCILIATION_GUIDE.md](RECONCILIATION_GUIDE.md) | EN | Smart merge rules |
+| [DC_ROLLOUT_GUIDE.md](DC_ROLLOUT_GUIDE.md) | EN | Multi-DC / dual NiFi rollout |
+| [RECONCILIATION_GUIDE.md](RECONCILIATION_GUIDE.md) | EN | Smart merge and removal guard |
 
 ## Design
 

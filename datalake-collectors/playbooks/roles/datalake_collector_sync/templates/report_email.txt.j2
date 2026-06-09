@@ -4,6 +4,7 @@ Dry run: {{ dry_run | default(true) }}
 
 Added IPs: {{ collector_email_added | default([]) | length }}
 Removed IPs: {{ collector_email_removed | default([]) | length }}
+Blocked removals: {{ collector_email_blocked | default([]) | length }}
 Check failures: {{ collector_email_failed_checks | default([]) | length }}
 
 {% for row in collector_email_added | default([]) %}
@@ -11,4 +12,7 @@ Check failures: {{ collector_email_failed_checks | default([]) | length }}
 {% endfor %}
 {% for row in collector_email_removed | default([]) %}
 - {{ row.proxy_id | default('') }} | {{ row.collector_type | default(row.conf_key) }} | {{ row.ip }}
+{% endfor %}
+{% for row in collector_email_blocked | default([]) %}
+! {{ row.proxy_id | default('') }} | {{ row.collector_type | default(row.conf_key) }} | {{ row.ip }} | still_reachable
 {% endfor %}

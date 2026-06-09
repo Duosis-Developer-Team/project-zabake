@@ -1,0 +1,3 @@
+# NetBackup hostname list (manual_extras — not from NetBox)
+Hostnames:
+  - "REPLACE_HOSTNAME_1"

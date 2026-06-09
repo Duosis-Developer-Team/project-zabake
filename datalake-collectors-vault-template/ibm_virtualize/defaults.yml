@@ -1,0 +1,6 @@
+# IBM Spectrum Virtualize / SVC (REPLACE before use)
+user: "REPLACE_ME"
+password: "REPLACE_ME"
+port: 22
+remote_path: "/dumps/iostats/"
+local_path: "/Datalake_Project/IBM/IBM_Storage/SSH/iostats/"

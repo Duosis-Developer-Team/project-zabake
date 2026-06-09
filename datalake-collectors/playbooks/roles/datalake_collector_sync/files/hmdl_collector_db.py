@@ -43,6 +43,7 @@ def cmd_ensure_schema(conn) -> None:
         "collector_sync_log.sql",
         "collector_diff_log.sql",
         "collector_check_log.sql",
+        "migrations/002_collector_check_phase.sql",
     ]
     with conn.cursor() as cur:
         for ddl_file in files:
@@ -143,12 +144,15 @@ def _normalize_inet(value: str | None) -> str | None:
 
 def cmd_write_diffs(conn, args) -> None:
     diffs = json.loads(Path(args.diffs_file).read_text(encoding="utf-8"))
+    log_actions = ("added", "removed", "removal_blocked")
     with conn.cursor() as cur:
         for d in diffs:
             action = d.get("action")
-            if action not in ("added", "removed"):
+            if action not in log_actions:
                 continue
             ip_value = _normalize_inet(d.get("ip"))
+            if ip_value is None and action != "removal_blocked":
+                continue
             if ip_value is None:
                 continue
             cur.execute(
@@ -169,15 +173,93 @@ def cmd_write_diffs(conn, args) -> None:
         conn.commit()
 
 
+def cmd_write_sync(conn, args) -> None:
+    diffs = json.loads(Path(args.diffs_file).read_text(encoding="utf-8"))
+    proxy_id = args.proxy_id
+    by_collector: dict[str, dict[str, int]] = {}
+    for d in diffs:
+        if d.get("proxy_id") and d.get("proxy_id") != proxy_id:
+            continue
+        ctype = d.get("collector_type") or d.get("conf_key") or "unknown"
+        bucket = by_collector.setdefault(
+            ctype, {"added": 0, "removed": 0, "unchanged": 0, "blocked": 0}
+        )
+        action = d.get("action")
+        if action == "added":
+            bucket["added"] += 1
+        elif action == "removed":
+            bucket["removed"] += 1
+        elif action == "removal_blocked":
+            bucket["blocked"] += 1
+        elif action == "preserved":
+            bucket["unchanged"] += 1
+
+    dry_run = str(args.dry_run).lower() in ("true", "1", "yes")
+    now = datetime.now(timezone.utc)
+    with conn.cursor() as cur:
+        for ctype, counts in by_collector.items():
+            cur.execute(
+                "SELECT id FROM hmdl.collector_definition WHERE collector_type = %s",
+                (ctype,),
+            )
+            row = cur.fetchone()
+            collector_id = row[0] if row else None
+            status = "dry_run" if dry_run else "completed"
+            if counts["blocked"]:
+                status = "completed_with_blocked_removals"
+            cur.execute(
+                """
+                INSERT INTO hmdl.collector_sync_log
+                    (run_id, awx_job_id, playbook_name, proxy_id, collector_id,
+                     added_count, removed_count, unchanged_count, status, dry_run,
+                     error_payload, finished_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    str(args.run_id),
+                    args.awx_job_id or None,
+                    args.playbook_name,
+                    proxy_id,
+                    collector_id,
+                    counts["added"],
+                    counts["removed"],
+                    counts["unchanged"],
+                    status,
+                    dry_run,
+                    json.dumps({"removal_blocked": counts["blocked"]})
+                    if counts["blocked"]
+                    else None,
+                    now,
+                ),
+            )
+        conn.commit()
+
+
+def cmd_mark_distributed(conn, args) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE hmdl.collector_target SET
+                last_distributed_at = NOW(),
+                updated_at = NOW()
+            WHERE proxy_id = %s
+            """,
+            (args.proxy_id,),
+        )
+        conn.commit()
+
+
 def cmd_write_checks(conn, args) -> None:
     checks = json.loads(Path(args.checks_file).read_text(encoding="utf-8"))
     with conn.cursor() as cur:
         for c in checks:
+            check_phase = c.get("check_phase")
             cur.execute(
                 """
                 INSERT INTO hmdl.collector_check_log
-                    (run_id, proxy_id, ip, check_type, port, status, latency_ms, error_text)
-                VALUES (%s, %s, %s::inet, %s, %s, %s, %s, %s)
+                    (run_id, proxy_id, ip, check_type, port, status,
+                     latency_ms, error_text, check_phase)
+                VALUES (%s, %s, %s::inet, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     args.run_id,
@@ -188,6 +270,7 @@ def cmd_write_checks(conn, args) -> None:
                     c["status"],
                     c.get("latency_ms"),
                     c.get("error_text"),
+                    check_phase,
                 ),
             )
             cur.execute(
@@ -225,6 +308,17 @@ def main() -> int:
     p_c.add_argument("--run-id", required=True)
     p_c.add_argument("--checks-file", required=True)
 
+    p_s = sub.add_parser("write-sync")
+    p_s.add_argument("--run-id", required=True)
+    p_s.add_argument("--proxy-id", required=True)
+    p_s.add_argument("--diffs-file", required=True)
+    p_s.add_argument("--dry-run", default="false")
+    p_s.add_argument("--playbook-name", default="datalake_collector_sync")
+    p_s.add_argument("--awx-job-id", default="")
+
+    p_m = sub.add_parser("mark-distributed")
+    p_m.add_argument("--proxy-id", required=True)
+
     args = parser.parse_args()
     conn = connect(args)
     try:
@@ -236,6 +330,10 @@ def main() -> int:
             cmd_write_diffs(conn, args)
         elif args.command == "write-checks":
             cmd_write_checks(conn, args)
+        elif args.command == "write-sync":
+            cmd_write_sync(conn, args)
+        elif args.command == "mark-distributed":
+            cmd_mark_distributed(conn, args)
     finally:
         conn.close()
     return 0

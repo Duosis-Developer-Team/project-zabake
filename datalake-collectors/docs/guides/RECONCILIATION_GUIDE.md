@@ -18,6 +18,10 @@ Non-IP keys in the section (ports, paths, usernames from vault) are merged from 
 
 When `dry_run: true`, diffs are written to `hmdl.collector_diff_log` and email; proxy `configuration_file.json` is not overwritten.
 
+## Removal guard
+
+When `removal_guard_enabled: true` (default), IPs that NetBox no longer lists but still pass ICMP/TCP checks are **not** removed. They appear in diffs as `removal_blocked` with reason `still_reachable` and in the email report under **Blocked removals**.
+
 ## Unknown sections
 
 Sections not in `collector_types.yml` remain untouched when `reconcile_preserve_unknown_sections: true` (default).
