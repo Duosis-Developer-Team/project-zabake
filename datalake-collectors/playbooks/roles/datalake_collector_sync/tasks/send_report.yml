@@ -3,6 +3,7 @@
   set_fact:
     collector_email_added: "{{ collector_diff_report | selectattr('action', 'equalto', 'added') | list }}"
     collector_email_removed: "{{ collector_diff_report | selectattr('action', 'equalto', 'removed') | list }}"
+    collector_email_blocked: "{{ collector_diff_report | selectattr('action', 'equalto', 'removal_blocked') | list }}"
     collector_email_failed_checks: "{{ collector_check_report | default([]) | rejectattr('status', 'equalto', 'ok') | list }}"
     collector_email_results_csv: []
 
@@ -48,7 +49,7 @@
     --smtp-pass {{ mail_smtp_password | quote }}
     --from-addr {{ mail_from | quote }}
     --recipients {{ mail_recipients | join(',') | quote }}
-    --subject {{ ('[HMDL Datalake Collectors] run ' ~ collector_run_id ~ ' — added ' ~ (collector_email_added | length) ~ ' removed ' ~ (collector_email_removed | length)) | quote }}
+    --subject {{ ('[HMDL Datalake Collectors] run ' ~ collector_run_id ~ ' — added ' ~ (collector_email_added | length) ~ ' removed ' ~ (collector_email_removed | length) ~ ' blocked ' ~ (collector_email_blocked | default([]) | length)) | quote }}
     --results-file {{ collector_work_dir }}/email_results.json
     --html-file {{ collector_work_dir }}/report_email.html
     --text-file {{ collector_work_dir }}/report_email.txt

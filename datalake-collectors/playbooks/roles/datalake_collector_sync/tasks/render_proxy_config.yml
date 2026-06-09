@@ -5,8 +5,24 @@
 
 - name: Filter proxies when proxy_filter set
   set_fact:
-    active_proxy_ids: "{{ active_proxy_ids | select('match', '^' ~ proxy_filter ~ '$') | list }}"
-  when: proxy_filter | default('') | length > 0
+    active_proxy_ids: >-
+      {{
+        proxy_lookup_map.values()
+        | selectattr('dc_code', 'equalto', proxy_filter)
+        | map(attribute='id')
+        | list
+        | unique
+      }}
+  when:
+    - proxy_filter | default('') | length > 0
+    - proxy_lookup_map is defined
+
+- name: Intersect filtered proxies with targets when proxy_filter set
+  set_fact:
+    active_proxy_ids: "{{ active_proxy_ids | intersect(collector_all_targets | map(attribute='proxy_id') | unique | list) }}"
+  when:
+    - proxy_filter | default('') | length > 0
+    - collector_all_targets | length > 0
 
 - name: Reconcile configuration per proxy
   include_tasks: reconcile_proxy.yml

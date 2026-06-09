@@ -40,6 +40,11 @@ def main() -> int:
     parser.add_argument("--proxy-id", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--diff-output", required=True)
+    parser.add_argument(
+        "--connectivity-json",
+        default="",
+        help="Path to ip->status map from pre-reconcile checks",
+    )
     args = parser.parse_args()
 
     current = json.loads(Path(args.current).read_text(encoding="utf-8"))
@@ -47,6 +52,12 @@ def main() -> int:
     collector_types = load_yaml(args.collector_types)
     vault_path = Path(args.vault_json)
     vault_by_dir = json.loads(vault_path.read_text(encoding="utf-8")) if vault_path.exists() else {}
+
+    connectivity_map: dict[str, str] = {}
+    if args.connectivity_json:
+        conn_path = Path(args.connectivity_json)
+        if conn_path.exists():
+            connectivity_map = json.loads(conn_path.read_text(encoding="utf-8"))
 
     proxy_targets = [t for t in targets if t.get("proxy_id") == args.proxy_id]
     grouped = group_targets_by_proxy_and_conf(proxy_targets)
@@ -81,7 +92,9 @@ def main() -> int:
         if vk in vault_by_dir:
             desired_by_conf[ck] = copy_manual_section(current.get(ck, {}), vault_by_dir[vk])
 
-    reconciled, diffs = reconcile_proxy_config(current, desired_by_conf, collector_types)
+    reconciled, diffs = reconcile_proxy_config(
+        current, desired_by_conf, collector_types, connectivity_map=connectivity_map
+    )
     for d in diffs:
         d["proxy_id"] = args.proxy_id
 

@@ -27,6 +27,17 @@
     file: "{{ proxy_assignment_path }}"
     name: proxy_assignment_map
 
+- name: Build proxy lookup map
+  command: >
+    python3 {{ role_path }}/files/build_proxy_lookup.py
+    --proxy-assignment {{ proxy_assignment_path | quote }}
+  register: proxy_lookup_cmd
+  changed_when: false
+
+- name: Set proxy lookup fact
+  set_fact:
+    proxy_lookup_map: "{{ proxy_lookup_cmd.stdout | from_json }}"
+
 - name: Load collector defaults
   include_vars:
     file: "{{ collector_defaults_path }}"
@@ -75,6 +86,13 @@
 - name: Render and reconcile proxy configuration
   include_tasks: render_proxy_config.yml
   when: not (only_fetch | bool)
+
+- name: Deploy collector scripts to proxy NiFi nodes
+  include_tasks: deploy_collector_scripts.yml
+  when:
+    - deploy_scripts | bool
+    - not (only_fetch | bool)
+    - not (dry_run | bool)
 
 - name: Run basic connectivity checks
   include_tasks: run_basic_checks.yml

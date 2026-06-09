@@ -7,6 +7,7 @@
     --icmp-count {{ icmp_count }}
     --icmp-timeout {{ icmp_timeout_sec }}
     --tcp-timeout {{ tcp_timeout_sec }}
+    --check-phase {{ check_phase_post_reconcile | quote }}
   register: check_cmd
   when: collector_all_targets | length > 0
   changed_when: false

@@ -38,19 +38,35 @@
 {% endfor %}
 </table>
 
+<h3>Blocked removals — still reachable ({{ collector_email_blocked | default([]) | length }})</h3>
+<table border="1" cellpadding="4">
+<tr><th>Proxy</th><th>Collector</th><th>IP</th><th>Reason</th></tr>
+{% for row in collector_email_blocked | default([]) %}
+<tr>
+  <td>{{ row.proxy_id | default('') }}</td>
+  <td>{{ row.collector_type | default(row.conf_key) }}</td>
+  <td>{{ row.ip }}</td>
+  <td>{{ row.reason | default('still_reachable') }}</td>
+</tr>
+{% else %}
+<tr><td colspan="4">None</td></tr>
+{% endfor %}
+</table>
+
 <h3>Connectivity failures ({{ collector_email_failed_checks | default([]) | length }})</h3>
 <table border="1" cellpadding="4">
-<tr><th>IP</th><th>Check</th><th>Port</th><th>Status</th><th>Error</th></tr>
+<tr><th>IP</th><th>Phase</th><th>Check</th><th>Port</th><th>Status</th><th>Error</th></tr>
 {% for row in collector_email_failed_checks | default([]) %}
 <tr>
   <td>{{ row.ip }}</td>
+  <td>{{ row.check_phase | default('') }}</td>
   <td>{{ row.check_type }}</td>
   <td>{{ row.port | default('') }}</td>
   <td>{{ row.status }}</td>
   <td>{{ row.error_text | default('') }}</td>
 </tr>
 {% else %}
-<tr><td colspan="5">None</td></tr>
+<tr><td colspan="6">None</td></tr>
 {% endfor %}
 </table>
 </body>

@@ -15,9 +15,11 @@ sys.path.insert(0, str(ROLE_UTILS))
 from collector_core import (  # noqa: E402
     format_ip_list,
     match_platform_mapping,
+    normalize_proxy_assignment,
     parse_ip_list,
     reconcile_proxy_config,
     reconcile_section_ips,
+    resolve_proxy_ids,
 )
 
 
@@ -106,3 +108,73 @@ def test_reconcile_proxy_preserves_manual_only():
     assert result["Zabbix"]["zabUrl"] == current["Zabbix"]["zabUrl"]
     assert result["Loki"] == current["Loki"]
     assert "10.0.0.2" in result["VmWare"]["VMwareIP"]
+
+
+def test_reconcile_section_removal_blocked_when_reachable():
+    current = {"VMwareIP": "10.0.0.1,10.0.0.2", "VMwarePort": "443"}
+    updated, diffs = reconcile_section_ips(
+        current,
+        ["10.0.0.2"],
+        "VMwareIP",
+        "comma_string",
+        connectivity_map={"10.0.0.1": "ok"},
+    )
+    assert "10.0.0.1" in updated["VMwareIP"]
+    assert "10.0.0.2" in updated["VMwareIP"]
+    actions = {d["action"] for d in diffs}
+    assert "removal_blocked" in actions
+    assert "removed" not in actions
+
+
+def test_reconcile_section_removes_when_unreachable():
+    current = {"VMwareIP": "10.0.0.1,10.0.0.2", "VMwarePort": "443"}
+    updated, diffs = reconcile_section_ips(
+        current,
+        ["10.0.0.2"],
+        "VMwareIP",
+        "comma_string",
+        connectivity_map={"10.0.0.1": "icmp_fail"},
+    )
+    assert "10.0.0.1" not in updated["VMwareIP"]
+    actions = {d["action"] for d in diffs}
+    assert "removed" in actions
+
+
+def test_normalize_proxy_assignment_multi_nifi():
+    assignment = {
+        "DC16": {
+            "dc_code": "DC16",
+            "proxies": [
+                {"id": "DC16-NIFI1", "proxy_nifi_host": "dc16-nifi-1"},
+                {"id": "DC16-NIFI2", "proxy_nifi_host": "dc16-nifi-2"},
+            ],
+        }
+    }
+    dc_map, lookup = normalize_proxy_assignment(assignment)
+    assert dc_map["DC16"] == ["DC16-NIFI1", "DC16-NIFI2"]
+    assert lookup["DC16-NIFI2"]["proxy_nifi_host"] == "dc16-nifi-2"
+
+
+def test_resolve_proxy_ids_fan_out():
+    assignment = {
+        "DC16": {
+            "dc_code": "DC16",
+            "proxies": [
+                {"id": "DC16-NIFI1", "proxy_nifi_host": "a"},
+                {"id": "DC16-NIFI2", "proxy_nifi_host": "b"},
+            ],
+        }
+    }
+    assert resolve_proxy_ids("DC16", assignment) == ["DC16-NIFI1", "DC16-NIFI2"]
+
+
+def test_legacy_proxy_assignment_still_works():
+    assignment = {
+        "DC13": {
+            "proxy_nifi_host": "dc13-nifi-1",
+            "ssh_user": "root",
+        }
+    }
+    dc_map, lookup = normalize_proxy_assignment(assignment)
+    assert "DC13" in dc_map
+    assert lookup["DC13"]["proxy_nifi_host"] == "dc13-nifi-1"

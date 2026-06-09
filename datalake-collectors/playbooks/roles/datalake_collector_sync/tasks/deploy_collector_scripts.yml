@@ -1,0 +1,35 @@
+---
+- name: Use active proxy ids from reconcile when available
+  set_fact:
+    script_deploy_proxy_ids: "{{ active_proxy_ids | default([]) }}"
+
+- name: Default script deploy proxy ids from lookup
+  set_fact:
+    script_deploy_proxy_ids: "{{ proxy_lookup_map.keys() | list }}"
+  when: script_deploy_proxy_ids | default([]) | length == 0
+
+- name: Determine proxy nodes for script deployment
+  set_fact:
+    script_deploy_proxy_ids: "{{ script_deploy_proxy_ids | default([]) }}"
+  when: script_deploy_proxy_ids is not defined
+
+- name: Filter script deploy proxies when proxy_filter set
+  set_fact:
+    script_deploy_proxy_ids: >-
+      {{
+        proxy_lookup_map.values()
+        | selectattr('dc_code', 'equalto', proxy_filter)
+        | map(attribute='id')
+        | list
+        | unique
+      }}
+  when:
+    - proxy_filter | default('') | length > 0
+    - proxy_lookup_map is defined
+
+- name: Deploy collector scripts per proxy
+  include_tasks: deploy_collector_scripts_proxy.yml
+  loop: "{{ script_deploy_proxy_ids | default([]) }}"
+  loop_control:
+    loop_var: script_deploy_proxy_id
+  when: script_deploy_proxy_ids | default([]) | length > 0

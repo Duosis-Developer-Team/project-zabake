@@ -18,7 +18,7 @@ from collector_core import (  # noqa: E402
     is_valid_ip_or_host,
     match_device_mapping,
     match_platform_mapping,
-    resolve_proxy_id,
+    resolve_proxy_ids,
 )
 
 
@@ -69,21 +69,22 @@ def main() -> int:
             if not ip or not is_valid_ip_or_host(ip):
                 continue
             dc = extract_dc_code(site)
-            proxy_id = resolve_proxy_id(dc, proxy_assignment)
-            targets.append(
-                {
-                    "collector_type": ctype,
-                    "conf_key": meta.get("conf_key", ctype),
-                    "ip": ip.split("/")[0],
-                    "proxy_id": proxy_id,
-                    "host_entity_type": "platform",
-                    "netbox_entity_id": item.get("id"),
-                    "entity_name": item.get("name"),
-                    "manufacturer": mfr,
-                    "dc_code": dc,
-                    "check_ports": meta.get("check_ports", []),
-                }
-            )
+            proxy_ids = resolve_proxy_ids(dc, proxy_assignment)
+            for proxy_id in proxy_ids:
+                targets.append(
+                    {
+                        "collector_type": ctype,
+                        "conf_key": meta.get("conf_key", ctype),
+                        "ip": ip.split("/")[0],
+                        "proxy_id": proxy_id,
+                        "host_entity_type": "platform",
+                        "netbox_entity_id": item.get("id"),
+                        "entity_name": item.get("name"),
+                        "manufacturer": mfr,
+                        "dc_code": dc,
+                        "check_ports": meta.get("check_ports", []),
+                    }
+                )
         else:
             row = match_device_mapping(item, mappings)
             if not row:
@@ -101,24 +102,25 @@ def main() -> int:
             cf = item.get("custom_fields") or {}
             site = cf.get("Site") or cf.get("DC") or ""
             dc = extract_dc_code(site)
-            proxy_id = resolve_proxy_id(dc, proxy_assignment)
+            proxy_ids = resolve_proxy_ids(dc, proxy_assignment)
             mfr = ""
             if item.get("device_type") and item["device_type"].get("manufacturer"):
                 mfr = item["device_type"]["manufacturer"].get("name", "")
-            targets.append(
-                {
-                    "collector_type": ctype,
-                    "conf_key": meta.get("conf_key", ctype),
-                    "ip": ip.split("/")[0],
-                    "proxy_id": proxy_id,
-                    "host_entity_type": "device",
-                    "netbox_entity_id": item.get("id"),
-                    "entity_name": item.get("name"),
-                    "manufacturer": mfr,
-                    "dc_code": dc,
-                    "check_ports": meta.get("check_ports", []),
-                }
-            )
+            for proxy_id in proxy_ids:
+                targets.append(
+                    {
+                        "collector_type": ctype,
+                        "conf_key": meta.get("conf_key", ctype),
+                        "ip": ip.split("/")[0],
+                        "proxy_id": proxy_id,
+                        "host_entity_type": "device",
+                        "netbox_entity_id": item.get("id"),
+                        "entity_name": item.get("name"),
+                        "manufacturer": mfr,
+                        "dc_code": dc,
+                        "check_ports": meta.get("check_ports", []),
+                    }
+                )
 
     Path(args.output).write_text(json.dumps(targets, indent=2), encoding="utf-8")
     print(json.dumps({"count": len(targets)}))

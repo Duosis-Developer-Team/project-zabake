@@ -1,0 +1,41 @@
+---
+- name: Resolve proxy for script deploy {{ script_deploy_proxy_id }}
+  set_fact:
+    script_proxy_cfg: "{{ proxy_lookup_map[script_deploy_proxy_id] | default({}) }}"
+
+- name: Skip script deploy when proxy host is placeholder
+  debug:
+    msg: "Skipping script deploy for {{ script_deploy_proxy_id }} — REPLACE_* host"
+  when: "'REPLACE_' in (script_proxy_cfg.proxy_nifi_host | default('REPLACE_'))"
+
+- name: Deploy collector scripts block for {{ script_deploy_proxy_id }}
+  when: "'REPLACE_' not in (script_proxy_cfg.proxy_nifi_host | default('REPLACE_'))"
+  block:
+    - name: Run collector script deploy dry-run or apply
+      command: >
+        python3 {{ role_path }}/files/deploy_collector_scripts.py
+        --collector-types {{ collector_types_path | quote }}
+        --src {{ collector_scripts_src | quote }}
+        --remote-base {{ collector_scripts_remote_base | quote }}
+        --types {{ platform_collector_types_for_deploy | join(',') | quote }}
+        --manifest-output {{ collector_work_dir }}/script_manifest_{{ script_deploy_proxy_id }}.json
+        {% if dry_run | bool %}--dry-run{% endif %}
+      register: script_manifest_cmd
+      changed_when: false
+      delegate_to: localhost
+
+    - name: Sync collector script directories to proxy
+      synchronize:
+        src: "{{ item.src }}/"
+        dest: "{{ item.dest }}/"
+        rsync_opts:
+          - "--checksum"
+          - "--delete"
+      delegate_to: "{{ script_proxy_cfg.proxy_nifi_host }}"
+      vars:
+        ansible_user: "{{ script_proxy_cfg.ssh_user | default('nifi') }}"
+      loop: "{{ (lookup('file', collector_work_dir + '/script_manifest_' + script_deploy_proxy_id + '.json') | from_json).deploy_paths | default([]) }}"
+      when:
+        - not (dry_run | bool)
+        - item.src is defined
+        - item.dest is defined

@@ -44,8 +44,10 @@ Proxy reconcile için **Machine Credential** (SSH) gerekir; `proxy_assignment.ym
 | `run_basic_checks` | `true` | ICMP + TCP kontrol |
 | `only_fetch` | `false` | Sadece fetch, reconcile yok |
 | `location_filter` | `""` | Site/DC substring filtresi |
-| `proxy_filter` | `""` | Örn. `DC13` |
+| `proxy_filter` | `""` | Örn. `DC13` (dc_code; tüm NiFi node'ları) |
 | `collector_filter` | `""` | Örn. `VmWare,Nutanix` |
+| `removal_guard_enabled` | `true` | NetBox'tan düşen IP silinmeden önce ICMP/TCP kontrol |
+| `deploy_scripts` | `false` | Platform collector script'lerini NiFi'ye rsync |
 
 ## E-posta (ADR-0003)
 

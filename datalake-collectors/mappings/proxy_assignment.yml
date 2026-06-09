@@ -1,22 +1,42 @@
 ---
-# DC / site code -> Proxy NiFi SSH target and configuration path.
-# Replace placeholder hostnames with real proxy NiFi addresses before production use.
+# DC / site code -> one or more Proxy NiFi SSH targets and configuration paths.
+# Each DC may have multiple NiFi nodes; targets are fan-out to every proxy id under the DC.
+# Replace REPLACE_* hostnames with AWX inventory host names before production use.
 
 DC13:
-  # AWX inventory host name (dc13-nifi-1 -> ansible_host 10.134.16.10)
-  proxy_nifi_host: "dc13-nifi-1"
-  ssh_user: "root"
-  conf_path: "/Datalake_Project/configuration_file.json"
-  gitea_audit_path: "proxies/dc13/configuration_file.json"
+  dc_code: "DC13"
+  proxies:
+    - id: "DC13-NIFI1"
+      # AWX inventory host (dc13-nifi-1 -> ansible_host 10.134.16.10)
+      proxy_nifi_host: "dc13-nifi-1"
+      ssh_user: "root"
+      conf_path: "/Datalake_Project/configuration_file.json"
+      gitea_audit_path: "proxies/dc13/nifi1/configuration_file.json"
 
 DC16:
-  proxy_nifi_host: "REPLACE_PROXY_NIFI_DC16"
-  ssh_user: "nifi"
-  conf_path: "/Datalake_Project/configuration_file.json"
-  gitea_audit_path: "proxies/dc16/configuration_file.json"
+  dc_code: "DC16"
+  proxies:
+    - id: "DC16-NIFI1"
+      proxy_nifi_host: "REPLACE_DC16_NIFI1"
+      ssh_user: "nifi"
+      conf_path: "/Datalake_Project/configuration_file.json"
+      gitea_audit_path: "proxies/dc16/nifi1/configuration_file.json"
+    - id: "DC16-NIFI2"
+      proxy_nifi_host: "REPLACE_DC16_NIFI2"
+      ssh_user: "nifi"
+      conf_path: "/Datalake_Project/configuration_file.json"
+      gitea_audit_path: "proxies/dc16/nifi2/configuration_file.json"
 
 MAIN:
-  proxy_nifi_host: "REPLACE_MAIN_NIFI"
-  ssh_user: "nifi"
-  conf_path: "/Datalake_Project/configuration_file.json"
-  gitea_audit_path: "proxies/main/configuration_file.json"
+  dc_code: "MAIN"
+  proxies:
+    - id: "MAIN-NIFI1"
+      proxy_nifi_host: "REPLACE_MAIN_NIFI1"
+      ssh_user: "nifi"
+      conf_path: "/Datalake_Project/configuration_file.json"
+      gitea_audit_path: "proxies/main/nifi1/configuration_file.json"
+    - id: "MAIN-NIFI2"
+      proxy_nifi_host: "REPLACE_MAIN_NIFI2"
+      ssh_user: "nifi"
+      conf_path: "/Datalake_Project/configuration_file.json"
+      gitea_audit_path: "proxies/main/nifi2/configuration_file.json"

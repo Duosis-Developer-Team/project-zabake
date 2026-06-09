@@ -1,7 +1,7 @@
 ---
 - name: Resolve proxy assignment for {{ reconcile_proxy_id }}
   set_fact:
-    current_proxy_cfg: "{{ proxy_assignment_map[reconcile_proxy_id] | default({}) }}"
+    current_proxy_cfg: "{{ proxy_lookup_map[reconcile_proxy_id] | default({}) }}"
 
 - name: Skip reconcile when proxy host is placeholder
   debug:
@@ -34,6 +34,39 @@
         dest: "{{ collector_work_dir }}/current_{{ reconcile_proxy_id }}.json"
         mode: "0640"
 
+    - name: Run pre-reconcile connectivity checks for removal candidates
+      command: >
+        python3 {{ role_path }}/files/pre_reconcile_checks.py
+        --current {{ collector_work_dir }}/current_{{ reconcile_proxy_id }}.json
+        --targets {{ collector_work_dir }}/all_targets.json
+        --collector-types {{ collector_types_path | quote }}
+        --proxy-id {{ reconcile_proxy_id | quote }}
+        --output {{ collector_work_dir }}/connectivity_{{ reconcile_proxy_id }}.json
+        --checks-output {{ collector_work_dir }}/pre_checks_{{ reconcile_proxy_id }}.json
+        --icmp-count {{ icmp_count }}
+        --icmp-timeout {{ icmp_timeout_sec }}
+        --tcp-timeout {{ tcp_timeout_sec }}
+      register: pre_check_cmd
+      changed_when: false
+      when:
+        - run_basic_checks | bool
+        - removal_guard_enabled | bool
+
+    - name: Record empty connectivity map when pre-checks skipped
+      copy:
+        content: "{}"
+        dest: "{{ collector_work_dir }}/connectivity_{{ reconcile_proxy_id }}.json"
+        mode: "0640"
+      when: not (run_basic_checks | bool and removal_guard_enabled | bool)
+
+    - name: Merge pre-reconcile check rows into global report
+      set_fact:
+        collector_check_report: "{{ collector_check_report + (lookup('file', collector_work_dir + '/pre_checks_' + reconcile_proxy_id + '.json') | from_json) }}"
+      when:
+        - run_basic_checks | bool
+        - removal_guard_enabled | bool
+        - pre_check_cmd is defined
+
     - name: Run reconcile for proxy {{ reconcile_proxy_id }}
       command: >
         python3 {{ role_path }}/files/reconcile_proxy_batch.py
@@ -42,6 +75,7 @@
         --collector-types {{ collector_types_path | quote }}
         --vault-json {{ collector_work_dir }}/vault_by_dir.json
         --proxy-id {{ reconcile_proxy_id | quote }}
+        --connectivity-json {{ collector_work_dir }}/connectivity_{{ reconcile_proxy_id }}.json
         --output {{ collector_work_dir }}/reconciled_{{ reconcile_proxy_id }}.json
         --diff-output {{ collector_work_dir }}/diffs_{{ reconcile_proxy_id }}.json
       register: reconcile_cmd
@@ -69,6 +103,25 @@
       failed_when: write_diffs_result.rc != 0
       when: hmdl_log_enabled | bool
 
+    - name: Write sync summary to HMDL database
+      command: >
+        python3 {{ role_path }}/files/hmdl_collector_db.py
+        --db-host {{ hmdl_db_host | quote }}
+        --db-port {{ hmdl_db_port }}
+        --db-name {{ hmdl_db_name | quote }}
+        --db-user {{ hmdl_db_user | quote }}
+        --db-password {{ hmdl_db_password | quote }}
+        write-sync
+        --run-id {{ collector_run_id | quote }}
+        --proxy-id {{ reconcile_proxy_id | quote }}
+        --diffs-file {{ collector_work_dir }}/diffs_{{ reconcile_proxy_id }}.json
+        --dry-run {{ dry_run | bool | lower }}
+        --playbook-name {{ hmdl_playbook_name | quote }}
+        --awx-job-id {{ ansible_env.AWX_JOB_ID | default('') | quote }}
+      register: write_sync_result
+      failed_when: write_sync_result.rc != 0
+      when: hmdl_log_enabled | bool
+
     - name: Deploy reconciled configuration to proxy
       copy:
         content: "{{ lookup('file', collector_work_dir + '/reconciled_' + reconcile_proxy_id + '.json') }}"
@@ -77,3 +130,17 @@
       delegate_to: "{{ current_proxy_cfg.proxy_nifi_host }}"
       remote_user: "{{ current_proxy_cfg.ssh_user | default('nifi') }}"
       when: not (dry_run | bool)
+
+    - name: Mark targets distributed on proxy
+      command: >
+        python3 {{ role_path }}/files/hmdl_collector_db.py
+        --db-host {{ hmdl_db_host | quote }}
+        --db-port {{ hmdl_db_port }}
+        --db-name {{ hmdl_db_name | quote }}
+        --db-user {{ hmdl_db_user | quote }}
+        --db-password {{ hmdl_db_password | quote }}
+        mark-distributed
+        --proxy-id {{ reconcile_proxy_id | quote }}
+      when:
+        - hmdl_log_enabled | bool
+        - not (dry_run | bool)

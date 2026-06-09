@@ -1,0 +1,5 @@
+# Dynamics 365 CRM (manual-only section)
+tenant_id: "REPLACE_ME"
+client_id: "REPLACE_ME"
+client_secret: "REPLACE_ME"
+resource_url: "https://REPLACE_ME/"

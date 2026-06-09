@@ -1,0 +1,3 @@
+# Loki / NetBox API (manual-only section)
+address: "https://REPLACE_ME/"
+api_token: "REPLACE_ME"

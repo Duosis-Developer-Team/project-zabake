@@ -1,0 +1,6 @@
+# Veeam backup infrastructure (REPLACE before use)
+username: "REPLACE_ME"
+password: "REPLACE_ME"
+created_after: 1
+lastrun_after: 1
+limit: 10000
