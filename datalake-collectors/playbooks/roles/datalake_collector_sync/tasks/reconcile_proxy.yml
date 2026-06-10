@@ -21,15 +21,25 @@
         ansible_user: "{{ hostvars['localhost']['proxy_lookup_map'][reconcile_proxy_id].ssh_user | default('root') }}"
       register: remote_conf_slurp
       ignore_errors: true
+      ignore_unreachable: true
 
     - name: Warn when proxy configuration could not be read via SSH
       debug:
         msg: >-
           WARNING: slurp failed for {{ reconcile_proxy_id }}
-          ({{ current_proxy_cfg.proxy_nifi_host }}):
+          ({{ hostvars['localhost']['proxy_lookup_map'][reconcile_proxy_id].proxy_nifi_host }}):
           {{ remote_conf_slurp.msg | default('unknown error') }} —
           reconcile will treat current config as empty
       when: remote_conf_slurp is failed
+
+    - name: Warn when proxy NiFi host is unreachable for config read
+      debug:
+        msg: >-
+          WARNING: NiFi host unreachable for {{ reconcile_proxy_id }}
+          ({{ hostvars['localhost']['proxy_lookup_map'][reconcile_proxy_id].proxy_nifi_host }}):
+          {{ remote_conf_slurp.msg | default('unreachable') }} —
+          reconcile will treat current config as empty
+      when: remote_conf_slurp is unreachable
 
     - name: Set current config fact (empty if missing)
       set_fact:
