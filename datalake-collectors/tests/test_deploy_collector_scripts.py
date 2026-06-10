@@ -23,6 +23,13 @@ def test_remote_dir_strips_datalake_prefix():
     ) == "/Datalake_Project/VMware"
 
 
+def test_remote_dir_hana_linux_collector():
+    assert remote_dir(
+        "datalake/collectors/Zabbix/Linux-Hana/zabbix-hana-linux-metrics.py",
+        "/Datalake_Project",
+    ) == "/Datalake_Project/Zabbix/Linux-Hana"
+
+
 def test_local_dir_resolves_under_src_root(tmp_path):
     src = tmp_path / "collectors"
     (src / "IBM").mkdir(parents=True)
