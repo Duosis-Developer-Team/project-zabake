@@ -417,10 +417,6 @@
     netbox_devices_raw:           "{{ (fetch_devices_monitor_result.stdout | from_json).devices }}"
     netbox_devices_count:         "{{ (fetch_devices_monitor_result.stdout | from_json).count }}"
 
-- name: Merge Hana Linux VMs from datalake virtualization inventory
-  include_tasks: fetch_hana_linux_vms_datalake.yml
-  when: sync_hana_linux_vms | default(true) | bool
-
 - name: Display fetch results for monitor and skip devices
   debug:
     msg: |
