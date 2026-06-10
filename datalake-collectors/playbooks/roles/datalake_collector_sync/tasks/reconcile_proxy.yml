@@ -165,7 +165,7 @@
 
     - name: Backup current configuration on proxy before deploy
       shell: |
-        set -euo pipefail
+        set -eu
         src="{{ hostvars['localhost']['proxy_lookup_map'][reconcile_proxy_id].conf_path | default('/Datalake_Project/configuration_file.json') }}"
         if [ ! -f "$src" ]; then
           echo "skip=no_existing_file"
