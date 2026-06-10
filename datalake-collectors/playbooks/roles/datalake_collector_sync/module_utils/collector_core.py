@@ -166,6 +166,118 @@ def filter_proxy_ids(
     return sorted(out)
 
 
+def _mapping_row_matches_name_site(
+    platform_name: str,
+    site: str,
+    row: dict,
+) -> bool:
+    """Match optional name_contains / site_contains with match_logic (and/or)."""
+    name_l = _lower(platform_name)
+    site_l = _lower(site)
+    nc = _lower(row.get("name_contains"))
+    sc = _lower(row.get("site_contains"))
+    name_match = not nc or nc in name_l
+    site_match = not sc or sc in site_l
+    if nc and sc:
+        logic = _lower(row.get("match_logic") or "and")
+        if logic == "or":
+            return name_match or site_match
+        return name_match and site_match
+    return name_match and site_match
+
+
+def is_platform_not_monitored(custom_fields: dict | None) -> bool:
+    """True when NetBox izlenmeli / monitor_edilmeli_mi means do-not-monitor."""
+    cf = custom_fields or {}
+    raw = cf.get("izlenmeli")
+    if raw is None:
+        raw = cf.get("monitor_edilmeli_mi")
+    if raw is None:
+        return False
+    val = raw
+    if isinstance(val, list) and val:
+        val = val[0]
+    txt = _lower(val)
+    return txt in ("hayir", "hayır", "no", "0", "false")
+
+
+def platform_manufacturer_name(platform: dict) -> str:
+    mfr = platform.get("manufacturer")
+    if isinstance(mfr, dict):
+        return _norm(mfr.get("name"))
+    return _norm(mfr)
+
+
+def platform_site_code(platform: dict) -> str:
+    cf = platform.get("custom_fields") or {}
+    return _norm(cf.get("Site") or cf.get("DC"))
+
+
+def is_valid_platform_site(site: str) -> bool:
+    return bool(extract_dc_code(site))
+
+
+def match_customer_environment(platform: dict, zabbix_mapping_rows: list[dict]) -> bool:
+    """True when a zabbix platform mapping row with customer_environment matches."""
+    mfr = platform_manufacturer_name(platform)
+    name = _norm(platform.get("name") or platform.get("display"))
+    site = platform_site_code(platform)
+    candidates = [
+        row
+        for row in zabbix_mapping_rows
+        if isinstance(row, dict)
+        and row.get("customer_environment")
+        and _lower(row.get("manufacturer", "")) == _lower(mfr)
+    ]
+    for row in sorted(candidates, key=lambda x: int(x.get("priority", 999))):
+        if _mapping_row_matches_name_site(name, site, row):
+            return True
+    return False
+
+
+def classify_platform_status(
+    platform: dict,
+    zabbix_mapping_rows: list[dict] | None = None,
+) -> tuple[str, str]:
+    """
+    Return (platform_status, platform_status_note) for collector audit.
+    Note is a semicolon-separated list of status codes.
+    """
+    statuses: list[str] = []
+    cf = platform.get("custom_fields") or {}
+    if is_platform_not_monitored(cf):
+        statuses.append("not_monitored")
+    if zabbix_mapping_rows and match_customer_environment(platform, zabbix_mapping_rows):
+        statuses.append("customer_environment")
+    if not statuses:
+        statuses.append("monitored")
+    note = "; ".join(statuses)
+    return note, note
+
+
+def build_ip_platform_status_map(targets: list[dict]) -> dict[str, str]:
+    """Merge platform_status values per IP (semicolon-unique join)."""
+    per_ip: dict[str, list[str]] = {}
+    for target in targets:
+        ip = _norm(target.get("ip")).split("/")[0]
+        if not ip:
+            continue
+        status = _norm(target.get("platform_status")) or "monitored"
+        bucket = per_ip.setdefault(ip, [])
+        for part in status.split(";"):
+            part = part.strip()
+            if part and part not in bucket:
+                bucket.append(part)
+    return {ip: "; ".join(parts) for ip, parts in per_ip.items()}
+
+
+def append_platform_status_to_reason(reason: str, ip: str, ip_status_map: dict[str, str]) -> str:
+    status = ip_status_map.get(ip, "")
+    if not status or status == "monitored":
+        return reason
+    return f"{reason} [platform_status: {status}]"
+
+
 def match_platform_mapping(
     manufacturer: str,
     platform_name: str,
@@ -174,16 +286,12 @@ def match_platform_mapping(
 ) -> dict | None:
     """First matching platform mapping row by priority."""
     mfr = _lower(manufacturer)
-    name_l = _lower(platform_name)
-    site_l = _lower(site)
     sorted_rows = sorted(mappings, key=lambda r: int(r.get("priority", 999)))
     for row in sorted_rows:
         row_mfr = _lower(row.get("manufacturer", ""))
         if row_mfr and row_mfr != mfr:
             continue
-        if row.get("name_contains") and _lower(row["name_contains"]) not in name_l:
-            continue
-        if row.get("site_contains") and _lower(row["site_contains"]) not in site_l:
+        if not _mapping_row_matches_name_site(platform_name, site, row):
             continue
         return row
     return None
@@ -289,6 +397,7 @@ def reconcile_section_ips(
     ip_format: str,
     secondary_fields: dict | None = None,
     connectivity_map: dict[str, str] | None = None,
+    ip_status_map: dict[str, str] | None = None,
 ) -> tuple[dict, list[dict]]:
     """
     Smart-merge: update only ip_field (and computed secondary_fields).
@@ -300,10 +409,12 @@ def reconcile_section_ips(
     desired_set = set(desired_ips)
     current_set = set(current_ips)
     connectivity_map = connectivity_map or {}
+    ip_status_map = ip_status_map or {}
 
     diffs: list[dict] = []
     for ip in sorted(desired_set - current_set):
-        diffs.append({"action": "added", "ip": ip, "reason": "new_in_netbox"})
+        reason = append_platform_status_to_reason("new_in_netbox", ip, ip_status_map)
+        diffs.append({"action": "added", "ip": ip, "reason": reason})
     for ip in sorted(current_set - desired_set):
         if connectivity_map.get(ip) == "ok":
             diffs.append(
@@ -318,7 +429,8 @@ def reconcile_section_ips(
                 {"action": "removed", "ip": ip, "reason": "missing_from_netbox"}
             )
     for ip in sorted(current_set & desired_set):
-        diffs.append({"action": "preserved", "ip": ip, "reason": "unchanged"})
+        reason = append_platform_status_to_reason("unchanged", ip, ip_status_map)
+        diffs.append({"action": "preserved", "ip": ip, "reason": reason})
 
     blocked = {d["ip"] for d in diffs if d["action"] == "removal_blocked"}
     effective_desired = desired_set | blocked
@@ -347,6 +459,7 @@ def reconcile_proxy_config(
     collector_types: dict,
     preserve_unknown: bool = True,
     connectivity_map: dict[str, str] | None = None,
+    ip_status_map: dict[str, str] | None = None,
 ) -> tuple[dict, list[dict]]:
     """
     Reconcile full configuration_file.json.
@@ -376,6 +489,7 @@ def reconcile_proxy_config(
             ip_format,
             secondary,
             connectivity_map,
+            ip_status_map,
         )
         # Merge non-IP fields from desired (vault/other_fields) without wiping manual keys
         for k, v in desired_section.items():

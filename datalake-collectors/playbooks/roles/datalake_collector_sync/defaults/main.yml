@@ -32,6 +32,8 @@ collector_filter: ""
 # Mapping paths: mappings/ lives beside playbooks/ under datalake-collectors/
 collector_types_path: "{{ playbook_dir }}/../mappings/collector_types.yml"
 platform_collector_mapping_path: "{{ playbook_dir }}/../mappings/netbox_platform_collector_mapping.yml"
+# zabbix-netbox mapping for customer_environment / izlenmeli status classification
+platform_status_mapping_path: "{{ playbook_dir }}/../../zabbix-netbox/mappings/netbox_platform_mapping.yml"
 device_collector_mapping_path: "{{ playbook_dir }}/../mappings/netbox_device_collector_mapping.yml"
 proxy_assignment_path: "{{ playbook_dir }}/../mappings/proxy_assignment.yml"
 collector_defaults_path: "{{ playbook_dir }}/../mappings/collector_defaults.yml"

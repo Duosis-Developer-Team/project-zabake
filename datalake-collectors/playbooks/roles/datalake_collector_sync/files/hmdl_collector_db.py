@@ -53,6 +53,17 @@ def cmd_ensure_schema(conn) -> None:
     conn.commit()
 
 
+def _target_extra(target: dict) -> dict:
+    extra: dict = {}
+    status = target.get("platform_status")
+    note = target.get("platform_status_note")
+    if status:
+        extra["platform_status"] = status
+    if note:
+        extra["platform_status_note"] = note
+    return extra
+
+
 def cmd_upsert_targets(conn, args) -> None:
     targets = json.loads(Path(args.targets_file).read_text(encoding="utf-8"))
     collector_types = json.loads(Path(args.collector_types_file).read_text(encoding="utf-8"))
@@ -105,14 +116,15 @@ def cmd_upsert_targets(conn, args) -> None:
                 """
                 INSERT INTO hmdl.collector_target
                     (collector_id, netbox_entity_id, host_entity_type, ip, dc_code,
-                     proxy_id, entity_name, manufacturer, status, last_seen_in_netbox)
-                VALUES (%s, %s, %s, %s::inet, %s, %s, %s, %s, 'active', NOW())
+                     proxy_id, entity_name, manufacturer, status, extra, last_seen_in_netbox)
+                VALUES (%s, %s, %s, %s::inet, %s, %s, %s, %s, 'active', %s::jsonb, NOW())
                 ON CONFLICT (collector_id, ip, proxy_id) DO UPDATE SET
                     netbox_entity_id = EXCLUDED.netbox_entity_id,
                     host_entity_type = EXCLUDED.host_entity_type,
                     entity_name = EXCLUDED.entity_name,
                     manufacturer = EXCLUDED.manufacturer,
                     dc_code = EXCLUDED.dc_code,
+                    extra = EXCLUDED.extra,
                     status = 'active',
                     last_seen_in_netbox = NOW(),
                     updated_at = NOW()
@@ -126,6 +138,7 @@ def cmd_upsert_targets(conn, args) -> None:
                     t["proxy_id"],
                     t.get("entity_name"),
                     t.get("manufacturer"),
+                    json.dumps(_target_extra(t)),
                 ),
             )
         conn.commit()

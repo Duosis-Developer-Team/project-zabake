@@ -23,6 +23,30 @@ def fetch_paginated(session, url: str, verify_ssl: bool) -> list:
     return results
 
 
+def dedupe_by_id(items: list[dict]) -> list[dict]:
+    seen: set[int | str] = set()
+    out: list[dict] = []
+    for item in items:
+        item_id = item.get("id")
+        if item_id in seen:
+            continue
+        seen.add(item_id)
+        out.append(item)
+    return out
+
+
+def fetch_all_platforms(session, base: str, verify: bool) -> list[dict]:
+    """Fetch monitor (Evet+null) and skip (Hayır) platform lists like zabbix-netbox."""
+    urls = [
+        f"{base}/api/dcim/platforms/?limit=100&cf_izlenmeli=Evet&cf_izlenmeli=null",
+        f"{base}/api/dcim/platforms/?limit=100&cf_izlenmeli=Hayır",
+    ]
+    combined: list[dict] = []
+    for url in urls:
+        combined.extend(fetch_paginated(session, url, verify))
+    return dedupe_by_id(combined)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--netbox-url", required=True)
@@ -41,8 +65,7 @@ def main() -> int:
     location_filter = (args.location_filter or "").strip().lower()
 
     if args.entity == "platforms":
-        url = f"{base}/api/dcim/platforms/?limit=100&cf_izlenmeli=Evet&cf_izlenmeli=null"
-        items = fetch_paginated(session, url, verify)
+        items = fetch_all_platforms(session, base, verify)
     else:
         url = f"{base}/api/dcim/devices/?limit=100&status=active"
         items = fetch_paginated(session, url, verify)

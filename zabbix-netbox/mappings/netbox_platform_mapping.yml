@@ -35,12 +35,13 @@ mappings:
     priority: 999
     limit_per_dc: 0
 
-  # Moneygram: no tenant on platforms — match by name OR custom_fields Site substring (see process_platform.yml).
+  # Moneygram: no tenant on platforms — match by name OR Site; flagged for collector platform_status logging.
   - manufacturer: "VMware"
     device_type: "VMware Moneygram"
     name_contains: "moneygram"
     site_contains: "moneygram"
     match_logic: "or"
+    customer_environment: true
     priority: 1
     limit_per_dc: 0
 

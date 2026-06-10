@@ -4,6 +4,8 @@
 
 The platform synchronization feature allows NetBox **Platforms** (virtual/logical groupings of devices such as Nutanix clusters) to be automatically registered as hosts in Zabbix. This is separate from the standard device sync flow and is **disabled by default**.
 
+For platform status categories used by **datalake-collectors** NiFi config (monitored / not_monitored / customer_environment), see [PLATFORM_STATUS_CLASSIFICATION.md](PLATFORM_STATUS_CLASSIFICATION.md).
+
 ---
 
 ## Architecture
