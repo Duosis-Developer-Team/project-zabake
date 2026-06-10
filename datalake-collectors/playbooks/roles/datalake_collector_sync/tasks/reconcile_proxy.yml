@@ -13,12 +13,12 @@
   block:
     - name: Fetch current configuration from proxy via SSH
       slurp:
-        src: "{{ current_proxy_cfg.conf_path | default('/Datalake_Project/configuration_file.json') }}"
-      delegate_to: "{{ current_proxy_cfg.proxy_nifi_host }}"
+        src: "{{ hostvars['localhost']['proxy_lookup_map'][reconcile_proxy_id].conf_path | default('/Datalake_Project/configuration_file.json') }}"
+      delegate_to: "{{ hostvars['localhost']['proxy_lookup_map'][reconcile_proxy_id].proxy_nifi_host }}"
       vars:
         ansible_connection: ssh
-        ansible_host: "{{ current_proxy_cfg.proxy_nifi_host }}"
-        ansible_user: "{{ current_proxy_cfg.ssh_user | default('root') }}"
+        ansible_host: "{{ hostvars['localhost']['proxy_lookup_map'][reconcile_proxy_id].proxy_nifi_host }}"
+        ansible_user: "{{ hostvars['localhost']['proxy_lookup_map'][reconcile_proxy_id].ssh_user | default('root') }}"
       register: remote_conf_slurp
       ignore_errors: true
 
@@ -137,13 +137,13 @@
     - name: Deploy reconciled configuration to proxy
       copy:
         content: "{{ lookup('file', collector_work_dir + '/reconciled_' + reconcile_proxy_id + '.json') }}"
-        dest: "{{ current_proxy_cfg.conf_path }}"
+        dest: "{{ hostvars['localhost']['proxy_lookup_map'][reconcile_proxy_id].conf_path | default('/Datalake_Project/configuration_file.json') }}"
         mode: "0644"
-      delegate_to: "{{ current_proxy_cfg.proxy_nifi_host }}"
+      delegate_to: "{{ hostvars['localhost']['proxy_lookup_map'][reconcile_proxy_id].proxy_nifi_host }}"
       vars:
         ansible_connection: ssh
-        ansible_host: "{{ current_proxy_cfg.proxy_nifi_host }}"
-        ansible_user: "{{ current_proxy_cfg.ssh_user | default('root') }}"
+        ansible_host: "{{ hostvars['localhost']['proxy_lookup_map'][reconcile_proxy_id].proxy_nifi_host }}"
+        ansible_user: "{{ hostvars['localhost']['proxy_lookup_map'][reconcile_proxy_id].ssh_user | default('root') }}"
       when: not (dry_run | bool)
 
     - name: Mark targets distributed on proxy
