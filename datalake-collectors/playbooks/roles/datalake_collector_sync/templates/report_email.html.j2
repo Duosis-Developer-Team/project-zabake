@@ -10,16 +10,17 @@
 
 <h3>Added IPs ({{ collector_email_added | default([]) | length }})</h3>
 <table border="1" cellpadding="4">
-<tr><th>Proxy</th><th>Collector</th><th>IP</th><th>Entity</th></tr>
+<tr><th>Proxy</th><th>Collector</th><th>IP</th><th>Platform status</th><th>Reason</th></tr>
 {% for row in collector_email_added | default([]) %}
 <tr>
   <td>{{ row.proxy_id | default('') }}</td>
   <td>{{ row.collector_type | default(row.conf_key) }}</td>
   <td>{{ row.ip }}</td>
+  <td>{{ row.platform_status | default('') }}</td>
   <td>{{ row.reason | default('') }}</td>
 </tr>
 {% else %}
-<tr><td colspan="4">None</td></tr>
+<tr><td colspan="5">None</td></tr>
 {% endfor %}
 </table>
 

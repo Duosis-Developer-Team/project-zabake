@@ -21,6 +21,7 @@
       ip: "{{ row.ip | default('') }}"
       status: "{{ row.action | default('') }}"
       reason: "{{ row.reason | default('') }}"
+      platform_status: "{{ row.platform_status | default('') }}"
   loop: "{{ collector_diff_report | default([]) }}"
   loop_control:
     loop_var: row

@@ -12,6 +12,14 @@ mappings:
     collector_type: "Nutanix"
     priority: 1
 
+  # Moneygram VMware — same match rules as zabbix-netbox netbox_platform_mapping.yml
+  - manufacturer: "VMware"
+    collector_type: "VmWare"
+    name_contains: "moneygram"
+    site_contains: "moneygram"
+    match_logic: "or"
+    priority: 1
+
   - manufacturer: "VMware"
     collector_type: "VmWare"
     priority: 999

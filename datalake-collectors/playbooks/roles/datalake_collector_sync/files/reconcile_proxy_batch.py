@@ -12,6 +12,7 @@ sys.path.insert(0, str(_ROLE_DIR / "module_utils"))
 import yaml  # noqa: E402
 
 from collector_core import (  # noqa: E402
+    build_ip_platform_status_map,
     group_targets_by_proxy_and_conf,
     merge_vault_into_section,
     reconcile_proxy_config,
@@ -60,6 +61,7 @@ def main() -> int:
             connectivity_map = json.loads(conn_path.read_text(encoding="utf-8"))
 
     proxy_targets = [t for t in targets if t.get("proxy_id") == args.proxy_id]
+    ip_status_map = build_ip_platform_status_map(proxy_targets)
     grouped = group_targets_by_proxy_and_conf(proxy_targets)
     conf_ips = grouped.get(args.proxy_id, {})
 
@@ -93,10 +95,18 @@ def main() -> int:
             desired_by_conf[ck] = copy_manual_section(current.get(ck, {}), vault_by_dir[vk])
 
     reconciled, diffs = reconcile_proxy_config(
-        current, desired_by_conf, collector_types, connectivity_map=connectivity_map
+        current,
+        desired_by_conf,
+        collector_types,
+        connectivity_map=connectivity_map,
+        ip_status_map=ip_status_map,
     )
     for d in diffs:
         d["proxy_id"] = args.proxy_id
+        ip = d.get("ip", "")
+        status = ip_status_map.get(ip, "")
+        if status:
+            d["platform_status"] = status
 
     Path(args.output).write_text(
         json.dumps(reconciled, indent=4, ensure_ascii=False) + "\n",

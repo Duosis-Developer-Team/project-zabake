@@ -7,8 +7,10 @@
     --collector-types {{ collector_types_path | quote }}
     --mapping-file {{ platform_collector_mapping_path | quote }}
     --proxy-assignment {{ proxy_assignment_path | quote }}
+    --platform-status-mapping {{ platform_status_mapping_path | quote }}
     --collector-filter {{ collector_filter | default('') | quote }}
     --output {{ collector_work_dir }}/platform_targets.json
+    --skipped-output {{ collector_work_dir }}/skipped_platforms.json
   register: platform_map_cmd
   changed_when: false
 

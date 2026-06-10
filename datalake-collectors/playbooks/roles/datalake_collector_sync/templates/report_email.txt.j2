@@ -8,7 +8,7 @@ Blocked removals: {{ collector_email_blocked | default([]) | length }}
 Check failures: {{ collector_email_failed_checks | default([]) | length }}
 
 {% for row in collector_email_added | default([]) %}
-+ {{ row.proxy_id | default('') }} | {{ row.collector_type | default(row.conf_key) }} | {{ row.ip }}
++ {{ row.proxy_id | default('') }} | {{ row.collector_type | default(row.conf_key) }} | {{ row.ip }} | {{ row.platform_status | default('') }} | {{ row.reason | default('') }}
 {% endfor %}
 {% for row in collector_email_removed | default([]) %}
 - {{ row.proxy_id | default('') }} | {{ row.collector_type | default(row.conf_key) }} | {{ row.ip }}
