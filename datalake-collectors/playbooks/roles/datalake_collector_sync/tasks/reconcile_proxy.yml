@@ -106,6 +106,25 @@
       set_fact:
         proxy_diffs: "{{ lookup('file', collector_work_dir + '/diffs_' + reconcile_proxy_id + '.json') | from_json }}"
 
+    - name: Check whether reconciled config differs from current
+      command: >
+        python3 {{ role_path }}/files/config_will_change.py
+        --current {{ collector_work_dir }}/current_{{ reconcile_proxy_id }}.json
+        --reconciled {{ collector_work_dir }}/reconciled_{{ reconcile_proxy_id }}.json
+      register: config_change_cmd
+      changed_when: false
+
+    - name: Set proxy config change flag
+      set_fact:
+        proxy_config_will_change: "{{ (config_change_cmd.stdout | from_json).changed | bool }}"
+
+    - name: Report configuration change intent (dry_run)
+      debug:
+        msg: >-
+          dry_run: {{ reconcile_proxy_id }} would
+          {{ 'update configuration (backup then deploy)' if proxy_config_will_change else 'skip deploy (unchanged)' }}
+      when: dry_run | bool
+
     - name: Append to global diff report
       set_fact:
         collector_diff_report: "{{ collector_diff_report + proxy_diffs }}"
@@ -144,6 +163,38 @@
       failed_when: write_sync_result.rc != 0
       when: hmdl_log_enabled | bool
 
+    - name: Backup current configuration on proxy before deploy
+      shell: |
+        set -euo pipefail
+        src="{{ hostvars['localhost']['proxy_lookup_map'][reconcile_proxy_id].conf_path | default('/Datalake_Project/configuration_file.json') }}"
+        if [ ! -f "$src" ]; then
+          echo "skip=no_existing_file"
+          exit 0
+        fi
+        dest="${src}{{ config_backup_suffix }}"
+        cp -a "$src" "$dest"
+        echo "backup=$dest"
+      delegate_to: "{{ hostvars['localhost']['proxy_lookup_map'][reconcile_proxy_id].proxy_nifi_host }}"
+      vars:
+        ansible_connection: ssh
+        ansible_host: "{{ hostvars['localhost']['proxy_lookup_map'][reconcile_proxy_id].proxy_nifi_host }}"
+        ansible_user: "{{ hostvars['localhost']['proxy_lookup_map'][reconcile_proxy_id].ssh_user | default('root') }}"
+      register: config_backup_result
+      changed_when: "'backup=' in (config_backup_result.stdout | default(''))"
+      when:
+        - not (dry_run | bool)
+        - backup_config_before_deploy | bool
+        - proxy_config_will_change | bool
+        - remote_conf_slurp is succeeded
+
+    - name: Log configuration backup path
+      debug:
+        msg: "Backed up {{ reconcile_proxy_id }} configuration to {{ config_backup_result.stdout | regex_search('backup=(.+)', '\\1') | first }}"
+      when:
+        - config_backup_result is defined
+        - config_backup_result.stdout is defined
+        - "'backup=' in config_backup_result.stdout"
+
     - name: Deploy reconciled configuration to proxy
       copy:
         content: "{{ lookup('file', collector_work_dir + '/reconciled_' + reconcile_proxy_id + '.json') }}"
@@ -154,7 +205,9 @@
         ansible_connection: ssh
         ansible_host: "{{ hostvars['localhost']['proxy_lookup_map'][reconcile_proxy_id].proxy_nifi_host }}"
         ansible_user: "{{ hostvars['localhost']['proxy_lookup_map'][reconcile_proxy_id].ssh_user | default('root') }}"
-      when: not (dry_run | bool)
+      when:
+        - not (dry_run | bool)
+        - proxy_config_will_change | bool
 
     - name: Mark targets distributed on proxy
       command: >
@@ -169,3 +222,4 @@
       when:
         - hmdl_log_enabled | bool
         - not (dry_run | bool)
+        - proxy_config_will_change | bool

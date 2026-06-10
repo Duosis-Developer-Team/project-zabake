@@ -42,6 +42,8 @@ target_conf_filename: "configuration_file.json"
 # Reconcile
 reconcile_strategy: ssh
 reconcile_preserve_unknown_sections: true
+backup_config_before_deploy: true
+config_backup_suffix: ".bak.{{ collector_run_id }}"
 
 # HMDL audit
 hmdl_log_enabled: true
