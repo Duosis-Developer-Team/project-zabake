@@ -24,7 +24,7 @@ def is_hana_linux_vm(row: dict[str, Any]) -> bool:
     endpoint = str(row.get("custom_fields_endpoint") or "").strip()
     status = str(row.get("status_value") or "").lower()
 
-    if status and status != "active":
+    if status in ("poweredoff", "offline", "decommissioning", "failed"):
         return False
     if "IBM" not in cluster.upper():
         return False

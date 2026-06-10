@@ -29,7 +29,7 @@ def test_is_hana_linux_vm_filters_non_hana():
             "cluster_name": "DC13-G2-CLS-IBM",
             "custom_fields_guest_os": "Linux/SLES",
             "custom_fields_endpoint": "10.34.2.141",
-            "status_value": "active",
+            "status_value": "poweredOn",
         }
     )
     assert not is_hana_linux_vm(
@@ -38,7 +38,16 @@ def test_is_hana_linux_vm_filters_non_hana():
             "cluster_name": "DC13-G2-CLS-IBM",
             "custom_fields_guest_os": "Linux/SLES",
             "custom_fields_endpoint": "10.34.2.141",
-            "status_value": "active",
+            "status_value": "poweredOn",
+        }
+    )
+    assert not is_hana_linux_vm(
+        {
+            "name": "Offline_Hana_Dev",
+            "cluster_name": "DC13-G2-CLS-IBM",
+            "custom_fields_guest_os": "Linux/SLES",
+            "custom_fields_endpoint": "10.34.2.141",
+            "status_value": "poweredOff",
         }
     )
 
@@ -70,7 +79,7 @@ def test_transform_deduplicates_by_name():
             "cluster_name": "DC13-G2-CLS-IBM",
             "custom_fields_guest_os": "Linux",
             "custom_fields_endpoint": "10.0.0.1",
-            "status_value": "active",
+            "status_value": "poweredOn",
         },
         {
             "id": 2,
@@ -78,7 +87,7 @@ def test_transform_deduplicates_by_name():
             "cluster_name": "DC13-G2-CLS-IBM",
             "custom_fields_guest_os": "Linux",
             "custom_fields_endpoint": "10.0.0.2",
-            "status_value": "active",
+            "status_value": "poweredOn",
         },
     ]
     devices = transform_hana_linux_vms(rows)

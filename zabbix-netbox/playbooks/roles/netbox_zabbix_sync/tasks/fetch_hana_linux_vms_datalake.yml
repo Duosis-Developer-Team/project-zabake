@@ -29,7 +29,7 @@
           v.created::text,
           v.last_updated::text
       FROM public.discovery_netbox_virtualization_vm v
-      WHERE v.status_value = 'active'
+      WHERE v.status_value IN ('active', 'poweredOn')
         AND v.cluster_name ILIKE '%IBM%'
         AND v.custom_fields_guest_os ILIKE '%Linux%'
         AND (v.name ILIKE '%hana%' OR v.name ILIKE '%HANA%')
