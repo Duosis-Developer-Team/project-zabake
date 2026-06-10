@@ -8,6 +8,7 @@
 - [x] `proxy_assignment.yml` synced from AWX inventory **NiFi_Prod_Envanter** (17 NiFi hosts)
 - [x] AWX Job Template uses inventory **NiFi_Prod_Envanter** + credential **NiFi_Prod_Root** (id 7)
 - [x] `localhost` host in NiFi inventory uses `ansible_connection: local` (AWX EE)
+- [x] Reconcile/deploy delegate tasks set `ansible_connection: ssh` + `ansible_host` (localhost play + slurp fix)
 - [ ] Job extra var `gitea_vault_url`: `http://10.134.16.135:3000/Admin/datalake-collectors-vault.git`
 
 Verify readiness:
