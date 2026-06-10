@@ -27,6 +27,7 @@ mappings:
   - manufacturer: "IBM HMC"
     collector_type: "IBM-HMC"
     priority: 1
+    # Operational rule: map HMC platforms only — do not add IBM Power (LPAR) platforms to NiFi config.
 
   - manufacturer: "IBM Virtualize"
     collector_type: "IBM-Virtualize"
