@@ -16,7 +16,16 @@ Non-IP keys in the section (ports, paths, usernames from vault) are merged from 
 
 ## dry_run
 
-When `dry_run: true`, diffs are written to `hmdl.collector_diff_log` and email; proxy `configuration_file.json` is not overwritten.
+When `dry_run: true`, diffs are written to `hmdl.collector_diff_log` and email; proxy `configuration_file.json` is not overwritten. AWX stdout notes whether each proxy **would update** or **skip deploy (unchanged)**.
+
+## Backup before deploy
+
+When `dry_run: false` and reconciled JSON differs from the current file on the NiFi node:
+
+1. Copy existing `configuration_file.json` to `configuration_file.json.bak.<run_id>` on the same host (`cp -a`).
+2. Write reconciled JSON to `configuration_file.json`.
+
+Skipped when config is unchanged, file does not exist yet (greenfield), or `backup_config_before_deploy: false`.
 
 ## Removal guard
 
