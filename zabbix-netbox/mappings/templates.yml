@@ -592,6 +592,12 @@ PFSense Virtual Firewall:
     host_groups:
       - "Network Devices"
       - "Virtual Firewall"
+
+IBM Host:
+  - name: BLT - Template Module ICMP Ping
+    type: agent
+    host_groups:
+      - "Physical Hosts"
 # # Placeholder logical type for NetBox custom-objects virtual firewalls (virtual_fw_mapping.yml).
 # # Point new vendor rows to this key until a dedicated Zabbix template is confirmed.
 # Virtual Firewall Default:
