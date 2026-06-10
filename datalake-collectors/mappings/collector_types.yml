@@ -128,7 +128,7 @@ Zabbix:
 
 Zabbix-Hana-Linux:
   conf_key: Zabbix
-  script_path: datalake/collectors/Zabbix/Linux-Hana/zabbix-hana-linux-metrics.py
+  script_path: Zabbix/Linux-Hana/zabbix-hana-linux-metrics.py
   source_type: manual_only
   vault_key: zabbix_connection
 

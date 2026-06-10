@@ -15,8 +15,13 @@ def load_yaml(path: Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
 
-def remote_dir(script_path: str, remote_base: str) -> str:
+def _normalized_rel(script_path: str) -> str:
     rel = script_path.replace("datalake/collectors/", "").replace("\\", "/")
+    return rel.lstrip("/")
+
+
+def remote_dir(script_path: str, remote_base: str) -> str:
+    rel = _normalized_rel(script_path)
     rel = rel.rstrip("/")
     if not rel:
         return remote_base
@@ -27,7 +32,7 @@ def remote_dir(script_path: str, remote_base: str) -> str:
 
 
 def local_dir(script_path: str, src_root: Path) -> Path:
-    rel = script_path.replace("datalake/collectors/", "").replace("\\", "/")
+    rel = _normalized_rel(script_path)
     rel = rel.rstrip("/")
     parent = Path(rel).parent
     if str(parent) == ".":
