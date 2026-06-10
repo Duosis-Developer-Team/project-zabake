@@ -21,7 +21,15 @@ psql -h HOST -U USER -d DB -f collector_check_log.sql
 
 ## Step 2 — Mappings and proxy assignment
 
-Edit [mappings/proxy_assignment.yml](../../mappings/proxy_assignment.yml): set real `proxy_nifi_host` values.
+Sync from AWX inventory (recommended):
+
+```bash
+cd datalake-collectors
+python3 scripts/sync_proxy_assignment_from_awx.py --dry-run
+python3 scripts/sync_proxy_assignment_from_awx.py
+```
+
+Or edit [mappings/proxy_assignment.yml](../../mappings/proxy_assignment.yml) manually for `proxy_nifi_host` overrides.
 
 Review [mappings/netbox_platform_collector_mapping.yml](../../mappings/netbox_platform_collector_mapping.yml) for your NetBox manufacturers.
 
