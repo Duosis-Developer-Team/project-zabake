@@ -492,3 +492,9 @@ mappings:
       device_role: "KVM OVER IP"
       manufacturer: "Avocent"
     priority: 1
+
+  - device_type: "IBM Host"
+    conditions:
+      device_role: "HOST"
+      manufacturer: "IBM"
+    priority: 1
