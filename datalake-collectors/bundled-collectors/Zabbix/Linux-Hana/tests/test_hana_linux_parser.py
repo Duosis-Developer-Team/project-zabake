@@ -66,6 +66,45 @@ class TestHanaLinuxParser(unittest.TestCase):
         self.assertEqual(record["disk_used_bytes"], 53687091200)
         self.assertEqual(record["disk_utilization_pct"], 50.0)
 
+    def test_parses_modern_fs_item_names(self):
+        items = [
+            {"name": "FS [/]: Total space", "key_": "vfs.fs.dependent.size[/,total]", "lastvalue": "1000", "units": "B"},
+            {"name": "FS [/]: Used space", "key_": "vfs.fs.dependent.size[/,used]", "lastvalue": "400", "units": "B"},
+        ]
+        record = parse_hana_linux_items(self._host(), items, 1_700_000_000_000)
+        self.assertEqual(record["disk_total_bytes"], 1000)
+        self.assertEqual(record["disk_used_bytes"], 400)
+        self.assertEqual(record["disk_utilization_pct"], 40.0)
+
+    def test_parses_legacy_disk_space_on_root_items(self):
+        items = [
+            {"name": "Total disk space on /", "key_": "vfs.fs.size[/,total]", "lastvalue": "2000", "units": "B"},
+            {"name": "Used disk space on /", "key_": "vfs.fs.size[/,used]", "lastvalue": "500", "units": "B"},
+        ]
+        record = parse_hana_linux_items(self._host(), items, 1_700_000_000_000)
+        self.assertEqual(record["disk_total_bytes"], 2000)
+        self.assertEqual(record["disk_used_bytes"], 500)
+
+    def test_parses_disk_metrics_from_item_key_only(self):
+        items = [
+            {
+                "name": "Root filesystem total",
+                "key_": "vfs.fs.size[/,total]",
+                "lastvalue": "8589934592",
+                "units": "B",
+            },
+            {
+                "name": "Root filesystem used percent",
+                "key_": "vfs.fs.size[/,pused]",
+                "lastvalue": "61.2",
+                "units": "%",
+            },
+        ]
+        record = parse_hana_linux_items(self._host(), items, 1_700_000_000_000)
+        self.assertEqual(record["disk_total_bytes"], 8589934592)
+        self.assertEqual(record["disk_utilization_pct"], 61.2)
+        self.assertEqual(record["disk_used_bytes"], int(8589934592 * 61.2 / 100.0))
+
     def test_uses_memory_utilization_directly(self):
         items = [
             {"name": "Memory utilization", "lastvalue": "73.5", "units": "%"},
