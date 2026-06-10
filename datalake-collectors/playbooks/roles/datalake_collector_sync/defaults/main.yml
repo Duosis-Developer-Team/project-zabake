@@ -82,6 +82,7 @@ platform_collector_types_for_deploy:
   - IBM-HMC
   - IBM-Virtualize
   - Veeam
+  - Zabbix-Hana-Linux
 
 # Runtime work dirs
 collector_work_dir: "/tmp/datalake_collector_sync_{{ ansible_date_time.epoch | default('run') }}"

@@ -498,3 +498,9 @@ mappings:
       device_role: "HOST"
       manufacturer: "IBM"
     priority: 1
+
+  # IBM Hana Linux VMs (synthetic records from discovery_netbox_virtualization_vm)
+  - device_type: "Hana Linux"
+    conditions:
+      device_role: "HANA VM"
+    priority: 1
