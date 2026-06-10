@@ -75,6 +75,8 @@ check_phase_post_reconcile: "post_reconcile"
 # Collector script deployment (off by default)
 deploy_scripts: false
 collector_scripts_src: "{{ playbook_dir }}/../../../../datalake/collectors"
+collector_scripts_bundled_src: "{{ playbook_dir }}/../bundled-collectors"
+collector_scripts_use_bundled: false
 collector_scripts_remote_base: "/Datalake_Project"
 platform_collector_types_for_deploy:
   - VmWare

@@ -15,7 +15,7 @@
       command: >
         python3 {{ role_path }}/files/deploy_collector_scripts.py
         --collector-types {{ collector_types_path | quote }}
-        --src {{ collector_scripts_src | quote }}
+        --src {{ (collector_scripts_bundled_src if (collector_scripts_use_bundled | bool) else collector_scripts_src) | quote }}
         --remote-base {{ collector_scripts_remote_base | quote }}
         --types {{ platform_collector_types_for_deploy | join(',') | quote }}
         --manifest-output {{ collector_work_dir }}/script_manifest_{{ script_deploy_proxy_id }}.json
