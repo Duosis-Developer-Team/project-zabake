@@ -11,6 +11,13 @@
 - name: Deploy collector scripts block for {{ script_deploy_proxy_id }}
   when: "'REPLACE_' not in (script_proxy_cfg.proxy_nifi_host | default('REPLACE_'))"
   block:
+    - name: Set SSH delegation vars for script deploy {{ script_deploy_proxy_id }}
+      set_fact:
+        script_ssh_delegate:
+          ansible_connection: ssh
+          ansible_host: "{{ script_proxy_cfg.proxy_nifi_host }}"
+          ansible_user: "{{ script_proxy_cfg.ssh_user | default('root') }}"
+
     - name: Run collector script deploy dry-run or apply
       command: >
         python3 {{ role_path }}/files/deploy_collector_scripts.py
@@ -32,8 +39,7 @@
           - "--checksum"
           - "--delete"
       delegate_to: "{{ script_proxy_cfg.proxy_nifi_host }}"
-      vars:
-        ansible_user: "{{ script_proxy_cfg.ssh_user | default('nifi') }}"
+      vars: "{{ script_ssh_delegate }}"
       loop: "{{ (lookup('file', collector_work_dir + '/script_manifest_' + script_deploy_proxy_id + '.json') | from_json).deploy_paths | default([]) }}"
       when:
         - not (dry_run | bool)
