@@ -5,15 +5,6 @@
 # on host.create only (port, dns, details fields). Never applied on host.update.
 # Optional per-template: proxy_group_by_dc maps DC codes (from NetBox location / DC_ID) to
 # exact Zabbix proxy group names when auto DC-regex matching does not apply.
-Hana Linux:
-  - name: BLT - Linux by Zabbix Agent Active
-    type: agent
-    host_groups:
-      - "Hana Linux"
-    interface_override:
-      useip: 1
-      dns: ""
-
 Lenovo IPMI:
   - name: BLT - Lenovo ICT XCC Monitoring
     type: snmpv3
