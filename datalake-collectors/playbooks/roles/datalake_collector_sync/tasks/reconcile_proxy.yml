@@ -11,18 +11,14 @@
 - name: Reconcile block for {{ reconcile_proxy_id }}
   when: "'REPLACE_' not in (current_proxy_cfg.proxy_nifi_host | default('REPLACE_'))"
   block:
-    - name: Set SSH delegation vars for {{ reconcile_proxy_id }}
-      set_fact:
-        proxy_ssh_delegate:
-          ansible_connection: ssh
-          ansible_host: "{{ current_proxy_cfg.proxy_nifi_host }}"
-          ansible_user: "{{ current_proxy_cfg.ssh_user | default('root') }}"
-
     - name: Fetch current configuration from proxy via SSH
       slurp:
         src: "{{ current_proxy_cfg.conf_path | default('/Datalake_Project/configuration_file.json') }}"
       delegate_to: "{{ current_proxy_cfg.proxy_nifi_host }}"
-      vars: "{{ proxy_ssh_delegate }}"
+      vars:
+        ansible_connection: ssh
+        ansible_host: "{{ current_proxy_cfg.proxy_nifi_host }}"
+        ansible_user: "{{ current_proxy_cfg.ssh_user | default('root') }}"
       register: remote_conf_slurp
       ignore_errors: true
 
@@ -144,7 +140,10 @@
         dest: "{{ current_proxy_cfg.conf_path }}"
         mode: "0644"
       delegate_to: "{{ current_proxy_cfg.proxy_nifi_host }}"
-      vars: "{{ proxy_ssh_delegate }}"
+      vars:
+        ansible_connection: ssh
+        ansible_host: "{{ current_proxy_cfg.proxy_nifi_host }}"
+        ansible_user: "{{ current_proxy_cfg.ssh_user | default('root') }}"
       when: not (dry_run | bool)
 
     - name: Mark targets distributed on proxy
