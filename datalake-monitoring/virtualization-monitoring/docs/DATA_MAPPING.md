@@ -27,7 +27,7 @@ Per-cluster coverage: is each inventory cluster actually collected into the data
 - VMware expected: `discovery_vmware_inventory_cluster` (`name` AS cluster_name, `status`, `last_observed`)
 - Nutanix collected: `nutanix_cluster_metrics` (`cluster_name`, `cluster_uuid`, `datacenter_name`, `collection_time`)
 - Nutanix expected: `discovery_nutanix_inventory_cluster` (`name`, `component_uuid`, `last_observed`)
-- Match key: cluster name (`normalize_name`). Result table: `hmdl.hmdl_datalake_monitoring_clusters`
+- Match key: cluster name (`normalize_name`). Result table: `hmdl.hmdl_datalake_coverage_cluster`
   (`source` = vmware|nutanix). Status: `in_both` | `only_expected` | `only_datalake`.
 
 ## Host coverage (Phase 4 — IBM Power)
@@ -36,7 +36,7 @@ Per-cluster coverage: is each inventory cluster actually collected into the data
   freshness via `"time"` — no collection_time column).
 - Expected: `discovery_ibm_inventory` (`servername`, `mtm`, `collection_time`) WHERE `asset_type = 'server'`.
 - Match key: `server_details_servername` ↔ `servername`. Result table:
-  `hmdl.hmdl_datalake_monitoring_ibm_host`. Status: `in_both` | `only_expected` | `only_datalake`.
+  `hmdl.hmdl_datalake_coverage_ibm_host`. Status: `in_both` | `only_expected` | `only_datalake`.
 
 ## CSV output columns
 - `run_id`

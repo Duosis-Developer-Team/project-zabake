@@ -46,30 +46,32 @@ def test_coverage_flags_expected_and_collected():
     assert coverage_flags("only_datalake") == (False, True)
 
 
-def test_upsert_cluster_coverage_writes_expected_collected_rows():
-    dl = [{"cluster_name": "dc13-km-cl-01", "datacenter": "DC13", "collection_time": "2026-06-10T00:00:00"}]
+def test_upsert_cluster_coverage_writes_simple_rows():
+    # collected + in inventory, and one expected-only (missing)
+    dl = [{"cluster_name": "dc13-km-cl-01", "datacenter": "DC13"}]
     exp = [{"cluster_name": "dc13-km-cl-01"}, {"cluster_name": "dc13-km-cl-09"}]
     result = ClusterReconciler("vmware").reconcile(dl, exp)
 
     conn = FakeConnection()
-    upsert_cluster_coverage(conn, "hmdl.hmdl_datalake_monitoring_clusters", "run-1", "vmware", result, 7)
+    upsert_cluster_coverage(conn, "hmdl.hmdl_datalake_coverage_cluster", "vmware", result)
 
     assert conn.committed is True
-    by_cluster = {params[2]: params for _q, params in conn.calls}
-    # params: (run_id, source, cluster_name, cluster_uuid, datacenter, expected, collected, status, ...)
-    assert by_cluster["dc13-km-cl-01"][5:8] == (True, True, "in_both")
-    assert by_cluster["dc13-km-cl-09"][5:8] == (True, False, "only_expected")
+    # params: (source, cluster_name, collected, expected)
+    by_cluster = {params[1]: params for _q, params in conn.calls}
+    assert by_cluster["dc13-km-cl-01"][0] == "vmware"
+    assert by_cluster["dc13-km-cl-01"][2:4] == (True, True)     # collected, expected
+    assert by_cluster["dc13-km-cl-09"][2:4] == (False, True)    # missing: expected but not collected
 
 
 def test_upsert_ibm_host_coverage_marks_only_datalake():
-    dl = [{"servername": "dc13-9009-zzz", "mtm": "9009-22A", "collection_time": "2026-06-10T00:00:00"}]
+    dl = [{"servername": "dc13-9009-zzz"}]
     result = IbmHostReconciler().reconcile(dl, [])
 
     conn = FakeConnection()
-    upsert_ibm_host_coverage(conn, "hmdl.hmdl_datalake_monitoring_ibm_host", "run-1", result, 7)
+    upsert_ibm_host_coverage(conn, "hmdl.hmdl_datalake_coverage_ibm_host", result)
 
     assert conn.committed is True
     _q, params = conn.calls[0]
-    # params: (run_id, servername, mtm, expected, collected, status, ...)
-    assert params[1] == "dc13-9009-zzz"
-    assert params[3:6] == (False, True, "only_datalake")
+    # params: (servername, collected, expected)
+    assert params[0] == "dc13-9009-zzz"
+    assert params[1:3] == (True, False)   # collected, not expected

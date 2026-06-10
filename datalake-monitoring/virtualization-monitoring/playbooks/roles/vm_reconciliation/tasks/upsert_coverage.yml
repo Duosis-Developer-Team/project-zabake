@@ -6,7 +6,7 @@
     login_db: "{{ reconciliation_db.name }}"
     login_user: "{{ reconciliation_db.user }}"
     login_password: "{{ reconciliation_db.password }}"
-    query: "{{ lookup('file', playbook_dir + '/../scripts/sql/create_hmdl_datalake_monitoring_clusters.sql') }}"
+    query: "{{ lookup('file', playbook_dir + '/../scripts/sql/create_hmdl_datalake_coverage_cluster.sql') }}"
 
 - name: Create IBM host coverage table if needed
   community.postgresql.postgresql_query:
@@ -15,7 +15,7 @@
     login_db: "{{ reconciliation_db.name }}"
     login_user: "{{ reconciliation_db.user }}"
     login_password: "{{ reconciliation_db.password }}"
-    query: "{{ lookup('file', playbook_dir + '/../scripts/sql/create_hmdl_datalake_monitoring_ibm_host.sql') }}"
+    query: "{{ lookup('file', playbook_dir + '/../scripts/sql/create_hmdl_datalake_coverage_ibm_host.sql') }}"
 
 - name: Upsert cluster/host coverage payload
   ansible.builtin.command:

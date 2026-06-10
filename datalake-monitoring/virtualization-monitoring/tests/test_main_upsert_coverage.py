@@ -36,21 +36,21 @@ def test_upsert_coverage_routes_targets_to_correct_tables(tmp_path, monkeypatch)
     monkeypatch.setattr(main, "connect", lambda _cfg: FakeConn())
     monkeypatch.setattr(
         main, "upsert_cluster_coverage",
-        lambda conn, table, run_id, source, tp, wd: cluster_calls.append((table, source, run_id)),
+        lambda conn, table, source, tp: cluster_calls.append((table, source)),
     )
     monkeypatch.setattr(
         main, "upsert_ibm_host_coverage",
-        lambda conn, table, run_id, tp, wd: ibm_calls.append((table, run_id)),
+        lambda conn, table, tp: ibm_calls.append(table),
     )
 
     args = types.SimpleNamespace(
         input_file=str(input_file),
-        clusters_table="hmdl.hmdl_datalake_monitoring_clusters",
-        ibm_host_table="hmdl.hmdl_datalake_monitoring_ibm_host",
+        clusters_table="hmdl.hmdl_datalake_coverage_cluster",
+        ibm_host_table="hmdl.hmdl_datalake_coverage_ibm_host",
     )
     result = main.run_upsert_coverage(args)
 
     assert result["status"] == "ok"
-    assert ("hmdl.hmdl_datalake_monitoring_clusters", "vmware", "run-1") in cluster_calls
-    assert ("hmdl.hmdl_datalake_monitoring_clusters", "nutanix", "run-1") in cluster_calls
-    assert ibm_calls == [("hmdl.hmdl_datalake_monitoring_ibm_host", "run-1")]
+    assert ("hmdl.hmdl_datalake_coverage_cluster", "vmware") in cluster_calls
+    assert ("hmdl.hmdl_datalake_coverage_cluster", "nutanix") in cluster_calls
+    assert ibm_calls == ["hmdl.hmdl_datalake_coverage_ibm_host"]

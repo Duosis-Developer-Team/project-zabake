@@ -5,11 +5,11 @@ Phase 1:
 
 Phase 2:
 - cluster-level reconciliation (DONE) — VMware + Nutanix cluster coverage
-  -> hmdl.hmdl_datalake_monitoring_clusters
+  -> hmdl.hmdl_datalake_coverage_cluster
 
 Phase 3:
 - platform-level reconciliation
 
 Phase 4:
 - host-level reconciliation (DONE) — IBM Power host coverage
-  -> hmdl.hmdl_datalake_monitoring_ibm_host
+  -> hmdl.hmdl_datalake_coverage_ibm_host

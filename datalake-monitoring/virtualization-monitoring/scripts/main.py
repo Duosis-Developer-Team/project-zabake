@@ -53,8 +53,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gui-replay-enabled", default="true")
     parser.add_argument("--input-file", default="")
     parser.add_argument("--table", default="reconciliation_results")
-    parser.add_argument("--clusters-table", default="hmdl.hmdl_datalake_monitoring_clusters")
-    parser.add_argument("--ibm-host-table", default="hmdl.hmdl_datalake_monitoring_ibm_host")
+    parser.add_argument("--clusters-table", default="hmdl.hmdl_datalake_coverage_cluster")
+    parser.add_argument("--ibm-host-table", default="hmdl.hmdl_datalake_coverage_ibm_host")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--fixtures-dir", default="")
     return parser.parse_args()
@@ -198,22 +198,16 @@ def run_upsert(args: argparse.Namespace) -> dict:
 def run_upsert_coverage(args: argparse.Namespace) -> dict:
     settings = load_settings()
     payload = json.loads(Path(args.input_file).read_text(encoding="utf-8"))
-    window_days = payload.get("window_days", 7)
-    run_id = payload["run_id"]
     written = []
     with connect(settings.reconciliation_db) as rc_conn:
         for target_payload in payload.get("coverage_targets", []):
             target = target_payload["target"]
             if target == "ibm_host":
-                upsert_ibm_host_coverage(
-                    rc_conn, args.ibm_host_table, run_id, target_payload, window_days
-                )
+                upsert_ibm_host_coverage(rc_conn, args.ibm_host_table, target_payload)
                 written.append(args.ibm_host_table)
             elif target.endswith("_cluster"):
                 source = target.replace("_cluster", "")
-                upsert_cluster_coverage(
-                    rc_conn, args.clusters_table, run_id, source, target_payload, window_days
-                )
+                upsert_cluster_coverage(rc_conn, args.clusters_table, source, target_payload)
                 written.append(args.clusters_table)
     return {"status": "ok", "tables": sorted(set(written))}
 

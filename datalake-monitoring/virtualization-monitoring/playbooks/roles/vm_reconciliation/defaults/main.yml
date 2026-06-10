@@ -35,9 +35,9 @@ reconciliation_db:
   password: ""
   table: reconciliation_results
   # Cluster/host coverage tables (hmdl schema). The upsert_coverage task creates
-  # them via scripts/sql/create_hmdl_datalake_monitoring_*.sql.
-  clusters_table: hmdl.hmdl_datalake_monitoring_clusters
-  ibm_host_table: hmdl.hmdl_datalake_monitoring_ibm_host
+  # them via scripts/sql/create_hmdl_datalake_coverage_*.sql.
+  clusters_table: hmdl.hmdl_datalake_coverage_cluster
+  ibm_host_table: hmdl.hmdl_datalake_coverage_ibm_host
 
 gui_replay:
   enabled: true
