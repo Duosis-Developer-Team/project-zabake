@@ -6,7 +6,8 @@
 - [x] DC13 pilot validated (platform sync, Gitea vault, AWX job)
 - [x] Gitea `Admin/datalake-collectors-vault` populated from DC13 `configuration_file.json`
 - [x] `proxy_assignment.yml` synced from AWX inventory **NiFi_Prod_Envanter** (17 NiFi hosts)
-- [ ] AWX Job Template uses inventory **NiFi_Prod_Envanter** + credential **NiFi_Prod_Root** (id 7)
+- [x] AWX Job Template uses inventory **NiFi_Prod_Envanter** + credential **NiFi_Prod_Root** (id 7)
+- [x] `localhost` host in NiFi inventory uses `ansible_connection: local` (AWX EE)
 - [ ] Job extra var `gitea_vault_url`: `http://10.134.16.135:3000/Admin/datalake-collectors-vault.git`
 
 Verify readiness:
@@ -32,7 +33,7 @@ python3 scripts/verify_proxy_rollout.py
 | DC13 | DC13-NIFI1 | 10.134.16.10 | 1 | **Validated** |
 | DC14 | DC14-NIFI1/2 | 10.50.16.250, .251 | 2 | Pending |
 | DC15 | DC15-NIFI1/2 | 10.40.16.250, .251 | 2 | Pending |
-| DC16 | DC16-NIFI1/2 | 10.60.16.250, .251 | 2 | Pending |
+| DC16 | DC16-NIFI1/2 | 10.60.16.250, .251 | 2 | dry_run OK (job 109841) |
 | DC17 | DC17-NIFI1/2 | 10.90.16.250, .251 | 2 | Pending |
 | AZ11 | AZ11-NIFI1/2 | 10.81.18.250, .251 | 2 | Pending |
 | ICT11 | ICT11-NIFI1/2 | 10.70.16.250, .251 | 2 | Pending |

@@ -1,6 +1,7 @@
 ---
 - name: HMDL Datalake Collector Sync (NetBox -> Proxy NiFi configuration_file.json)
   hosts: localhost
+  connection: local
   gather_facts: true
   vars:
     _discovery_db_host: "{{ discovery_db_host | default('') }}"
