@@ -31,11 +31,11 @@
         rsync_opts:
           - "--checksum"
           - "--delete"
-      delegate_to: "{{ script_proxy_cfg.proxy_nifi_host }}"
+      delegate_to: "{{ hostvars['localhost']['proxy_lookup_map'][script_deploy_proxy_id].proxy_nifi_host }}"
       vars:
         ansible_connection: ssh
-        ansible_host: "{{ script_proxy_cfg.proxy_nifi_host }}"
-        ansible_user: "{{ script_proxy_cfg.ssh_user | default('root') }}"
+        ansible_host: "{{ hostvars['localhost']['proxy_lookup_map'][script_deploy_proxy_id].proxy_nifi_host }}"
+        ansible_user: "{{ hostvars['localhost']['proxy_lookup_map'][script_deploy_proxy_id].ssh_user | default('root') }}"
       loop: "{{ (lookup('file', collector_work_dir + '/script_manifest_' + script_deploy_proxy_id + '.json') | from_json).deploy_paths | default([]) }}"
       when:
         - not (dry_run | bool)
