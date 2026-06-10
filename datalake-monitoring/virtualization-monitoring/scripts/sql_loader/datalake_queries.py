@@ -77,3 +77,54 @@ def fetch_nutanix_cluster_set(connection, window_days: int) -> set[str]:
     """
     rows = fetch_all(connection, query, (str(window_days),))
     return {str(row["cluster_name"]).strip() for row in rows if row.get("cluster_name")}
+
+
+def fetch_vmware_clusters(connection, window_days: int) -> list[dict]:
+    """Collected VMware clusters (cluster-level coverage). cluster_metrics columns
+    are `datacenter`, `cluster`, `"timestamp"` (NOT NULL) and `collection_time`."""
+    query = """
+        SELECT DISTINCT ON (cluster)
+            cluster AS cluster_name,
+            datacenter,
+            "timestamp" AS collection_time
+        FROM cluster_metrics
+        WHERE "timestamp" >= NOW() - (%s::text || ' days')::interval
+          AND cluster IS NOT NULL
+          AND BTRIM(cluster) <> ''
+        ORDER BY cluster, "timestamp" DESC
+    """
+    return fetch_all(connection, query, (str(window_days),))
+
+
+def fetch_nutanix_clusters(connection, window_days: int) -> list[dict]:
+    """Collected Nutanix clusters (cluster-level coverage)."""
+    query = """
+        SELECT DISTINCT ON (cluster_name)
+            cluster_name,
+            cluster_uuid::text AS cluster_uuid,
+            datacenter_name AS datacenter,
+            collection_time
+        FROM nutanix_cluster_metrics
+        WHERE collection_time >= NOW() - (%s::text || ' days')::interval
+          AND cluster_name IS NOT NULL
+          AND BTRIM(cluster_name) <> ''
+        ORDER BY cluster_name, collection_time DESC
+    """
+    return fetch_all(connection, query, (str(window_days),))
+
+
+def fetch_ibm_hosts(connection, window_days: int) -> list[dict]:
+    """Collected IBM Power hosts (host-level coverage). ibm_server_general has no
+    collection_time column; freshness comes from the `"time"` column."""
+    query = """
+        SELECT DISTINCT ON (server_details_servername)
+            server_details_servername AS servername,
+            server_details_mtm AS mtm,
+            "time" AS collection_time
+        FROM ibm_server_general
+        WHERE "time" >= NOW() - (%s::text || ' days')::interval
+          AND server_details_servername IS NOT NULL
+          AND BTRIM(server_details_servername) <> ''
+        ORDER BY server_details_servername, "time" DESC
+    """
+    return fetch_all(connection, query, (str(window_days),))

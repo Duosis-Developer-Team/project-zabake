@@ -1,0 +1,39 @@
+---
+- name: Create cluster coverage table if needed
+  community.postgresql.postgresql_query:
+    login_host: "{{ reconciliation_db.host }}"
+    login_port: "{{ reconciliation_db.port }}"
+    login_db: "{{ reconciliation_db.name }}"
+    login_user: "{{ reconciliation_db.user }}"
+    login_password: "{{ reconciliation_db.password }}"
+    query: "{{ lookup('file', playbook_dir + '/../scripts/sql/create_hmdl_datalake_monitoring_clusters.sql') }}"
+
+- name: Create IBM host coverage table if needed
+  community.postgresql.postgresql_query:
+    login_host: "{{ reconciliation_db.host }}"
+    login_port: "{{ reconciliation_db.port }}"
+    login_db: "{{ reconciliation_db.name }}"
+    login_user: "{{ reconciliation_db.user }}"
+    login_password: "{{ reconciliation_db.password }}"
+    query: "{{ lookup('file', playbook_dir + '/../scripts/sql/create_hmdl_datalake_monitoring_ibm_host.sql') }}"
+
+- name: Upsert cluster/host coverage payload
+  ansible.builtin.command:
+    argv:
+      - python3
+      - "{{ playbook_dir }}/../scripts/main.py"
+      - --mode
+      - upsert-coverage
+      - --input-file
+      - "{{ reconciliation_output_file }}"
+      - --clusters-table
+      - "{{ reconciliation_db.clusters_table }}"
+      - --ibm-host-table
+      - "{{ reconciliation_db.ibm_host_table }}"
+  changed_when: false
+  environment:
+    RECONCILIATION_DB_HOST: "{{ reconciliation_db.host }}"
+    RECONCILIATION_DB_PORT: "{{ reconciliation_db.port | string }}"
+    RECONCILIATION_DB_NAME: "{{ reconciliation_db.name }}"
+    RECONCILIATION_DB_USER: "{{ reconciliation_db.user }}"
+    RECONCILIATION_DB_PASSWORD: "{{ reconciliation_db.password }}"
