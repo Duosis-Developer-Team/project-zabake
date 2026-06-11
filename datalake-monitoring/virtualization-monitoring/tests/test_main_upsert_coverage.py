@@ -34,6 +34,7 @@ def test_upsert_coverage_routes_targets_to_correct_tables(tmp_path, monkeypatch)
     monkeypatch.setattr(main, "load_settings", lambda: types.SimpleNamespace(
         reconciliation_db=None))
     monkeypatch.setattr(main, "connect", lambda _cfg: FakeConn())
+    monkeypatch.setattr(main, "_run_sql_file", lambda conn, filename: None)
     monkeypatch.setattr(
         main, "upsert_cluster_coverage",
         lambda conn, table, source, tp: cluster_calls.append((table, source)),

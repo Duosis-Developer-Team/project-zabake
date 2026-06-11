@@ -187,10 +187,22 @@ def render_email(args: argparse.Namespace) -> dict:
     return render_email_files(payload, args.output_dir)
 
 
+_SQL_DIR = Path(__file__).resolve().parent / "sql"
+
+
+def _run_sql_file(conn, filename: str) -> None:
+    """Run a .sql file via psycopg2 (no community.postgresql collection needed)."""
+    sql = (_SQL_DIR / filename).read_text(encoding="utf-8")
+    with conn.cursor() as cur:
+        cur.execute(sql)
+    conn.commit()
+
+
 def run_upsert(args: argparse.Namespace) -> dict:
     settings = load_settings()
     payload = json.loads(Path(args.input_file).read_text(encoding="utf-8"))
     with connect(settings.reconciliation_db) as rc_conn:
+        _run_sql_file(rc_conn, "create_reconciliation_results.sql")
         upsert_reconciliation_results(rc_conn, args.table, payload, payload.get("window_days", 7))
     return {"status": "ok", "table": args.table}
 
@@ -200,6 +212,10 @@ def run_upsert_coverage(args: argparse.Namespace) -> dict:
     payload = json.loads(Path(args.input_file).read_text(encoding="utf-8"))
     written = []
     with connect(settings.reconciliation_db) as rc_conn:
+        # Ensure A tables exist and refresh B — all via psycopg2.
+        _run_sql_file(rc_conn, "create_hmdl_datalake_coverage_cluster.sql")
+        _run_sql_file(rc_conn, "create_hmdl_datalake_coverage_ibm_host.sql")
+        _run_sql_file(rc_conn, "create_hmdl_datalake_coverage_target.sql")
         for target_payload in payload.get("coverage_targets", []):
             target = target_payload["target"]
             if target == "ibm_host":

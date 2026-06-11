@@ -1,22 +1,6 @@
 ---
-- name: Create reconciliation table if needed
-  community.postgresql.postgresql_query:
-    login_host: "{{ reconciliation_db.host }}"
-    login_port: "{{ reconciliation_db.port }}"
-    login_db: "{{ reconciliation_db.name }}"
-    login_user: "{{ reconciliation_db.user }}"
-    login_password: "{{ reconciliation_db.password }}"
-    query: |
-      CREATE TABLE IF NOT EXISTS {{ reconciliation_db.table }} (
-        run_id TEXT NOT NULL,
-        target TEXT NOT NULL,
-        window_days INTEGER NOT NULL,
-        generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        summary JSONB NOT NULL,
-        details JSONB,
-        PRIMARY KEY (run_id, target)
-      );
-
+# Table creation + upsert are both handled by main.py via psycopg2
+# (the AWX EE does not ship the community.postgresql collection).
 - name: Upsert reconciliation payload
   ansible.builtin.command:
     argv:
