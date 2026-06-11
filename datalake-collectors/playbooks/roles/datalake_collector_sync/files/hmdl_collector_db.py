@@ -44,6 +44,7 @@ def cmd_ensure_schema(conn) -> None:
         "collector_diff_log.sql",
         "collector_check_log.sql",
         "migrations/002_collector_check_phase.sql",
+        "proxy_node.sql",
     ]
     with conn.cursor() as cur:
         for ddl_file in files:
@@ -248,6 +249,41 @@ def cmd_write_sync(conn, args) -> None:
         conn.commit()
 
 
+def cmd_upsert_proxy_node(conn, args) -> None:
+    dry_run = str(args.dry_run).lower() in ("true", "1", "yes")
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO hmdl.proxy_node
+                (proxy_id, dc_code, proxy_nifi_host, ssh_user, conf_path,
+                 gitea_audit_path, last_run_id, last_awx_job_id, last_dry_run, last_seen_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            ON CONFLICT (proxy_id) DO UPDATE SET
+                dc_code = EXCLUDED.dc_code,
+                proxy_nifi_host = EXCLUDED.proxy_nifi_host,
+                ssh_user = EXCLUDED.ssh_user,
+                conf_path = EXCLUDED.conf_path,
+                gitea_audit_path = EXCLUDED.gitea_audit_path,
+                last_run_id = EXCLUDED.last_run_id,
+                last_awx_job_id = EXCLUDED.last_awx_job_id,
+                last_dry_run = EXCLUDED.last_dry_run,
+                last_seen_at = NOW()
+            """,
+            (
+                args.proxy_id,
+                str(args.dc_code).upper(),
+                args.proxy_nifi_host,
+                args.ssh_user or "root",
+                args.conf_path or "/Datalake_Project/configuration_file.json",
+                args.gitea_audit_path or None,
+                str(args.run_id),
+                args.awx_job_id or None,
+                dry_run,
+            ),
+        )
+    conn.commit()
+
+
 def cmd_mark_distributed(conn, args) -> None:
     with conn.cursor() as cur:
         cur.execute(
@@ -332,6 +368,17 @@ def main() -> int:
     p_m = sub.add_parser("mark-distributed")
     p_m.add_argument("--proxy-id", required=True)
 
+    p_p = sub.add_parser("upsert-proxy-node")
+    p_p.add_argument("--run-id", required=True)
+    p_p.add_argument("--proxy-id", required=True)
+    p_p.add_argument("--dc-code", required=True)
+    p_p.add_argument("--proxy-nifi-host", required=True)
+    p_p.add_argument("--ssh-user", default="root")
+    p_p.add_argument("--conf-path", default="/Datalake_Project/configuration_file.json")
+    p_p.add_argument("--gitea-audit-path", default="")
+    p_p.add_argument("--dry-run", default="false")
+    p_p.add_argument("--awx-job-id", default="")
+
     args = parser.parse_args()
     conn = connect(args)
     try:
@@ -347,6 +394,8 @@ def main() -> int:
             cmd_write_sync(conn, args)
         elif args.command == "mark-distributed":
             cmd_mark_distributed(conn, args)
+        elif args.command == "upsert-proxy-node":
+            cmd_upsert_proxy_node(conn, args)
     finally:
         conn.close()
     return 0
