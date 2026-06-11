@@ -163,6 +163,28 @@
       failed_when: write_sync_result.rc != 0
       when: hmdl_log_enabled | bool
 
+    - name: Upsert proxy node registry in HMDL database
+      command: >
+        python3 {{ role_path }}/files/hmdl_collector_db.py
+        --db-host {{ hmdl_db_host | quote }}
+        --db-port {{ hmdl_db_port }}
+        --db-name {{ hmdl_db_name | quote }}
+        --db-user {{ hmdl_db_user | quote }}
+        --db-password {{ hmdl_db_password | quote }}
+        upsert-proxy-node
+        --run-id {{ collector_run_id | quote }}
+        --proxy-id {{ reconcile_proxy_id | quote }}
+        --dc-code {{ current_proxy_cfg.dc_code | quote }}
+        --proxy-nifi-host {{ current_proxy_cfg.proxy_nifi_host | quote }}
+        --ssh-user {{ current_proxy_cfg.ssh_user | default('root') | quote }}
+        --conf-path {{ current_proxy_cfg.conf_path | default('/Datalake_Project/configuration_file.json') | quote }}
+        --gitea-audit-path {{ current_proxy_cfg.gitea_audit_path | default('') | quote }}
+        --dry-run {{ dry_run | bool | lower }}
+        --awx-job-id {{ ansible_env.AWX_JOB_ID | default('') | quote }}
+      register: upsert_proxy_node_result
+      failed_when: upsert_proxy_node_result.rc != 0
+      when: hmdl_log_enabled | bool
+
     - name: Backup current configuration on proxy before deploy
       shell: |
         set -eu
