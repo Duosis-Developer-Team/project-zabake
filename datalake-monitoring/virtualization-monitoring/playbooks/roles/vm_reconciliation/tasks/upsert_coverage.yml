@@ -1,0 +1,24 @@
+---
+# Table creation (A), the B-table refresh, and the upserts are all handled by
+# main.py via psycopg2 — the AWX EE does not ship the community.postgresql
+# collection, so we avoid postgresql_query entirely.
+- name: Upsert cluster/host coverage payload (creates tables + refreshes target table)
+  ansible.builtin.command:
+    argv:
+      - python3
+      - "{{ playbook_dir }}/../scripts/main.py"
+      - --mode
+      - upsert-coverage
+      - --input-file
+      - "{{ reconciliation_output_file }}"
+      - --clusters-table
+      - "{{ reconciliation_db.clusters_table | default('hmdl.hmdl_datalake_coverage_cluster') }}"
+      - --ibm-host-table
+      - "{{ reconciliation_db.ibm_host_table | default('hmdl.hmdl_datalake_coverage_ibm_host') }}"
+  changed_when: false
+  environment:
+    RECONCILIATION_DB_HOST: "{{ reconciliation_db.host }}"
+    RECONCILIATION_DB_PORT: "{{ reconciliation_db.port | string }}"
+    RECONCILIATION_DB_NAME: "{{ reconciliation_db.name }}"
+    RECONCILIATION_DB_USER: "{{ reconciliation_db.user }}"
+    RECONCILIATION_DB_PASSWORD: "{{ reconciliation_db.password }}"

@@ -1,0 +1,80 @@
+from outputs.coverage_db_writer import (
+    coverage_flags,
+    coverage_status,
+    upsert_cluster_coverage,
+    upsert_ibm_host_coverage,
+)
+from reconcilers.cluster import ClusterReconciler
+from reconcilers.ibm_host import IbmHostReconciler
+
+
+class FakeCursor:
+    def __init__(self, sink):
+        self._sink = sink
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def execute(self, query, params=None):
+        self._sink.append((query, params))
+
+
+class FakeConnection:
+    def __init__(self):
+        self.calls = []
+        self.committed = False
+
+    def cursor(self):
+        return FakeCursor(self.calls)
+
+    def commit(self):
+        self.committed = True
+
+
+def test_coverage_status_maps_base_statuses_to_coverage_vocab():
+    assert coverage_status("in_both") == "in_both"
+    assert coverage_status("only_in_datalake") == "only_datalake"
+    assert coverage_status("only_in_loki") == "only_expected"
+
+
+def test_coverage_flags_expected_and_collected():
+    assert coverage_flags("in_both") == (True, True)
+    assert coverage_flags("only_expected") == (True, False)
+    assert coverage_flags("only_datalake") == (False, True)
+
+
+def test_upsert_cluster_coverage_writes_simple_rows():
+    # collected + in inventory, and one expected-only (missing)
+    dl = [{"cluster_name": "dc13-km-cl-01", "datacenter": "DC13", "collection_time": "2026-06-11T00:00:00"}]
+    exp = [{"cluster_name": "dc13-km-cl-01"}, {"cluster_name": "dc13-km-cl-09"}]
+    result = ClusterReconciler("vmware").reconcile(dl, exp)
+
+    conn = FakeConnection()
+    upsert_cluster_coverage(conn, "hmdl.hmdl_datalake_coverage_cluster", "vmware", result)
+
+    assert conn.committed is True
+    assert any("is_live" in q for q, _p in conn.calls)   # is_live recomputed in SQL
+    # params: (source, cluster_name, collected, expected, last_collected)
+    by_cluster = {p[1]: p for q, p in conn.calls if p is not None}
+    assert by_cluster["dc13-km-cl-01"][0] == "vmware"
+    assert by_cluster["dc13-km-cl-01"][2:4] == (True, True)     # collected, expected
+    assert by_cluster["dc13-km-cl-01"][4] == "2026-06-11T00:00:00"  # last_collected
+    assert by_cluster["dc13-km-cl-09"][2:4] == (False, True)    # missing: expected but not collected
+    assert by_cluster["dc13-km-cl-09"][4] is None              # never collected -> no timestamp
+
+
+def test_upsert_ibm_host_coverage_marks_only_datalake():
+    dl = [{"servername": "dc13-9009-zzz"}]
+    result = IbmHostReconciler().reconcile(dl, [])
+
+    conn = FakeConnection()
+    upsert_ibm_host_coverage(conn, "hmdl.hmdl_datalake_coverage_ibm_host", result)
+
+    assert conn.committed is True
+    _q, params = conn.calls[0]
+    # params: (servername, collected, expected)
+    assert params[0] == "dc13-9009-zzz"
+    assert params[1:3] == (True, False)   # collected, not expected

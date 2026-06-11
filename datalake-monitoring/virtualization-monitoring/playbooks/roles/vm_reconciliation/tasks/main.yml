@@ -18,6 +18,12 @@
   ansible.builtin.include_tasks: upsert_results.yml
   when: reconciliation_db.enabled | bool
 
+- name: Upsert cluster/host coverage results
+  ansible.builtin.include_tasks: upsert_coverage.yml
+  when:
+    - reconciliation_db.enabled | bool
+    - (recon_targets | intersect(['vmware_cluster', 'nutanix_cluster', 'ibm_host']) | length) > 0
+
 - name: Send summary email
   ansible.builtin.include_tasks: send_email.yml
   when: mail.enabled | bool

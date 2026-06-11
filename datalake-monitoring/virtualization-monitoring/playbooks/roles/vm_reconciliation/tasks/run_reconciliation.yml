@@ -38,3 +38,12 @@
     reconciliation_output_file: "{{ (vm_reconciliation_run.stdout | from_json).output_file }}"
     reconciliation_summary_file: "{{ (vm_reconciliation_run.stdout | from_json).summary_file }}"
     reconciliation_csv_file: "{{ (vm_reconciliation_run.stdout | from_json).csv_file }}"
+
+- name: Read reconciliation summary
+  ansible.builtin.slurp:
+    src: "{{ reconciliation_summary_file }}"
+  register: reconciliation_summary_raw
+
+- name: Show reconciliation summary (per target counts)
+  ansible.builtin.debug:
+    msg: "{{ reconciliation_summary_raw.content | b64decode | from_json }}"

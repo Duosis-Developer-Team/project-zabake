@@ -1,9 +1,13 @@
 ---
 recon_window_days: 7
+# VM/LPAR: vmware, nutanix, ibm_lpar | Coverage: vmware_cluster, nutanix_cluster, ibm_host
 recon_targets:
   - vmware
   - nutanix
   - ibm_lpar
+  - vmware_cluster
+  - nutanix_cluster
+  - ibm_host
 
 datalake_db:
   host: "db.local"
@@ -23,6 +27,8 @@ reconciliation_db:
   user: ""
   password: ""
   table: reconciliation_results
+  clusters_table: hmdl.hmdl_datalake_coverage_cluster
+  ibm_host_table: hmdl.hmdl_datalake_coverage_ibm_host
 
 gui_replay:
   enabled: true

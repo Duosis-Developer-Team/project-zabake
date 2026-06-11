@@ -5,34 +5,56 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from matchers.keys import normalize_name
+from outputs.coverage_db_writer import (
+    upsert_cluster_coverage,
+    upsert_ibm_host_coverage,
+)
 from outputs.csv_writer import write_combined_csv
 from outputs.db_writer import upsert_reconciliation_results
 from outputs.email_renderer import render_email_files
 from outputs.json_writer import write_json_report
-from reconcilers import IbmLparReconciler, NutanixVmReconciler, VmwareVmReconciler
+from reconcilers import (
+    ClusterReconciler,
+    IbmHostReconciler,
+    IbmLparReconciler,
+    NutanixVmReconciler,
+    VmwareVmReconciler,
+)
 from settings import load_settings
 from sql_loader.datalake_queries import (
+    fetch_ibm_hosts,
     fetch_ibm_lpars,
     fetch_nutanix_cluster_set,
+    fetch_nutanix_clusters,
     fetch_nutanix_vms,
     fetch_vmware_cluster_set,
+    fetch_vmware_clusters,
     fetch_vmware_vms,
 )
 from sql_loader.gui_replay import build_gui_replay_snapshot
+from sql_loader.inventory_queries import (
+    fetch_expected_ibm_hosts,
+    fetch_expected_nutanix_clusters,
+    fetch_expected_vmware_clusters,
+)
 from sql_loader.netbox_queries import fetch_netbox_vm_inventory
 from utils.db import connect
 from utils.logging import configure_logging
 
+COVERAGE_TARGETS = ("vmware_cluster", "nutanix_cluster", "ibm_host")
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="VM/LPAR reconciliation runner.")
-    parser.add_argument("--mode", required=True, choices=["vm-reconciliation", "render-email", "upsert-reconciliation"])
+    parser.add_argument("--mode", required=True, choices=["vm-reconciliation", "render-email", "upsert-reconciliation", "upsert-coverage"])
     parser.add_argument("--window-days", type=int, default=7)
     parser.add_argument("--targets", default="vmware,nutanix,ibm_lpar")
     parser.add_argument("--output-dir", default="/tmp/vm_reconciliation")
     parser.add_argument("--gui-replay-enabled", default="true")
     parser.add_argument("--input-file", default="")
     parser.add_argument("--table", default="reconciliation_results")
+    parser.add_argument("--clusters-table", default="hmdl.hmdl_datalake_coverage_cluster")
+    parser.add_argument("--ibm-host-table", default="hmdl.hmdl_datalake_coverage_ibm_host")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--fixtures-dir", default="")
     return parser.parse_args()
@@ -45,7 +67,9 @@ def run_reconciliation(args: argparse.Namespace) -> dict:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     target_names = [item.strip() for item in args.targets.split(",") if item.strip()]
+    coverage_names = [name for name in target_names if name in COVERAGE_TARGETS]
     targets = []
+    coverage_inputs: list[tuple[str, list[dict], list[dict]]] = []
     gui_replay = {}
     vmware_cluster_set = set()
     nutanix_cluster_set = set()
@@ -75,6 +99,10 @@ def run_reconciliation(args: argparse.Namespace) -> dict:
             rows = json.loads((fixtures / "ibm_lpar_rows.json").read_text(encoding="utf-8"))
             ibm_lpar_name_set = {normalize_name(row.get("lparname")) for row in rows if normalize_name(row.get("lparname"))}
             targets.append(("ibm_lpar", rows))
+        for name in coverage_names:
+            dl_rows = json.loads((fixtures / f"{name}_datalake.json").read_text(encoding="utf-8"))
+            exp_rows = json.loads((fixtures / f"{name}_expected.json").read_text(encoding="utf-8"))
+            coverage_inputs.append((name, dl_rows, exp_rows))
         if args.gui_replay_enabled.lower() == "true":
             gui_replay = {
                 "source": "internal_sql_replay",
@@ -99,6 +127,17 @@ def run_reconciliation(args: argparse.Namespace) -> dict:
                 rows = fetch_ibm_lpars(dl_conn, args.window_days)
                 ibm_lpar_name_set = {normalize_name(row.get("lparname")) for row in rows if normalize_name(row.get("lparname"))}
                 targets.append(("ibm_lpar", rows))
+            for name in coverage_names:
+                if name == "vmware_cluster":
+                    dl_rows = fetch_vmware_clusters(dl_conn, args.window_days)
+                    exp_rows = fetch_expected_vmware_clusters(dl_conn)
+                elif name == "nutanix_cluster":
+                    dl_rows = fetch_nutanix_clusters(dl_conn, args.window_days)
+                    exp_rows = fetch_expected_nutanix_clusters(dl_conn)
+                else:  # ibm_host
+                    dl_rows = fetch_ibm_hosts(dl_conn, args.window_days)
+                    exp_rows = fetch_expected_ibm_hosts(dl_conn)
+                coverage_inputs.append((name, dl_rows, exp_rows))
             if args.gui_replay_enabled.lower() == "true":
                 gui_replay = build_gui_replay_snapshot(dl_conn, args.window_days)
 
@@ -117,18 +156,28 @@ def run_reconciliation(args: argparse.Namespace) -> dict:
             reconciled_targets.append(IbmLparReconciler(**reconciler_options).reconcile(rows, netbox_rows))
     targets = reconciled_targets
 
+    coverage_targets = []
+    for name, dl_rows, exp_rows in coverage_inputs:
+        if name == "ibm_host":
+            coverage_targets.append(IbmHostReconciler().reconcile(dl_rows, exp_rows))
+        else:  # vmware_cluster | nutanix_cluster
+            source = name.replace("_cluster", "")
+            coverage_targets.append(ClusterReconciler(source).reconcile(dl_rows, exp_rows))
+
     run_id = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S") + "-" + uuid.uuid4().hex[:8]
     payload = {
         "run_id": run_id,
         "window_days": args.window_days,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "targets": targets,
+        "coverage_targets": coverage_targets,
         "gui_replay": gui_replay,
     }
     report_file = write_json_report(args.output_dir, run_id, payload)
     csv_file = write_combined_csv(args.output_dir, run_id, payload)
     summary_file = str(output_dir / f"vm_reconciliation_{run_id}_summary.json")
     summary_payload = {item["target"]: item["summary"] for item in targets}
+    summary_payload.update({item["target"]: item["summary"] for item in coverage_targets})
     Path(summary_file).write_text(json.dumps(summary_payload, indent=2), encoding="utf-8")
     return {"output_file": report_file, "summary_file": summary_file, "csv_file": csv_file}
 
@@ -138,12 +187,45 @@ def render_email(args: argparse.Namespace) -> dict:
     return render_email_files(payload, args.output_dir)
 
 
+_SQL_DIR = Path(__file__).resolve().parent / "sql"
+
+
+def _run_sql_file(conn, filename: str) -> None:
+    """Run a .sql file via psycopg2 (no community.postgresql collection needed)."""
+    sql = (_SQL_DIR / filename).read_text(encoding="utf-8")
+    with conn.cursor() as cur:
+        cur.execute(sql)
+    conn.commit()
+
+
 def run_upsert(args: argparse.Namespace) -> dict:
     settings = load_settings()
     payload = json.loads(Path(args.input_file).read_text(encoding="utf-8"))
     with connect(settings.reconciliation_db) as rc_conn:
+        _run_sql_file(rc_conn, "create_reconciliation_results.sql")
         upsert_reconciliation_results(rc_conn, args.table, payload, payload.get("window_days", 7))
     return {"status": "ok", "table": args.table}
+
+
+def run_upsert_coverage(args: argparse.Namespace) -> dict:
+    settings = load_settings()
+    payload = json.loads(Path(args.input_file).read_text(encoding="utf-8"))
+    written = []
+    with connect(settings.reconciliation_db) as rc_conn:
+        # Ensure A tables exist and refresh B — all via psycopg2.
+        _run_sql_file(rc_conn, "create_hmdl_datalake_coverage_cluster.sql")
+        _run_sql_file(rc_conn, "create_hmdl_datalake_coverage_ibm_host.sql")
+        _run_sql_file(rc_conn, "create_hmdl_datalake_coverage_target.sql")
+        for target_payload in payload.get("coverage_targets", []):
+            target = target_payload["target"]
+            if target == "ibm_host":
+                upsert_ibm_host_coverage(rc_conn, args.ibm_host_table, target_payload)
+                written.append(args.ibm_host_table)
+            elif target.endswith("_cluster"):
+                source = target.replace("_cluster", "")
+                upsert_cluster_coverage(rc_conn, args.clusters_table, source, target_payload)
+                written.append(args.clusters_table)
+    return {"status": "ok", "tables": sorted(set(written))}
 
 
 def main() -> int:
@@ -153,6 +235,9 @@ def main() -> int:
         return 0
     if args.mode == "render-email":
         print(json.dumps(render_email(args)))
+        return 0
+    if args.mode == "upsert-coverage":
+        print(json.dumps(run_upsert_coverage(args)))
         return 0
     print(json.dumps(run_upsert(args)))
     return 0
