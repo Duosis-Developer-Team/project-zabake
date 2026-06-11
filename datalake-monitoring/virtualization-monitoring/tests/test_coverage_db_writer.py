@@ -18,7 +18,7 @@ class FakeCursor:
     def __exit__(self, *exc):
         return False
 
-    def execute(self, query, params):
+    def execute(self, query, params=None):
         self._sink.append((query, params))
 
 
@@ -56,8 +56,9 @@ def test_upsert_cluster_coverage_writes_simple_rows():
     upsert_cluster_coverage(conn, "hmdl.hmdl_datalake_coverage_cluster", "vmware", result)
 
     assert conn.committed is True
+    assert any("is_live" in q for q, _p in conn.calls)   # is_live recomputed in SQL
     # params: (source, cluster_name, collected, expected, last_collected)
-    by_cluster = {params[1]: params for _q, params in conn.calls}
+    by_cluster = {p[1]: p for q, p in conn.calls if p is not None}
     assert by_cluster["dc13-km-cl-01"][0] == "vmware"
     assert by_cluster["dc13-km-cl-01"][2:4] == (True, True)     # collected, expected
     assert by_cluster["dc13-km-cl-01"][4] == "2026-06-11T00:00:00"  # last_collected

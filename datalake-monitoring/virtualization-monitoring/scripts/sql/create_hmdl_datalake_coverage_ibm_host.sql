@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS hmdl.hmdl_datalake_coverage_ibm_host (
     collected      BOOLEAN     NOT NULL,     -- ibm_server_general'da var mi
     expected       BOOLEAN     NOT NULL,     -- envanterde (inventory) var mi
     last_collected TIMESTAMPTZ NULL,         -- topladigimiz en guncel veri zamani
+    is_live        BOOLEAN     NOT NULL DEFAULT FALSE,  -- expected & son 1 gunde veri var
     checked_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (servername)
 );

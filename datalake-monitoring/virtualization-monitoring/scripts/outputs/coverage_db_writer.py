@@ -11,6 +11,14 @@ _STATUS_MAP = {
     "only_in_loki": "only_expected",
 }
 
+# is_live = expected AND fresh data collected within the last day (computed in SQL
+# to avoid timezone-naive/aware comparison issues across metric tables).
+_IS_LIVE_UPDATE = (
+    "UPDATE {table} SET is_live = "
+    "(expected AND last_collected IS NOT NULL "
+    "AND last_collected >= NOW() - INTERVAL '1 day')"
+)
+
 
 def coverage_status(base_status: str) -> str:
     """Translate a base reconciler status into the coverage vocabulary."""
@@ -47,6 +55,7 @@ def upsert_cluster_coverage(connection, table: str, source: str, target_payload:
         for dl, nb, collected, expected in _rows(target_payload):
             cluster_name = dl.get("cluster_name") or nb.get("cluster_name") or ""
             cursor.execute(query, (source, cluster_name, collected, expected, dl.get("collection_time")))
+        cursor.execute(_IS_LIVE_UPDATE.format(table=table))
     connection.commit()
 
 
@@ -64,4 +73,5 @@ def upsert_ibm_host_coverage(connection, table: str, target_payload: dict) -> No
         for dl, nb, collected, expected in _rows(target_payload):
             servername = dl.get("servername") or nb.get("servername") or ""
             cursor.execute(query, (servername, collected, expected, dl.get("collection_time")))
+        cursor.execute(_IS_LIVE_UPDATE.format(table=table))
     connection.commit()
