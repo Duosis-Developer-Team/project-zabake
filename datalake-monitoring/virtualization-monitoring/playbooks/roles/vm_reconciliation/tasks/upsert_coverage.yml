@@ -12,9 +12,9 @@
       - --input-file
       - "{{ reconciliation_output_file }}"
       - --clusters-table
-      - "{{ reconciliation_db.clusters_table }}"
+      - "{{ reconciliation_db.clusters_table | default('hmdl.hmdl_datalake_coverage_cluster') }}"
       - --ibm-host-table
-      - "{{ reconciliation_db.ibm_host_table }}"
+      - "{{ reconciliation_db.ibm_host_table | default('hmdl.hmdl_datalake_coverage_ibm_host') }}"
   changed_when: false
   environment:
     RECONCILIATION_DB_HOST: "{{ reconciliation_db.host }}"

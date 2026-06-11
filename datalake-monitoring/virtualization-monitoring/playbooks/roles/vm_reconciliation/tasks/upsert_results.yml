@@ -11,7 +11,7 @@
       - --input-file
       - "{{ reconciliation_output_file }}"
       - --table
-      - "{{ reconciliation_db.table }}"
+      - "{{ reconciliation_db.table | default('reconciliation_results') }}"
   changed_when: false
   environment:
     RECONCILIATION_DB_HOST: "{{ reconciliation_db.host }}"
