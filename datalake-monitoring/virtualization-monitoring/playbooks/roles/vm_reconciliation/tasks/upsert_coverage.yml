@@ -17,6 +17,15 @@
     login_password: "{{ reconciliation_db.password }}"
     query: "{{ lookup('file', playbook_dir + '/../scripts/sql/create_hmdl_datalake_coverage_ibm_host.sql') }}"
 
+- name: Refresh target coverage table (B) from collector_target
+  community.postgresql.postgresql_query:
+    login_host: "{{ reconciliation_db.host }}"
+    login_port: "{{ reconciliation_db.port }}"
+    login_db: "{{ reconciliation_db.name }}"
+    login_user: "{{ reconciliation_db.user }}"
+    login_password: "{{ reconciliation_db.password }}"
+    query: "{{ lookup('file', playbook_dir + '/../scripts/sql/create_hmdl_datalake_coverage_target.sql') }}"
+
 - name: Upsert cluster/host coverage payload
   ansible.builtin.command:
     argv:
