@@ -38,17 +38,18 @@ def fetch_expected_nutanix_clusters(connection) -> list[dict]:
 
 
 def fetch_expected_ibm_hosts(connection) -> list[dict]:
-    """Expected IBM Power hosts from discovery_ibm_inventory (asset_type='server').
-    Key `servername` matches ibm_server_general.server_details_servername."""
+    """Expected IBM Power hosts from NetBox device inventory (Can's rule):
+    manufacturer_display=IBM AND device_role_display=HOST. Key `name` (AS
+    servername) matches ibm_server_general.server_details_servername."""
     query = """
-        SELECT DISTINCT ON (servername)
-            servername,
-            mtm,
+        SELECT DISTINCT ON (name)
+            name AS servername,
             collection_time
-        FROM discovery_ibm_inventory
-        WHERE asset_type = 'server'
-          AND servername IS NOT NULL
-          AND BTRIM(servername) <> ''
-        ORDER BY servername, collection_time DESC
+        FROM discovery_netbox_inventory_device
+        WHERE manufacturer_display IN ('IBM')
+          AND device_role_display IN ('HOST')
+          AND name IS NOT NULL
+          AND BTRIM(name) <> ''
+        ORDER BY name, collection_time DESC
     """
     return fetch_all(connection, query)

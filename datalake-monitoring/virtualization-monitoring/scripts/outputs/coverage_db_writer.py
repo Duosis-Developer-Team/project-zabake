@@ -35,31 +35,33 @@ def _rows(target_payload: dict):
 
 def upsert_cluster_coverage(connection, table: str, source: str, target_payload: dict) -> None:
     query = f"""
-        INSERT INTO {table} (source, cluster_name, collected, expected)
-        VALUES (%s, %s, %s, %s)
+        INSERT INTO {table} (source, cluster_name, collected, expected, last_collected)
+        VALUES (%s, %s, %s, %s, %s)
         ON CONFLICT (source, cluster_name) DO UPDATE SET
             collected = EXCLUDED.collected,
             expected = EXCLUDED.expected,
+            last_collected = EXCLUDED.last_collected,
             checked_at = NOW()
     """
     with connection.cursor() as cursor:
         for dl, nb, collected, expected in _rows(target_payload):
             cluster_name = dl.get("cluster_name") or nb.get("cluster_name") or ""
-            cursor.execute(query, (source, cluster_name, collected, expected))
+            cursor.execute(query, (source, cluster_name, collected, expected, dl.get("collection_time")))
     connection.commit()
 
 
 def upsert_ibm_host_coverage(connection, table: str, target_payload: dict) -> None:
     query = f"""
-        INSERT INTO {table} (servername, collected, expected)
-        VALUES (%s, %s, %s)
+        INSERT INTO {table} (servername, collected, expected, last_collected)
+        VALUES (%s, %s, %s, %s)
         ON CONFLICT (servername) DO UPDATE SET
             collected = EXCLUDED.collected,
             expected = EXCLUDED.expected,
+            last_collected = EXCLUDED.last_collected,
             checked_at = NOW()
     """
     with connection.cursor() as cursor:
         for dl, nb, collected, expected in _rows(target_payload):
             servername = dl.get("servername") or nb.get("servername") or ""
-            cursor.execute(query, (servername, collected, expected))
+            cursor.execute(query, (servername, collected, expected, dl.get("collection_time")))
     connection.commit()

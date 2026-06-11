@@ -5,9 +5,10 @@ CREATE SCHEMA IF NOT EXISTS hmdl;
 CREATE TABLE IF NOT EXISTS hmdl.hmdl_datalake_coverage_cluster (
     source        VARCHAR(20)  NOT NULL,   -- 'vmware' | 'nutanix'
     cluster_name  TEXT         NOT NULL,
-    collected     BOOLEAN      NOT NULL,    -- datalake'te metrik var mi
-    expected      BOOLEAN      NOT NULL,    -- envanterde (inventory) var mi
-    checked_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    collected      BOOLEAN     NOT NULL,    -- datalake'te metrik var mi
+    expected       BOOLEAN     NOT NULL,    -- envanterde (inventory) var mi
+    last_collected TIMESTAMPTZ NULL,        -- topladigimiz en guncel veri zamani
+    checked_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (source, cluster_name)
 );
 
