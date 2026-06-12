@@ -31,6 +31,7 @@ from parallel_compare_engine import (
     process_device_info,
     run_parallel_compare,
     _find_matching_mapping_safe,
+    _resolve_vfw_existing_host,
     zabbix_platform_technical_hostname,
     zabbix_vfw_technical_hostname,
     zabbix_vfw_display_name,
@@ -98,6 +99,7 @@ def _make_ctx(**overrides):
         "by_loki": {},
         "by_hostname": {},
         "by_visible": {},
+        "by_ip": {},
         "create_devices_disabled": False,
         "create_platforms_disabled": False,
         "create_virtual_fws_disabled": False,
@@ -392,6 +394,45 @@ class TestCompareOneVfw:
         plan = compare_one_vfw(_make_vfw(), _make_ctx())
         for key in ("action", "vfw_id", "zbx_record", "zbx_existing_host", "zbx_scenario"):
             assert key in plan, f"Missing key: {key}"
+
+    def test_update_scenario_by_ip_and_visible_name(self):
+        hostname = "ADILE SULTAN_EV_YEMEKLERI"
+        visible = f"{hostname} - Firewall"
+        ip = "91.108.216.173"
+        ctx = _make_ctx(
+            by_ip={
+                ip: {
+                    "hostid": "88001",
+                    "host": "ADILE_SULTAN_EV_YEMEKLERI_VFW_1884",
+                    "name": visible,
+                }
+            }
+        )
+        plan = compare_one_vfw(
+            _make_vfw(hostname=hostname, vfw_id=727, ip_port=f"{ip}:443"),
+            ctx,
+        )
+        assert plan["action"] == "update"
+        assert plan["zbx_existing_host"]["hostid"] == "88001"
+
+    def test_canonical_override_when_loki_points_to_stale_host(self):
+        target = zabbix_vfw_technical_hostname("DIJITAL_KURYE_DC14", "804")
+        stale = {"hostid": "34103", "host": "DIJITAL_KURYE - Firewall", "name": "DIJITAL_KURYE - Firewall"}
+        canonical = {"hostid": "35001", "host": target, "name": "DIJITAL_KURYE - Firewall"}
+        ctx = _make_ctx(
+            by_loki={"VFW_804": stale},
+            by_hostname={target: canonical},
+        )
+        resolved = _resolve_vfw_existing_host(
+            "804",
+            target,
+            "DIJITAL_KURYE - Firewall",
+            "DIJITAL_KURYE_DC14",
+            "10.0.0.1",
+            ctx,
+        )
+        assert resolved["hostid"] == "35001"
+        assert resolved["host"] == target
 
 
 # ---------------------------------------------------------------------------

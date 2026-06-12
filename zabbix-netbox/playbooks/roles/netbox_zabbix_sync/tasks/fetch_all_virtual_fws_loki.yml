@@ -88,9 +88,81 @@
           seen_ids.add(fid)
           deduped.append(fw)
 
+      def parse_vfw_ip(ip_port):
+          s = str(ip_port or "").strip()
+          if not s:
+              return ""
+          if ":" in s:
+              return s.rsplit(":", 1)[0].strip()
+          return s
+
+      def composite_dedup_key(fw):
+          ip = parse_vfw_ip(fw.get("ip_port"))
+          host = str(fw.get("hostname") or "").strip().lower()
+          if not ip or not host:
+              return None
+          return (ip, host)
+
+      by_composite = {}
+      no_composite = []
+      skipped_duplicate_vfws = []
+      for fw in deduped:
+          key = composite_dedup_key(fw)
+          if key is None:
+              no_composite.append(fw)
+              continue
+          fid = fw.get("id")
+          if key not in by_composite:
+              by_composite[key] = fw
+              continue
+          existing = by_composite[key]
+          existing_id = existing.get("id")
+          keep_current = False
+          if fid is not None and existing_id is not None:
+              try:
+                  keep_current = int(fid) < int(existing_id)
+              except (TypeError, ValueError):
+                  keep_current = False
+          if keep_current:
+              skipped_duplicate_vfws.append(
+                  {
+                      "id": existing_id,
+                      "hostname": existing.get("hostname"),
+                      "ip": parse_vfw_ip(existing.get("ip_port")),
+                      "kept_id": fid,
+                      "reason": "Duplicate Loki VFW (same IP and hostname)",
+                  }
+              )
+              by_composite[key] = fw
+          else:
+              skipped_duplicate_vfws.append(
+                  {
+                      "id": fid,
+                      "hostname": fw.get("hostname"),
+                      "ip": parse_vfw_ip(fw.get("ip_port")),
+                      "kept_id": existing_id,
+                      "reason": "Duplicate Loki VFW (same IP and hostname)",
+                  }
+              )
+
+      deduped_final = list(by_composite.values()) + no_composite
+      if skipped_duplicate_vfws:
+          print(
+              f"DEBUG: Skipped {len(skipped_duplicate_vfws)} duplicate virtual firewalls "
+              f"(same IP+hostname, kept lowest id)",
+              file=sys.stderr,
+          )
+          for row in skipped_duplicate_vfws:
+              print(
+                  f"DEBUG: Skipped VFW id={row.get('id')} hostname={row.get('hostname')} "
+                  f"ip={row.get('ip')} kept_id={row.get('kept_id')}",
+                  file=sys.stderr,
+              )
+
       result = {
-          "virtual_fws": deduped,
-          "virtual_fws_count": len(deduped),
+          "virtual_fws": deduped_final,
+          "virtual_fws_count": len(deduped_final),
+          "skipped_duplicate_vfws": skipped_duplicate_vfws,
       }
       print(json.dumps(sanitize_json(result), ensure_ascii=False, default=str))
     dest: "/tmp/fetch_all_netbox_virtual_fws.py"

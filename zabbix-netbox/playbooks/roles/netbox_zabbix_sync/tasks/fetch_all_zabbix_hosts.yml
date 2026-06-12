@@ -138,6 +138,24 @@
   delegate_to: localhost
   when: zabbix_host_list is defined
 
+- name: Build primary interface IP to host mapping (VFW duplicate fallback)
+  set_fact:
+    zabbix_hosts_by_ip: >-
+      {%- set mapping = {} -%}
+      {%- for host in zabbix_host_list | default([]) -%}
+      {%- set ifaces = host.interfaces | default([]) -%}
+      {%- if ifaces | length > 0 -%}
+      {%- set ip = ifaces[0].ip | default('') | string | trim -%}
+      {%- if ip != '' -%}
+      {%- set _ = mapping.update({ip: host}) -%}
+      {%- endif -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ mapping }}
+  run_once: true
+  delegate_to: localhost
+  when: zabbix_host_list is defined
+
 - name: Display mapping statistics
   debug:
     msg: |
@@ -148,6 +166,7 @@
       Hosts with Loki_ID tag: {{ zabbix_hosts_by_loki_id | default({}) | length }}
       Hostname mapping size: {{ zabbix_hosts_by_hostname | default({}) | length }}
       Visible name mapping size: {{ zabbix_hosts_by_visible_name | default({}) | length }}
+      IP mapping size: {{ zabbix_hosts_by_ip | default({}) | length }}
       ============================================
   when: zabbix_host_list is defined
 

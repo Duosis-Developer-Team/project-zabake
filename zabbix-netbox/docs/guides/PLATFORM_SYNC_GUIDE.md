@@ -342,7 +342,23 @@ When a platform is synced again after already existing in Zabbix:
 
 **Cause (fixed in 2026-05):** Prefetch resolves the host by `Loki_ID=VFW_<id>` on a **legacy** Zabbix host (old technical `host` / visible name). A **newer** host already owns the canonical technical name (`<slug>_VFW_<id>`). The play attempted `host.update` on the stale host while renaming `host` to the canonical name, which collides with the existing host.
 
-**Fix (built-in):** In [`process_virtual_fw.yml`](../../playbooks/roles/netbox_zabbix_sync/tasks/process_virtual_fw.yml), after Loki_ID lookup, if the matched host’s technical name differs from the expected `HOSTNAME` **and** `zabbix_hosts_by_hostname` already has that canonical name, the playbook selects the canonical host for update instead of renaming the stale one. VFW processing also removes leftover `/tmp/zabbix_vfw_operation_result_*.json` before each run ([`main.yml`](../../playbooks/roles/netbox_zabbix_sync/tasks/main.yml)).
+**Fix (built-in):** In [`process_virtual_fw.yml`](../../playbooks/roles/netbox_zabbix_sync/tasks/process_virtual_fw.yml), after Loki_ID lookup, if the matched host’s technical name differs from the expected `HOSTNAME` **and** `zabbix_hosts_by_hostname` already has that canonical name, the playbook selects the canonical host for update instead of renaming the stale one. VFW processing also removes leftover `/tmp/zabbix_vfw_operation_result_*.json` before each run ([`main.yml`](../../playbooks/roles/netbox_zabbix_sync/tasks/main.yml)). Phase A [`compare_one_vfw`](../../playbooks/roles/netbox_zabbix_sync/files/parallel_compare_engine.py) now applies the same canonical override and `by_ip` fallback.
+
+### Duplicate Loki VFW records (same IP + hostname, different id)
+
+**Symptom:** Two Zabbix hosts for one firewall (e.g. `..._VFW_1884` and `..._VFW_727`), same management IP.
+
+**Cause:** Loki `virtual_fws` had duplicate rows; sync identity is `VFW_<loki_id>` + `_VFW_<id>` technical suffix, not IP.
+
+**Fix (2026-06):** [`fetch_all_virtual_fws_loki.yml`](../../playbooks/roles/netbox_zabbix_sync/tasks/fetch_all_virtual_fws_loki.yml) dedupes by `(ip, hostname)` keeping lowest id; compare engine matches existing hosts by IP + visible name; [`process_virtual_fw_apply.yml`](../../playbooks/roles/netbox_zabbix_sync/tasks/process_virtual_fw_apply.yml) recovers duplicate `host.create` errors via re-enrich + `host.update`.
+
+### VFW visible name missing ` - Firewall` suffix
+
+**Symptom:** Zabbix visible name equals technical slug (e.g. `ADILE_SULTAN_EV_YEMEKLERI_VFW_727`) instead of `ADILE SULTAN_EV_YEMEKLERI - Firewall`.
+
+**Cause:** Legacy create or empty Loki hostname fallback; visible name was never updated (device/platform policy).
+
+**Fix (2026-06):** For `DEVICE_ROLE: VIRTUAL_FW` only, [`zabbix_payload_builder.py`](../../playbooks/roles/netbox_zabbix_sync/files/zabbix_payload_builder.py) sends `name` on `host.update` when expected visible differs; manual edits preserved when HMDL `last_visible_name` indicates operator change.
 
 **Stale hosts:** Orphan Zabbix hosts that still hold the wrong `Loki_ID` tag are not deleted automatically; disable or remove them manually after confirming the canonical host is correct.
 

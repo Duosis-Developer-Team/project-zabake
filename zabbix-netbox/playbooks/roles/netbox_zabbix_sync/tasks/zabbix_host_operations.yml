@@ -1041,6 +1041,22 @@
     - zbx_existing_host.hostid is defined
     - zbx_existing_host.name is defined
     - zbx_existing_host.name | string | trim != ''
+    - (zbx_record.DEVICE_ROLE | default('') | string | upper) != 'VIRTUAL_FW'
+
+- name: Apply VFW visible name correction on update when needed
+  set_fact:
+    zbx_host_visible_name: "{{ zbx_record.HOST_VISIBLE_NAME | default(zbx_host_visible_name, true) }}"
+    _vfw_visible_name_apply: >-
+      {{
+        (zbx_existing_host.name | default('') | string | trim)
+        != (zbx_record.HOST_VISIBLE_NAME | default('') | string | trim)
+      }}
+  when:
+    - zbx_scenario == 'update'
+    - zbx_existing_host.hostid is defined
+    - (zbx_record.DEVICE_ROLE | default('') | string | upper) == 'VIRTUAL_FW'
+    - zbx_record.HOST_VISIBLE_NAME is defined
+    - zbx_record.HOST_VISIBLE_NAME | string | trim != ''
 
 - name: Determine if interface type changed (update path)
   set_fact:
@@ -1118,7 +1134,11 @@
           (_proxy_apply_update | default(false) | bool) or
           (_tags_needs_update | default(false) | bool) or
           (_groups_needs_update | default(false) | bool) or
-          (_macros_needs_update | default(false) | bool)
+          (_macros_needs_update | default(false) | bool) or
+          (
+            (zbx_record.DEVICE_ROLE | default('') | string | upper == 'VIRTUAL_FW') and
+            (_vfw_visible_name_apply | default(false) | bool)
+          )
         ) | bool
       }}
   when:
@@ -1137,7 +1157,11 @@
         {%- set _ = entries.append({'field_name': 'hostname', 'old_value': zbx_existing_host.host | default(''), 'new_value': zbx_record.HOSTNAME, 'action': 'updated'}) -%}
       {%- endif -%}
       {%- if zbx_existing_host.name | default('') | string | trim != (zbx_record.HOST_VISIBLE_NAME | default(zbx_record.HOSTNAME) | string | trim) -%}
+        {%- if (zbx_record.DEVICE_ROLE | default('') | string | upper == 'VIRTUAL_FW') and (_vfw_visible_name_apply | default(false) | bool) -%}
+        {%- set _ = entries.append({'field_name': 'visible_name', 'old_value': zbx_existing_host.name | default(''), 'new_value': zbx_record.HOST_VISIBLE_NAME | default(zbx_record.HOSTNAME), 'action': 'updated', 'merge_result': 'corrected'}) -%}
+        {%- else -%}
         {%- set _ = entries.append({'field_name': 'visible_name', 'old_value': zbx_existing_host.name | default(''), 'new_value': zbx_record.HOST_VISIBLE_NAME | default(zbx_record.HOSTNAME), 'action': 'skipped', 'merge_result': 'preserved_existing', 'reason': 'Visible name is never updated on existing hosts'}) -%}
+        {%- endif -%}
       {%- endif -%}
       {%- if _existing_interface.ip | default('') != zbx_record.HOST_IP -%}
         {%- set _ = entries.append({'field_name': 'interface_ip', 'old_value': _existing_interface.ip | default(''), 'new_value': zbx_record.HOST_IP, 'action': 'updated'}) -%}
@@ -1250,6 +1274,19 @@
     - _host_update_params is defined
     - _host_update_params | length > 0
     - _tags_needs_update | default(false) | bool
+    - not (dry_run | default(false) | bool)
+
+- name: Add visible name to host.update params for VFW correction
+  set_fact:
+    _host_update_params: "{{ _host_update_params | combine({'name': zbx_record.HOST_VISIBLE_NAME | string}) }}"
+  when:
+    - zbx_scenario == 'update'
+    - _host_update_params is defined
+    - _host_update_params | length > 0
+    - (zbx_record.DEVICE_ROLE | default('') | string | upper) == 'VIRTUAL_FW'
+    - _vfw_visible_name_apply | default(false) | bool
+    - zbx_record.HOST_VISIBLE_NAME is defined
+    - zbx_record.HOST_VISIBLE_NAME | string | trim != ''
     - not (dry_run | default(false) | bool)
 
 - name: Update existing host (scenario update)

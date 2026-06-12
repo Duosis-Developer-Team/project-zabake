@@ -104,6 +104,13 @@
   delegate_to: localhost
   run_once: true
 
+- name: Write Zabbix hosts by primary IP map for compare engine
+  copy:
+    content: "{{ zabbix_hosts_by_ip | default({}) | to_json }}"
+    dest: /tmp/pce_zbx_by_ip.json
+  delegate_to: localhost
+  run_once: true
+
 - name: Write Zabbix template ID cache for payload builder
   copy:
     content: "{{ zbx_template_id_cache | default({}) | to_json }}"
@@ -151,6 +158,7 @@
     --zbx-hosts-loki-map /tmp/pce_zbx_by_loki.json
     --zbx-hosts-hostname-map /tmp/pce_zbx_by_hostname.json
     --zbx-hosts-visible-map /tmp/pce_zbx_by_visible.json
+    --zbx-hosts-ip-map /tmp/pce_zbx_by_ip.json
     --zbx-templates-cache /tmp/pce_template_id_cache.json
     --zbx-groups-cache /tmp/pce_group_id_cache.json
     --zbx-proxy-groups-cache /tmp/pce_proxy_group_cache.json

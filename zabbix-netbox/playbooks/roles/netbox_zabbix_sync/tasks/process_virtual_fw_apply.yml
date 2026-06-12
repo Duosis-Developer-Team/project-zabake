@@ -102,7 +102,7 @@
       hostname: "{{ _vfw_sync_plan_loaded.zbx_record.HOSTNAME | default('') }}"
       device_role: "VIRTUAL_FW"
       status: "eklenemedi"
-      reason: "{{ zbx_vfw_create_resp.json.error.message | default('host.create failed') }}"
+      reason: "{{ zbx_vfw_create_resp.json.error.message | default('host.create failed') }}{{ (' — ' ~ (zbx_vfw_create_resp.json.error.data | string)) if (zbx_vfw_create_resp.json.error.data is defined and (zbx_vfw_create_resp.json.error.data | string | length) > 0) else '' }}"
       ip: "{{ _vfw_sync_plan_loaded.zbx_record.HOST_IP | default('N/A') }}"
       location: "{{ _vfw_sync_plan_loaded.zbx_record.REPORT_LOCATION | default('N/A') }}"
       site: "{{ _vfw_sync_plan_loaded.zbx_record.REPORT_SITE | default('N/A') }}"
@@ -113,6 +113,187 @@
     - _vfw_sync_plan_loaded.action | default('skip') == 'create'
     - zbx_vfw_create_resp is defined
     - zbx_vfw_create_resp.json.error is defined
+
+- name: Detect duplicate host error on VFW create
+  set_fact:
+    _vfw_create_duplicate_error: >-
+      {{
+        (zbx_vfw_create_resp.json.error.message | default('')) is search('already exists')
+        or (zbx_vfw_create_resp.json.error.data | default('') | string) is search('already exists')
+      }}
+  when:
+    - _vfw_sync_plan_loaded.action | default('skip') == 'create'
+    - zbx_vfw_create_resp is defined
+    - zbx_vfw_create_resp.json.error is defined
+
+- name: Capture Loki_ID from VFW create payload for duplicate resolution
+  set_fact:
+    _vfw_dup_loki: >-
+      {{
+        (
+          _vfw_sync_plan_loaded.create_payload.tags | default([])
+          | selectattr('tag', 'equalto', 'Loki_ID')
+          | map(attribute='value')
+          | list
+          | first
+          | default('', true)
+        ) | string
+      }}
+  when:
+    - _vfw_create_duplicate_error | default(false) | bool
+    - _vfw_sync_plan_loaded.create_payload is defined
+
+- name: Resolve duplicate VFW host from prefetch maps
+  set_fact:
+    _vfw_dup_resolved_candidate: >-
+      {%- set resolved = {} -%}
+      {%- set rec = _vfw_sync_plan_loaded.zbx_record | default({}) -%}
+      {%- if _vfw_dup_loki | default('') | length > 0 and zabbix_hosts_by_loki_id is defined -%}
+      {%- set by_loki = zabbix_hosts_by_loki_id.get(_vfw_dup_loki, {}) -%}
+      {%- if by_loki.hostid is defined -%}
+      {%- set resolved = by_loki -%}
+      {%- endif -%}
+      {%- endif -%}
+      {%- if resolved.hostid is not defined and zabbix_hosts_by_hostname is defined -%}
+      {%- set by_host = zabbix_hosts_by_hostname.get(rec.HOSTNAME | default(''), {}) -%}
+      {%- if by_host.hostid is defined -%}
+      {%- set resolved = by_host -%}
+      {%- endif -%}
+      {%- endif -%}
+      {%- if resolved.hostid is not defined and zabbix_hosts_by_visible_name is defined -%}
+      {%- set vis = rec.HOST_VISIBLE_NAME | default('') -%}
+      {%- if vis | length > 0 -%}
+      {%- set by_visible = zabbix_hosts_by_visible_name.get(vis, {}) -%}
+      {%- if by_visible.hostid is defined -%}
+      {%- set resolved = by_visible -%}
+      {%- endif -%}
+      {%- endif -%}
+      {%- endif -%}
+      {%- if resolved.hostid is not defined and zabbix_hosts_by_ip is defined and rec.HOST_IP | default('') | length > 0 -%}
+      {%- set by_ip = zabbix_hosts_by_ip.get(rec.HOST_IP, {}) -%}
+      {%- if by_ip.hostid is defined -%}
+      {%- set resolved = by_ip -%}
+      {%- endif -%}
+      {%- endif -%}
+      {{ resolved }}
+  when:
+    - _vfw_create_duplicate_error | default(false) | bool
+
+- name: Write resolved duplicate host JSON for plan re-enrich
+  copy:
+    content: "{{ _vfw_dup_resolved_candidate | to_json }}"
+    dest: "/tmp/vfw_dup_host_{{ netbox_virtual_fw.id | default('unknown') }}.json"
+  delegate_to: localhost
+  when:
+    - _vfw_create_duplicate_error | default(false) | bool
+    - _vfw_dup_resolved_candidate is defined
+    - _vfw_dup_resolved_candidate.hostid is defined
+
+- name: Re-enrich VFW plan as update after duplicate create recovery
+  command: >
+    python3 /tmp/zabbix_payload_builder.py
+    --re-enrich-plan {{ _vfw_plan_path }}
+    --existing-host-json /tmp/vfw_dup_host_{{ netbox_virtual_fw.id | default('unknown') }}.json
+    --output-plan {{ _vfw_plan_path }}
+    --mappings-dir {{ (playbook_dir | default(ansible_playbook_directory)) + '/../mappings' }}
+    --zbx-templates-cache /tmp/pce_template_id_cache.json
+    --zbx-groups-cache /tmp/pce_group_id_cache.json
+    --zbx-proxy-groups-cache /tmp/pce_proxy_group_cache.json
+    --hmdl-baseline-map /tmp/pce_hmdl_baseline.json
+  register: _vfw_re_enrich_result
+  changed_when: false
+  delegate_to: localhost
+  when:
+    - _vfw_create_duplicate_error | default(false) | bool
+    - _vfw_dup_resolved_candidate is defined
+    - _vfw_dup_resolved_candidate.hostid is defined
+    - not (dry_run | default(false) | bool)
+
+- name: Reload VFW plan after duplicate recovery re-enrich
+  set_fact:
+    _vfw_sync_plan_loaded: "{{ lookup('file', _vfw_plan_path) | from_json }}"
+  when:
+    - _vfw_re_enrich_result is defined
+    - _vfw_re_enrich_result.rc is defined
+    - _vfw_re_enrich_result.rc == 0
+
+- name: POST host.update after VFW duplicate create recovery
+  uri:
+    url: "{{ zabbix_url }}"
+    method: POST
+    body_format: json
+    validate_certs: "{{ zabbix_validate_certs | default(false) }}"
+    body:
+      jsonrpc: "2.0"
+      method: "host.update"
+      params: "{{ _vfw_sync_plan_loaded.update_payload }}"
+      auth: "{{ zabbix_auth }}"
+      id: 3
+  register: zbx_vfw_dup_update_resp
+  failed_when: false
+  when:
+    - _vfw_sync_plan_loaded.action | default('skip') == 'update'
+    - _vfw_re_enrich_result is defined
+    - _vfw_re_enrich_result.rc is defined
+    - _vfw_re_enrich_result.rc == 0
+    - _vfw_sync_plan_loaded.needs_update | default(false) | bool
+    - _vfw_sync_plan_loaded.update_payload is defined
+    - not (dry_run | default(false) | bool)
+    - zabbix_auth is defined
+
+- name: Record VFW duplicate recovery update success
+  set_fact:
+    current_vfw_result:
+      hostname: "{{ _vfw_sync_plan_loaded.zbx_record.HOSTNAME | default('') }}"
+      device_role: "VIRTUAL_FW"
+      status: "güncellendi"
+      reason: "Duplicate create recovered via host.update"
+      ip: "{{ _vfw_sync_plan_loaded.zbx_record.HOST_IP | default('N/A') }}"
+      location: "{{ _vfw_sync_plan_loaded.zbx_record.REPORT_LOCATION | default('N/A') }}"
+      site: "{{ _vfw_sync_plan_loaded.zbx_record.REPORT_SITE | default('N/A') }}"
+      tenant: "N/A"
+      ownership: "N/A"
+      planned_operation: "update"
+  when:
+    - zbx_vfw_dup_update_resp is defined
+    - zbx_vfw_dup_update_resp.json.result is defined
+
+- name: Record VFW duplicate recovery update failure
+  set_fact:
+    current_vfw_result:
+      hostname: "{{ _vfw_sync_plan_loaded.zbx_record.HOSTNAME | default('') }}"
+      device_role: "VIRTUAL_FW"
+      status: "eklenemedi"
+      reason: "{{ zbx_vfw_dup_update_resp.json.error.message | default('host.update failed after duplicate recovery') }}"
+      ip: "{{ _vfw_sync_plan_loaded.zbx_record.HOST_IP | default('N/A') }}"
+      location: "{{ _vfw_sync_plan_loaded.zbx_record.REPORT_LOCATION | default('N/A') }}"
+      site: "{{ _vfw_sync_plan_loaded.zbx_record.REPORT_SITE | default('N/A') }}"
+      tenant: "N/A"
+      ownership: "N/A"
+      planned_operation: "update"
+  when:
+    - zbx_vfw_dup_update_resp is defined
+    - zbx_vfw_dup_update_resp.json.error is defined
+
+- name: Record VFW duplicate recovery — host already up to date
+  set_fact:
+    current_vfw_result:
+      hostname: "{{ _vfw_sync_plan_loaded.zbx_record.HOSTNAME | default('') }}"
+      device_role: "VIRTUAL_FW"
+      status: "güncel"
+      reason: "Duplicate create recovered; no update delta"
+      ip: "{{ _vfw_sync_plan_loaded.zbx_record.HOST_IP | default('N/A') }}"
+      location: "{{ _vfw_sync_plan_loaded.zbx_record.REPORT_LOCATION | default('N/A') }}"
+      site: "{{ _vfw_sync_plan_loaded.zbx_record.REPORT_SITE | default('N/A') }}"
+      tenant: "N/A"
+      ownership: "N/A"
+      planned_operation: "update"
+  when:
+    - _vfw_re_enrich_result is defined
+    - _vfw_re_enrich_result.rc is defined
+    - _vfw_re_enrich_result.rc == 0
+    - _vfw_sync_plan_loaded.action | default('skip') == 'update'
+    - not (_vfw_sync_plan_loaded.needs_update | default(false) | bool)
 
 - name: DRY-RUN — Record planned VFW create
   set_fact:
@@ -257,12 +438,12 @@
       zabbix_proxy_group_id: ""
       proxy_location_change: false
       proxy_manual_change_detected: false
-      field_merge_actions: {}
+      field_merge_actions: "{{ _vfw_sync_plan_loaded.field_merge_actions | default({}) }}"
       last_managed_groups: []
       dry_run: "{{ dry_run | default(false) | bool }}"
       extra_data: {}
       request_payload: "{{ _vfw_sync_plan_loaded.create_payload | default(_vfw_sync_plan_loaded.update_payload | default({})) }}"
-      response_payload: "{{ zbx_vfw_create_resp.json | default(zbx_vfw_update_resp.json | default({})) }}"
+      response_payload: "{{ zbx_vfw_create_resp.json | default(zbx_vfw_update_resp.json | default(zbx_vfw_dup_update_resp.json | default({}))) }}"
       error_payload: {}
   when:
     - hmdl_log_enabled | bool

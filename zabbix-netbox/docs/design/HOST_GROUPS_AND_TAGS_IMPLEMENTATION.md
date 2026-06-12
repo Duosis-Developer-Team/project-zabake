@@ -170,7 +170,8 @@ Update path preserves operator changes in Zabbix while refreshing Loki/datalake-
 | Tags | Device: `tags_config.yml` + `Loki_Tag_*`. Platform: also `platform_tags_config.yml` (`IP`, `Port`, `Loki_ID`, …) | Preserved |
 | Host groups | Groups from `host_groups_config.yml` / templates | Extra groups preserved |
 | Macros | Keys from `templates.yml` for mapped `device_type` | Extra macros preserved |
-| Visible name | `HOST_VISIBLE_NAME` when unchanged since last HMDL log | Preserved + reported |
+| Visible name | Device/platform: preserved when manual change vs HMDL | Preserved + reported |
+| Visible name (VFW) | Corrected to `<hostname> - Firewall` on update unless HMDL shows manual edit | Updated or `preserved_manual` |
 | Proxy group | Recalculated from `DC_ID`; **location change overrides** | Preserved when log shows correct proxy but Zabbix differs |
 
 **Inventory source (AWX extra vars):** `device_source`, `platform_source`, `virtual_fw_source` — each `loki` (NetBox API) or `datalake` (PostgreSQL discovery tables).

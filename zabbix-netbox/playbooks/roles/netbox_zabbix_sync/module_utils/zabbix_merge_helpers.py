@@ -177,11 +177,13 @@ def should_preserve_visible_name(
     """
     expected = (expected_visible_name or "").strip()
     current = (zabbix_visible_name or "").strip()
-    last = (last_hmdl_visible_name or "").strip() if last_hmdl_visible_name else expected
+    last = (last_hmdl_visible_name or "").strip()
 
     if current == expected:
         return False, ""
-    if last and current != last:
+    if not last:
+        return False, ""
+    if current != last:
         return True, "visible_name manually changed in Zabbix"
     return False, ""
 

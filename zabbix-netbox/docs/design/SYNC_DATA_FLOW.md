@@ -23,7 +23,7 @@ flowchart TB
 
     subgraph zabbix_read [2 Zabbix read]
         ZH[host.get all hosts]
-        Maps[Loki_ID / hostname / visible name maps]
+        Maps[Loki_ID / hostname / visible name / IP maps]
     end
 
     subgraph process [3 Process per record]
@@ -65,7 +65,7 @@ flowchart TB
 | 1 | Load mappings | Always | `templates_map`, `device_type_mapping`, … |
 | 2 | `fetch_all_devices.yml` | `sync_devices` or `only_fetch` | `netbox_devices_*` |
 | 3 | `fetch_all_virtual_fws.yml` | `sync_virtual_fws` | `netbox_virtual_fws_raw` |
-| 4 | `fetch_all_zabbix_hosts.yml` | Not `only_fetch` | `zabbix_hosts_by_loki_id`, `zabbix_hosts_by_hostname`, `zabbix_hosts_by_visible_name` |
+| 4 | `fetch_all_zabbix_hosts.yml` | Not `only_fetch` | `zabbix_hosts_by_loki_id`, `zabbix_hosts_by_hostname`, `zabbix_hosts_by_visible_name`, `zabbix_hosts_by_ip` |
 | 5 | Filter/limit devices | After fetch | `netbox_devices_final` |
 | 6 | `process_device.yml` loop | `sync_devices` | Per-device JSON in `/tmp/zabbix_host_operation_result_*.json` |
 | 7 | `process_platform.yml` loop | `sync_platforms` | Platform results |

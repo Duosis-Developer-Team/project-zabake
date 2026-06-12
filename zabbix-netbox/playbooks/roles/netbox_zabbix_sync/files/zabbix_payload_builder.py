@@ -32,6 +32,7 @@ from zabbix_merge_helpers import (  # noqa: E402
     merge_host_groups,
     merge_tags,
     resolve_proxy_group_update,
+    should_preserve_visible_name,
 )
 
 _DC_PATTERN = re.compile(r"(DC|AZ|ICT|UZ)\d+", re.IGNORECASE)
@@ -353,13 +354,19 @@ class ZabbixPayloadBuilder:
             template_rows, zbx_record.get("HOST_IP", "") or ""
         )
         tags = _macros_to_tags(_parse_macros_field(zbx_record.get("MACROS", {})))
-        visible_name = zbx_record.get("HOST_VISIBLE_NAME") or zbx_record.get("HOSTNAME", "")
+        device_role_upper = (device_role or "").upper()
+        if device_role_upper == "VIRTUAL_FW":
+            visible_name = (zbx_record.get("HOST_VISIBLE_NAME") or "").strip()
+        else:
+            visible_name = zbx_record.get("HOST_VISIBLE_NAME") or zbx_record.get("HOSTNAME", "")
         validation_errors: List[str] = []
 
         if not zbx_record.get("HOSTNAME"):
             validation_errors.append("Hostname eksik")
         if not zbx_record.get("HOST_IP"):
             validation_errors.append("IP adresi eksik")
+        if device_role_upper == "VIRTUAL_FW" and action == "create" and not visible_name:
+            validation_errors.append("Missing hostname for visible name")
         if missing_templates:
             validation_errors.append(
                 "Zabbix'te bulunamayan şablonlar: " + ", ".join(missing_templates)
@@ -487,6 +494,28 @@ class ZabbixPayloadBuilder:
         if groups_needs_update:
             update_reasons.append("groups_changed")
 
+        visible_needs_update = False
+        visible_preserve_manual = False
+        field_merge_actions: Dict[str, Any] = {}
+        if device_role_upper == "VIRTUAL_FW" and visible_name:
+            current_visible = str(zbx_existing.get("name") or "").strip()
+            if current_visible != visible_name:
+                hmdl = self._hmdl_row_for_record(zbx_record)
+                preserve, preserve_reason = should_preserve_visible_name(
+                    visible_name,
+                    current_visible,
+                    hmdl.get("last_visible_name"),
+                )
+                if preserve:
+                    visible_preserve_manual = True
+                    field_merge_actions["visible_name"] = "preserved_manual"
+                    if preserve_reason:
+                        field_merge_actions["visible_name_reason"] = preserve_reason
+                else:
+                    visible_needs_update = True
+                    field_merge_actions["visible_name"] = "corrected"
+                    update_reasons.append("visible_name_corrected")
+
         needs_update = bool(
             (existing_ip != zbx_record.get("HOST_IP", ""))
             or (zbx_existing.get("host", "") != zbx_record.get("HOSTNAME", ""))
@@ -494,6 +523,7 @@ class ZabbixPayloadBuilder:
             or proxy_apply
             or tags_needs_update
             or groups_needs_update
+            or visible_needs_update
         )
         if needs_update and iface_update and not iface_locked:
             update_reasons.append("interface_changed")
@@ -501,6 +531,8 @@ class ZabbixPayloadBuilder:
             update_reasons.append("interface_type_locked")
 
         plan["update_reasons"] = update_reasons
+        plan["field_merge_actions"] = field_merge_actions
+        plan["visible_name_preserved_manual"] = visible_preserve_manual
 
         plan["needs_update"] = needs_update
         plan["proxy_manual_change_detected"] = bool(
@@ -544,6 +576,8 @@ class ZabbixPayloadBuilder:
             )
         if tags_needs_update:
             update_payload["tags"] = merged_tags
+        if visible_needs_update:
+            update_payload["name"] = visible_name
 
         plan["update_payload"] = update_payload
         plan["create_payload"] = None
@@ -565,3 +599,115 @@ class ZabbixPayloadBuilder:
             "ownership": zbx_record.get("REPORT_OWNERSHIP", "N/A"),
         }
         return plan
+
+
+def re_enrich_plan(plan: Dict[str, Any], ctx: Dict[str, Any], existing_host: Dict[str, Any]) -> Dict[str, Any]:
+    """Switch a create plan to update after duplicate host.create recovery."""
+    updated = deepcopy(plan)
+    updated["action"] = "update"
+    updated["zbx_scenario"] = "update"
+    updated["zbx_existing_host"] = existing_host
+    builder = ZabbixPayloadBuilder(ctx)
+    return builder.enrich_plan(updated)
+
+
+def _load_builder_ctx_from_args(args: Any) -> Dict[str, Any]:
+    import yaml
+
+    mappings_dir = args.mappings_dir or ""
+    tags_config: Dict[str, Any] = {}
+    vfw_tags_config: Dict[str, Any] = {}
+    tags_path = os.path.join(mappings_dir, "tags_config.yml")
+    vfw_tags_path = os.path.join(mappings_dir, "virtual_fw_tags_config.yml")
+    if os.path.exists(tags_path):
+        with open(tags_path, encoding="utf-8") as f:
+            tags_config = yaml.safe_load(f) or {}
+    if os.path.exists(vfw_tags_path):
+        with open(vfw_tags_path, encoding="utf-8") as f:
+            vfw_tags_config = yaml.safe_load(f) or {}
+
+    template_id_cache: Dict[str, Any] = {}
+    group_id_cache: Dict[str, Any] = {}
+    proxy_group_config: List[Dict[str, str]] = []
+    hmdl_baseline_map: Dict[str, Any] = {}
+    templates_map: Dict[str, Any] = {}
+    template_type_map: Dict[str, Any] = {}
+
+    if getattr(args, "zbx_templates_cache", None) and os.path.exists(args.zbx_templates_cache):
+        with open(args.zbx_templates_cache, encoding="utf-8") as f:
+            template_id_cache = json.load(f) or {}
+    if getattr(args, "zbx_groups_cache", None) and os.path.exists(args.zbx_groups_cache):
+        with open(args.zbx_groups_cache, encoding="utf-8") as f:
+            group_id_cache = json.load(f) or {}
+    if getattr(args, "zbx_proxy_groups_cache", None) and os.path.exists(args.zbx_proxy_groups_cache):
+        with open(args.zbx_proxy_groups_cache, encoding="utf-8") as f:
+            proxy_raw = json.load(f) or {}
+        if isinstance(proxy_raw, list):
+            proxy_group_config = proxy_raw
+        else:
+            proxy_group_config = build_proxy_group_config(proxy_raw)
+    if getattr(args, "hmdl_baseline_map", None) and os.path.exists(args.hmdl_baseline_map):
+        with open(args.hmdl_baseline_map, encoding="utf-8") as f:
+            hmdl_baseline_map = json.load(f) or {}
+    templates_path = os.path.join(mappings_dir, "templates.yml")
+    template_types_path = os.path.join(mappings_dir, "template_types.yml")
+    if os.path.exists(templates_path):
+        with open(templates_path, encoding="utf-8") as f:
+            templates_map = yaml.safe_load(f) or {}
+    if os.path.exists(template_types_path):
+        with open(template_types_path, encoding="utf-8") as f:
+            template_type_map = yaml.safe_load(f) or {}
+
+    return {
+        "tags_config": tags_config,
+        "templates_map": templates_map,
+        "template_type_map": template_type_map,
+        "template_id_cache": template_id_cache,
+        "group_id_cache": group_id_cache,
+        "proxy_group_config": proxy_group_config,
+        "hmdl_baseline_map": hmdl_baseline_map,
+        "vfw_managed_tag_keys": (
+            vfw_tags_config.get("virtual_fw_tags", {}).get("managed_keys", [])
+            if isinstance(vfw_tags_config, dict)
+            else []
+        ),
+        "platform_managed_tag_keys": [],
+    }
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Zabbix payload builder utilities")
+    parser.add_argument("--re-enrich-plan", help="Path to compare plan JSON to re-enrich as update")
+    parser.add_argument("--existing-host-json", help="Path to resolved Zabbix host JSON")
+    parser.add_argument("--output-plan", help="Path to write re-enriched plan JSON")
+    parser.add_argument("--mappings-dir", help="Path to mappings/ directory")
+    parser.add_argument("--zbx-templates-cache")
+    parser.add_argument("--zbx-groups-cache")
+    parser.add_argument("--zbx-proxy-groups-cache")
+    parser.add_argument("--hmdl-baseline-map")
+    args = parser.parse_args()
+
+    if not args.re_enrich_plan:
+        parser.error("--re-enrich-plan is required")
+    if not args.existing_host_json:
+        parser.error("--existing-host-json is required")
+    if not args.mappings_dir:
+        parser.error("--mappings-dir is required")
+
+    with open(args.re_enrich_plan, encoding="utf-8") as f:
+        plan = json.load(f)
+    with open(args.existing_host_json, encoding="utf-8") as f:
+        existing_host = json.load(f)
+
+    ctx = _load_builder_ctx_from_args(args)
+    enriched = re_enrich_plan(plan, ctx, existing_host)
+
+    out_path = args.output_plan or args.re_enrich_plan
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(enriched, f, ensure_ascii=False)
+
+
+if __name__ == "__main__":
+    main()

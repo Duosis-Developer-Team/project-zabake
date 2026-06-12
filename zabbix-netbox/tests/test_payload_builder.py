@@ -659,3 +659,104 @@ def test_is_discovered_host_flag():
     assert _is_discovered_host({}) is False
 
 
+VFW_TEMPLATES_MAP = {
+    "Fortinet VFW": [
+        {
+            "name": "BLT - Fortinet FW",
+            "snmpv2": True,
+            "host_groups": ["Virtual Firewalls"],
+        }
+    ],
+}
+
+VFW_BASE_CTX = {
+    **BASE_CTX,
+    "templates_map": VFW_TEMPLATES_MAP,
+    "template_id_cache": {"BLT - Fortinet FW": "10099"},
+    "group_id_cache": {"Virtual Firewalls": "20099", "Fortinet VFW": "20100"},
+    "vfw_managed_tag_keys": ["Vendor", "Location", "Loki_ID"],
+}
+
+
+def _vfw_update_plan(existing_name: str, visible_name: str = "ACME-FW1 - Firewall") -> dict:
+    return {
+        "action": "update",
+        "vfw_id": "3001",
+        "zbx_record": {
+            "DEVICE_TYPE": "Fortinet VFW",
+            "DEVICE_ROLE": "VIRTUAL_FW",
+            "HOST_IP": "10.1.0.1",
+            "HOSTNAME": "ACME-FW1_VFW_3001",
+            "HOST_VISIBLE_NAME": visible_name,
+            "DC_ID": "DC14",
+            "HOST_GROUPS": "Fortinet,Virtual Firewalls",
+            "MACROS": json.dumps({"Loki_ID": "VFW_3001", "Vendor": "Fortinet", "Location": "DC14"}),
+            "REPORT_LOCATION": "DC14",
+            "REPORT_SITE": "DC14",
+            "REPORT_TENANT": "",
+            "REPORT_OWNERSHIP": "",
+        },
+        "zbx_existing_host": {
+            "hostid": "70001",
+            "host": "ACME-FW1_VFW_3001",
+            "name": existing_name,
+            "monitored_by": "2",
+            "proxy_groupid": "45",
+            "interfaces": [
+                {"interfaceid": "80001", "type": "2", "ip": "10.1.0.1", "port": "161"}
+            ],
+            "groups": [{"name": "Virtual Firewalls"}],
+            "tags": [{"tag": "Vendor", "value": "Fortinet"}],
+        },
+    }
+
+
+def test_vfw_create_skips_when_visible_name_missing():
+    builder = ZabbixPayloadBuilder(VFW_BASE_CTX)
+    plan = {
+        "action": "create",
+        "vfw_id": "3001",
+        "zbx_record": {
+            "DEVICE_TYPE": "Fortinet VFW",
+            "DEVICE_ROLE": "VIRTUAL_FW",
+            "HOST_IP": "10.1.0.1",
+            "HOSTNAME": "ACME-FW1_VFW_3001",
+            "HOST_VISIBLE_NAME": "",
+            "DC_ID": "DC14",
+            "HOST_GROUPS": "Fortinet,Virtual Firewalls",
+            "MACROS": json.dumps({"Loki_ID": "VFW_3001"}),
+            "REPORT_LOCATION": "DC14",
+            "REPORT_SITE": "DC14",
+            "REPORT_TENANT": "",
+            "REPORT_OWNERSHIP": "",
+        },
+        "zbx_existing_host": {},
+    }
+    enriched = builder.enrich_plan(plan)
+    assert enriched["action"] == "skip"
+    assert "Missing hostname for visible name" in enriched["current_vfw_result"]["reason"]
+
+
+def test_vfw_update_corrects_wrong_visible_name():
+    builder = ZabbixPayloadBuilder(VFW_BASE_CTX)
+    enriched = builder.enrich_plan(_vfw_update_plan("ACME-FW1_VFW_3001"))
+    assert enriched["needs_update"] is True
+    assert enriched["update_payload"]["name"] == "ACME-FW1 - Firewall"
+    assert "visible_name_corrected" in enriched["update_reasons"]
+    assert enriched["field_merge_actions"]["visible_name"] == "corrected"
+
+
+def test_vfw_update_preserves_manual_visible_name():
+    ctx = {
+        **VFW_BASE_CTX,
+        "hmdl_baseline_map": {
+            "3001": {"last_visible_name": "ACME-FW1 - Firewall"},
+        },
+    }
+    builder = ZabbixPayloadBuilder(ctx)
+    enriched = builder.enrich_plan(_vfw_update_plan("Custom Operator Label"))
+    assert enriched.get("visible_name_preserved_manual") is True
+    assert "name" not in (enriched.get("update_payload") or {})
+    assert enriched["field_merge_actions"].get("visible_name") == "preserved_manual"
+
+

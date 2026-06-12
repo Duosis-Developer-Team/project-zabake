@@ -653,6 +653,56 @@ def _resolve_existing_host(
     return {}
 
 
+def _resolve_vfw_existing_host(
+    vfw_id: str,
+    technical_hostname: str,
+    hostname_visible: str,
+    hostname_raw: str,
+    host_ip: str,
+    ctx: Dict,
+) -> Dict:
+    """
+    VFW host resolution: Loki_ID → canonical technical hostname override →
+    hostname → visible → legacy raw hostname → IP+hostname match.
+    """
+    by_loki = ctx.get("by_loki", {}) or {}
+    by_hostname = ctx.get("by_hostname", {}) or {}
+    by_visible = ctx.get("by_visible", {}) or {}
+    by_ip = ctx.get("by_ip", {}) or {}
+
+    loki_key = f"VFW_{vfw_id}"
+    resolved = _resolve_existing_host(
+        loki_key,
+        technical_hostname,
+        hostname_visible,
+        by_loki,
+        by_hostname,
+        by_visible,
+    )
+
+    if resolved.get("hostid") and resolved.get("host", "") != technical_hostname:
+        canonical = by_hostname.get(technical_hostname)
+        if isinstance(canonical, dict) and canonical.get("hostid"):
+            resolved = canonical
+
+    if not resolved.get("hostid") and hostname_raw:
+        legacy = by_visible.get(hostname_raw)
+        if isinstance(legacy, dict) and legacy.get("hostid"):
+            resolved = legacy
+
+    if not resolved.get("hostid") and host_ip and host_ip in by_ip:
+        candidate = by_ip[host_ip]
+        if isinstance(candidate, dict) and candidate.get("hostid"):
+            cand_name = str(candidate.get("name") or "").strip()
+            if (
+                (hostname_visible and cand_name == hostname_visible)
+                or (hostname_raw and cand_name == hostname_raw)
+            ):
+                resolved = candidate
+
+    return resolved if isinstance(resolved, dict) else {}
+
+
 # ---------------------------------------------------------------------------
 # Per-item compare functions
 # ---------------------------------------------------------------------------
@@ -1089,20 +1139,14 @@ def compare_one_vfw(
     }
 
     loki_key = f"VFW_{vfw_id}"
-    zbx_existing = _resolve_existing_host(
-        loki_key,
+    zbx_existing = _resolve_vfw_existing_host(
+        vfw_id,
         technical_hostname,
         hostname_visible,
-        ctx.get("by_loki", {}),
-        ctx.get("by_hostname", {}),
-        ctx.get("by_visible", {}),
+        hostname_raw,
+        host_ip,
+        ctx,
     )
-
-    # Fallback: legacy NetBox hostname as visible name
-    if not zbx_existing.get("hostid") and hostname_raw:
-        h = ctx.get("by_visible", {}).get(hostname_raw)
-        if isinstance(h, dict) and h.get("hostid"):
-            zbx_existing = h
 
     zbx_scenario = "update" if zbx_existing.get("hostid") else "create"
 
@@ -1313,6 +1357,7 @@ def main():
     parser.add_argument("--zbx-hosts-loki-map", help="Path to Zabbix hosts by Loki_ID JSON")
     parser.add_argument("--zbx-hosts-hostname-map", help="Path to Zabbix hosts by hostname JSON")
     parser.add_argument("--zbx-hosts-visible-map", help="Path to Zabbix hosts by visible_name JSON")
+    parser.add_argument("--zbx-hosts-ip-map", help="Path to Zabbix hosts by primary interface IP JSON")
     parser.add_argument("--hmdl-baseline-map", help="Path to HMDL baseline map JSON")
     parser.add_argument("--output-dir", default="/tmp", help="Directory to write plan files (default: /tmp)")
     parser.add_argument("--workers", type=int, default=20, help="Max parallel compare workers (default: 20)")
@@ -1359,6 +1404,7 @@ def main():
     by_loki = _load_json_file(args.zbx_hosts_loki_map, {})
     by_hostname = _load_json_file(args.zbx_hosts_hostname_map, {})
     by_visible = _load_json_file(args.zbx_hosts_visible_map, {})
+    by_ip = _load_json_file(args.zbx_hosts_ip_map, {})
 
     ctx: Dict = {
         "device_type_mapping": device_type_mapping,
@@ -1370,6 +1416,7 @@ def main():
         "by_loki": by_loki or {},
         "by_hostname": by_hostname or {},
         "by_visible": by_visible or {},
+        "by_ip": by_ip or {},
         "create_devices_disabled": args.create_devices_disabled,
         "create_platforms_disabled": args.create_platforms_disabled,
         "create_virtual_fws_disabled": args.create_vfws_disabled,
