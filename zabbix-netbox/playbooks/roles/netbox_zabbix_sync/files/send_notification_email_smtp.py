@@ -36,6 +36,8 @@ def build_csv_attachment(processing_results) -> MIMEApplication:
             "IP Adresi",
             "İşlem Durumu",
             "Açıklama/Hata Sebebi",
+            "Update Reasons",
+            "Error Detail",
             "Zaman Damgası",
         ]
     )
@@ -53,6 +55,7 @@ def build_csv_attachment(processing_results) -> MIMEApplication:
         "GÜNCELLENDI": "GÜNCELLENDİ",
         "GÜNCEL": "GÜNCEL",
         "EKLENEMEDI": "EKLENEMEDI",
+        "ATLANDI": "ATLANDI",
         "DRY_RUN": "DRY-RUN (PLANLANMIŞ)",
     }
 
@@ -71,6 +74,12 @@ def build_csv_attachment(processing_results) -> MIMEApplication:
         ip_addr = result.get("ip", "N/A")
         status = str(result.get("status", "N/A")).upper()
         reason = result.get("reason", "-")
+        update_reasons = result.get("update_reasons") or []
+        if isinstance(update_reasons, list):
+            update_reasons_text = "; ".join(str(item) for item in update_reasons if item)
+        else:
+            update_reasons_text = str(update_reasons or "")
+        error_detail = str(result.get("error_data") or "").strip()
         planned_op = str(result.get("planned_operation", "") or "").strip().lower()
 
         status_tr = status_tr_map.get(status, status)
@@ -89,6 +98,8 @@ def build_csv_attachment(processing_results) -> MIMEApplication:
                 ip_addr,
                 status_tr,
                 reason,
+                update_reasons_text or "-",
+                error_detail or "-",
                 timestamp,
             ]
         )

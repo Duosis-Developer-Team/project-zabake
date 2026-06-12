@@ -497,4 +497,5 @@ mappings:
     conditions:
       device_role: "HOST"
       manufacturer: "IBM"
+    hostname_suffix: " - BMC"
     priority: 1

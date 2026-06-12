@@ -103,7 +103,14 @@
       hostname: "{{ _platform_sync_plan_loaded.zbx_record.HOSTNAME | default('') }}"
       device_role: "PLATFORM"
       status: "eklenemedi"
-      reason: "{{ zbx_platform_create_resp.json.error.message | default('host.create failed') }}"
+      reason: >-
+        {{
+          (zbx_platform_create_resp.json.error.data | default('') | string | trim)
+          if (zbx_platform_create_resp.json.error.data is defined and (zbx_platform_create_resp.json.error.data | string | trim | length) > 0)
+          else (zbx_platform_create_resp.json.error.message | default('host.create failed'))
+        }}
+      error_data: "{{ zbx_platform_create_resp.json.error.data | default('') | string | trim }}"
+      update_reasons: "{{ _platform_sync_plan_loaded.update_reasons | default([]) }}"
       ip: "{{ _platform_sync_plan_loaded.zbx_record.HOST_IP | default('N/A') }}"
       location: "{{ _platform_sync_plan_loaded.zbx_record.REPORT_LOCATION | default('N/A') }}"
       site: "{{ _platform_sync_plan_loaded.zbx_record.REPORT_SITE | default('N/A') }}"
@@ -183,7 +190,14 @@
       hostname: "{{ _platform_sync_plan_loaded.zbx_record.HOSTNAME | default('') }}"
       device_role: "PLATFORM"
       status: "eklenemedi"
-      reason: "{{ zbx_platform_update_resp.json.error.message | default('host.update failed') }}"
+      reason: >-
+        {{
+          (zbx_platform_update_resp.json.error.data | default('') | string | trim)
+          if (zbx_platform_update_resp.json.error.data is defined and (zbx_platform_update_resp.json.error.data | string | trim | length) > 0)
+          else (zbx_platform_update_resp.json.error.message | default('host.update failed'))
+        }}
+      error_data: "{{ zbx_platform_update_resp.json.error.data | default('') | string | trim }}"
+      update_reasons: "{{ _platform_sync_plan_loaded.update_reasons | default([]) }}"
       ip: "{{ _platform_sync_plan_loaded.zbx_record.HOST_IP | default('N/A') }}"
       location: "{{ _platform_sync_plan_loaded.zbx_record.REPORT_LOCATION | default('N/A') }}"
       site: "{{ _platform_sync_plan_loaded.zbx_record.REPORT_SITE | default('N/A') }}"
@@ -191,6 +205,22 @@
       ownership: "N/A"
       planned_operation: "update"
   when:
+    - _platform_sync_plan_loaded.action | default('skip') == 'update'
+    - zbx_platform_update_resp is defined
+    - zbx_platform_update_resp.json.error is defined
+
+- name: Debug — Show detailed Zabbix update error (Phase B platform apply)
+  debug:
+    msg: |
+      ========================================
+      ZABBIX API UPDATE ERROR (Phase B platform)
+      ========================================
+      Host: {{ _platform_sync_plan_loaded.zbx_record.HOSTNAME | default('N/A') }}
+      Error message: {{ zbx_platform_update_resp.json.error.message | default('N/A') }}
+      Error data: {{ zbx_platform_update_resp.json.error.data | default('N/A') | to_nice_json }}
+      ========================================
+  when:
+    - debug_mode | default(false) | bool
     - _platform_sync_plan_loaded.action | default('skip') == 'update'
     - zbx_platform_update_resp is defined
     - zbx_platform_update_resp.json.error is defined
@@ -262,9 +292,14 @@
       last_managed_groups: []
       dry_run: "{{ dry_run | default(false) | bool }}"
       extra_data: {}
-      request_payload: "{{ _platform_sync_plan_loaded.create_payload | default(_platform_sync_plan_loaded.update_payload | default({})) }}"
+      request_payload: >-
+        {{
+          (_platform_sync_plan_loaded.update_payload | default({}, true))
+          if ((_platform_sync_plan_loaded.update_payload | default({}, true) | length) > 0)
+          else (_platform_sync_plan_loaded.create_payload | default({}, true))
+        }}
       response_payload: "{{ zbx_platform_create_resp.json | default(zbx_platform_update_resp.json | default({})) }}"
-      error_payload: {}
+      error_payload: "{{ zbx_platform_create_resp.json.error | default(zbx_platform_update_resp.json.error | default({})) }}"
   when:
     - hmdl_log_enabled | bool
     - current_platform_result is defined

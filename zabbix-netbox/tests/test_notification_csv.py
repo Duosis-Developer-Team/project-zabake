@@ -61,6 +61,57 @@ def test_build_csv_attachment_defaults_missing_report_fields_to_na():
     assert data_cols[6] == "N/A"
 
 
+def test_build_csv_attachment_network_discovery_skip_shows_atlandi():
+    mod = _load_smtp_module()
+    rows = [
+        {
+            "hostname": "G2HV28DC13",
+            "device_role": "HOST",
+            "location": "DC13",
+            "site": "ISTANBUL",
+            "tenant": "N/A",
+            "ownership": "N/A",
+            "ip": "10.132.1.120",
+            "status": "atlandı",
+            "reason": "Network Discovery, no action taken",
+        }
+    ]
+    attachment = mod.build_csv_attachment(rows)
+    raw = attachment.get_payload(decode=True)
+    assert raw is not None
+    text = raw.decode("utf-8-sig")
+    assert "ATLANDI" in text
+    assert "Network Discovery, no action taken" in text
+
+
+def test_build_csv_attachment_includes_update_reasons_and_error_detail_columns():
+    mod = _load_smtp_module()
+    rows = [
+        {
+            "hostname": "G2HV28DC13",
+            "device_role": "HOST",
+            "location": "DC13",
+            "site": "ISTANBUL",
+            "tenant": "N/A",
+            "ownership": "N/A",
+            "ip": "10.132.1.120",
+            "status": "eklenemedi",
+            "reason": 'Cannot update "host" for a discovered host "G2HV28DC13".',
+            "update_reasons": ["ip_changed:10.134.16.13->10.132.1.120", "interface_changed"],
+            "error_data": 'Cannot update "host" for a discovered host "G2HV28DC13".',
+        }
+    ]
+    attachment = mod.build_csv_attachment(rows)
+    raw = attachment.get_payload(decode=True)
+    assert raw is not None
+    text = raw.decode("utf-8-sig")
+    first_line = text.splitlines()[0]
+    assert "Update Reasons" in first_line
+    assert "Error Detail" in first_line
+    assert "discovered host" in text
+    assert "ip_changed" in text
+
+
 def test_build_csv_attachment_dry_run_create_and_update_labels():
     mod = _load_smtp_module()
     rows = [

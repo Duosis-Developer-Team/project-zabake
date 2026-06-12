@@ -463,6 +463,8 @@ ORDER BY source_device_id, processed_at DESC;
 | Proxy güncellenmiyor | Manuel değişiklik algılandı | `proxy_manual_change_detected` loguna bak |
 | Log yazılmıyor | `hmdl_log_enabled: false` | `true` yap; şema migration çalıştır |
 | Zabbix duplicate | Eşleşme zinciri | Loki_ID → hostname → visible name; bkz. SYNC_DATA_FLOW |
+| CSV `Application error.` | Phase B yalnızca `error.message` logluyordu | `error.data` artık `reason` + CSV `Error Detail`; geçmiş run için `hmdl.zabbix_sync_log.error_payload` |
+| Loki cihazı + Zabbix discovery host eşleşmesi | `host.flags & 4` | `atlandı` / `Network Discovery, no action taken` — Zabbix API çağrısı yok; bkz. [[NetBox-Loki]] |
 
 ---
 

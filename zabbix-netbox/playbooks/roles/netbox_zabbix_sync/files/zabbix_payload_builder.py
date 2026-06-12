@@ -36,6 +36,17 @@ from zabbix_merge_helpers import (  # noqa: E402
 
 _DC_PATTERN = re.compile(r"(DC|AZ|ICT|UZ)\d+", re.IGNORECASE)
 _PROXY_SUFFIX = re.compile(r"[-\s]*PROXY.*$", re.IGNORECASE)
+# Zabbix host.flags: ZBX_FLAG_DISCOVERY_CREATED — cannot host.update the technical name.
+_ZBX_FLAG_DISCOVERY_CREATED = 4
+
+
+def _is_discovered_host(zbx_existing: Dict[str, Any]) -> bool:
+    """Return True when Zabbix created the host via network discovery."""
+    try:
+        flags = int(zbx_existing.get("flags") or 0)
+    except (TypeError, ValueError):
+        return False
+    return bool(flags & _ZBX_FLAG_DISCOVERY_CREATED)
 
 
 def _extract_dc_code(location_or_name: str) -> str:

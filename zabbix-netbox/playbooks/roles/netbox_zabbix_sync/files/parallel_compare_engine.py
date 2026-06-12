@@ -31,7 +31,13 @@ import unicodedata
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from zabbix_payload_builder import ZabbixPayloadBuilder, build_proxy_group_config
+from zabbix_payload_builder import (
+    ZabbixPayloadBuilder,
+    build_proxy_group_config,
+    _is_discovered_host,
+)
+
+NETWORK_DISCOVERY_SKIP_REASON = "Network Discovery, no action taken"
 
 # ---------------------------------------------------------------------------
 # Hostname / filter helpers (from filter_plugins/zabbix_hostname.py)
@@ -752,6 +758,29 @@ def compare_one_device(
         ctx.get("by_hostname", {}),
         ctx.get("by_visible", {}),
     )
+
+    if zbx_existing.get("hostid") and _is_discovered_host(zbx_existing):
+        skip_result = {
+            "hostname": zabbix_hostname or device_name or "N/A",
+            "device_role": device_info.get("device_role", "N/A"),
+            "status": "atlandı",
+            "reason": NETWORK_DISCOVERY_SKIP_REASON,
+            "ip": device_info.get("primary_ip") or "N/A",
+            "location": device_info.get("location") or "N/A",
+            "site": device_info.get("site") or "N/A",
+            "tenant": device_info.get("tenant") or "N/A",
+            "ownership": device_info.get("ownership") or "N/A",
+        }
+        return {
+            "action": "skip",
+            "device_id": device_id,
+            "zbx_record": zbx_record,
+            "zbx_existing_host": zbx_existing,
+            "zbx_scenario": "skip",
+            "device_info": device_info,
+            "current_device_result": skip_result,
+            "netbox_device_name": device_name,
+        }
 
     zbx_scenario = "update" if zbx_existing.get("hostid") else "create"
     action = zbx_scenario  # create or update

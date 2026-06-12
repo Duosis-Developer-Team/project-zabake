@@ -28,6 +28,7 @@ from zabbix_payload_builder import (  # noqa: E402
     ZabbixPayloadBuilder,
     build_proxy_group_config,
     _extract_dc_code,
+    _is_discovered_host,
 )
 
 TEMPLATE_TYPE_MAP = {
@@ -649,3 +650,12 @@ def test_update_reasons_empty_when_no_delta():
     enriched = builder.enrich_plan(plan)
     assert enriched["needs_update"] is False
     assert enriched["update_reasons"] == []
+
+
+def test_is_discovered_host_flag():
+    assert _is_discovered_host({"flags": 4}) is True
+    assert _is_discovered_host({"flags": "4"}) is True
+    assert _is_discovered_host({"flags": 0}) is False
+    assert _is_discovered_host({}) is False
+
+

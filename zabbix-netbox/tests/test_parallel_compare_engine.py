@@ -222,6 +222,24 @@ class TestCompareOneDevice:
         assert plan["action"] == "update"
         assert plan["zbx_existing_host"]["hostid"] == "888"
 
+    def test_skip_when_matched_zabbix_host_is_network_discovered(self):
+        hostname = "srv01dc14.blt.vc - BMC"
+        ctx = _make_ctx(
+            by_loki={
+                "1001": {
+                    "hostid": "777",
+                    "host": hostname,
+                    "flags": 4,
+                }
+            }
+        )
+        device = _make_device(name="srv01dc14.blt.vc", device_id=1001)
+        plan = compare_one_device(device, ctx)
+        assert plan["action"] == "skip"
+        assert plan["zbx_scenario"] == "skip"
+        assert plan["current_device_result"]["status"] == "atlandı"
+        assert plan["current_device_result"]["reason"] == "Network Discovery, no action taken"
+
     def test_skip_when_no_matching_device_type(self):
         device = _make_device(role="Unknown Role", manufacturer="UnknownMfr")
         plan = compare_one_device(device, _make_ctx())

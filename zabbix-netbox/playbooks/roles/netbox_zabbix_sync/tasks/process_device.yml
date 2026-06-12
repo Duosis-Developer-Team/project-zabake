@@ -739,6 +739,27 @@
     - device_info.primary_ip is not none
     - device_info.primary_ip != ""
 
+- name: Record skipped device (Zabbix network-discovered host — no Loki update)
+  set_fact:
+    current_device_result:
+      hostname: "{{ zabbix_hostname_final | default(netbox_device.name | default('N/A')) }}"
+      device_role: "{{ device_info.device_role | default('N/A') }}"
+      status: "atlandı"
+      reason: "Network Discovery, no action taken"
+      ip: "{{ device_info.primary_ip | default('N/A') }}"
+      location: "{{ device_info.location | default('N/A', true) }}"
+      site: "{{ device_info.site | default('N/A', true) }}"
+      tenant: "{{ device_info.tenant | default('N/A', true) }}"
+      ownership: "{{ device_info.ownership | default('N/A', true) }}"
+    zbx_scenario: skip
+  when:
+    - device_info.device_type is not none
+    - device_info.device_type != ""
+    - device_info.primary_ip is not none
+    - device_info.primary_ip != ""
+    - zbx_existing_host.hostid is defined
+    - ((zbx_existing_host.flags | default(0) | int) & 4) == 4
+
 - name: Display scenario for device
   debug:
     msg: "Device {{ netbox_device.name }}: Scenario = {{ zbx_scenario }} ({{ 'Host exists in Zabbix' if (zbx_existing_host is defined and zbx_existing_host is not none and zbx_existing_host.hostid is defined) else 'New host - will be created' }})"
@@ -967,6 +988,7 @@
     - device_info.primary_ip != ""
     - _zbx_record_for_role is defined
     - _zabbix_auth_for_role is defined
+    - zbx_scenario | default('create') != 'skip'
 
 - name: Collect device result from zabbix host operations (if processed)
   set_fact:
@@ -1109,3 +1131,4 @@
     - hmdl_log_enabled | bool
     - _hmdl_log_entry is defined
     - device_sync_phase | default('full') in ['full', 'apply']
+    - current_device_result.status | default('') != 'atlandı'

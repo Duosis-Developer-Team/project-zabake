@@ -60,7 +60,14 @@
       hostname: "{{ _device_sync_plan_loaded.zbx_record.HOSTNAME | default(netbox_device.name | default('')) }}"
       device_role: "{{ _device_sync_plan_loaded.zbx_record.DEVICE_ROLE | default('N/A') }}"
       status: "eklenemedi"
-      reason: "{{ zbx_create_resp.json.error.message | default('host.create failed') }}"
+      reason: >-
+        {{
+          (zbx_create_resp.json.error.data | default('') | string | trim)
+          if (zbx_create_resp.json.error.data is defined and (zbx_create_resp.json.error.data | string | trim | length) > 0)
+          else (zbx_create_resp.json.error.message | default('host.create failed'))
+        }}
+      error_data: "{{ zbx_create_resp.json.error.data | default('') | string | trim }}"
+      update_reasons: "{{ _device_sync_plan_loaded.update_reasons | default([]) }}"
       ip: "{{ _device_sync_plan_loaded.zbx_record.HOST_IP | default('N/A') }}"
       location: "{{ _device_sync_plan_loaded.zbx_record.REPORT_LOCATION | default('N/A', true) }}"
       site: "{{ _device_sync_plan_loaded.zbx_record.REPORT_SITE | default('N/A', true) }}"
@@ -128,6 +135,8 @@
       device_role: "{{ _device_sync_plan_loaded.zbx_record.DEVICE_ROLE | default('N/A') }}"
       status: "güncellendi"
       reason: "{{ (_device_sync_plan_loaded.update_reasons | default([])) | join('; ') }}"
+      update_reasons: "{{ _device_sync_plan_loaded.update_reasons | default([]) }}"
+      error_data: ""
       ip: "{{ _device_sync_plan_loaded.zbx_record.HOST_IP | default('N/A') }}"
       location: "{{ _device_sync_plan_loaded.zbx_record.REPORT_LOCATION | default('N/A', true) }}"
       site: "{{ _device_sync_plan_loaded.zbx_record.REPORT_SITE | default('N/A', true) }}"
@@ -146,7 +155,14 @@
       hostname: "{{ _device_sync_plan_loaded.zbx_record.HOSTNAME | default(netbox_device.name | default('')) }}"
       device_role: "{{ _device_sync_plan_loaded.zbx_record.DEVICE_ROLE | default('N/A') }}"
       status: "eklenemedi"
-      reason: "{{ zbx_update_resp.json.error.message | default('host.update failed') }}"
+      reason: >-
+        {{
+          (zbx_update_resp.json.error.data | default('') | string | trim)
+          if (zbx_update_resp.json.error.data is defined and (zbx_update_resp.json.error.data | string | trim | length) > 0)
+          else (zbx_update_resp.json.error.message | default('host.update failed'))
+        }}
+      error_data: "{{ zbx_update_resp.json.error.data | default('') | string | trim }}"
+      update_reasons: "{{ _device_sync_plan_loaded.update_reasons | default([]) }}"
       ip: "{{ _device_sync_plan_loaded.zbx_record.HOST_IP | default('N/A') }}"
       location: "{{ _device_sync_plan_loaded.zbx_record.REPORT_LOCATION | default('N/A', true) }}"
       site: "{{ _device_sync_plan_loaded.zbx_record.REPORT_SITE | default('N/A', true) }}"
@@ -154,6 +170,26 @@
       ownership: "{{ _device_sync_plan_loaded.zbx_record.REPORT_OWNERSHIP | default('N/A', true) }}"
       planned_operation: "update"
   when:
+    - _device_sync_plan_loaded.action | default('skip') == 'update'
+    - zbx_update_resp is defined
+    - zbx_update_resp.json.error is defined
+
+- name: Debug — Show detailed Zabbix update error (Phase B device apply)
+  debug:
+    msg: |
+      ========================================
+      ZABBIX API UPDATE ERROR (Phase B)
+      ========================================
+      Host: {{ _device_sync_plan_loaded.zbx_record.HOSTNAME | default(netbox_device.name | default('N/A')) }}
+      Host ID: {{ _device_sync_plan_loaded.zbx_existing_host.hostid | default('N/A') }}
+      Update reasons: {{ _device_sync_plan_loaded.update_reasons | default([]) | join('; ') }}
+      Error message: {{ zbx_update_resp.json.error.message | default('N/A') }}
+      Error code: {{ zbx_update_resp.json.error.code | default('N/A') }}
+      Error data: {{ zbx_update_resp.json.error.data | default('N/A') | to_nice_json }}
+      Request payload: {{ _device_sync_plan_loaded.update_payload | default({}) | to_nice_json }}
+      ========================================
+  when:
+    - debug_mode | default(false) | bool
     - _device_sync_plan_loaded.action | default('skip') == 'update'
     - zbx_update_resp is defined
     - zbx_update_resp.json.error is defined
@@ -227,7 +263,12 @@
         {{ (_device_sync_plan_loaded.zbx_record.HOST_GROUPS | default('')).split(',') | map('trim') | reject('equalto', '') | list }}
       dry_run: "{{ dry_run | default(false) | bool }}"
       extra_data: {}
-      request_payload: "{{ _device_sync_plan_loaded.create_payload | default(_device_sync_plan_loaded.update_payload | default({})) }}"
+      request_payload: >-
+        {{
+          (_device_sync_plan_loaded.update_payload | default({}, true))
+          if ((_device_sync_plan_loaded.update_payload | default({}, true) | length) > 0)
+          else (_device_sync_plan_loaded.create_payload | default({}, true))
+        }}
       response_payload: "{{ zbx_create_resp.json | default(zbx_update_resp.json | default({})) }}"
       error_payload: "{{ zbx_create_resp.json.error | default(zbx_update_resp.json.error | default({})) }}"
   when:
@@ -235,6 +276,7 @@
     - current_device_result is defined
     - current_device_result | length > 0
     - _device_sync_plan_loaded is defined
+    - current_device_result.status | default('') != 'atlandı'
 
 - name: Write HMDL log for device (apply phase)
   include_tasks: hmdl_sync_log.yml
